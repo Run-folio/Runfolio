@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-background font-sans text-[15px] leading-relaxed text-white antialiased;
+  background-image: radial-gradient(circle at 20% -10%, rgba(201, 160, 107, 0.06), transparent 45%);
+}
+
+.app-shell {
+  @apply mx-auto w-full max-w-[1400px] px-6 py-10 md:px-8;
+}
+
+/* Full-bleed hero: edge-to-edge, sharp corners */
+.hero-full {
+  @apply relative w-full overflow-hidden border-b border-border;
+  background: linear-gradient(180deg, rgba(5, 7, 12, 0.35) 0%, rgba(5, 7, 12, 0.92) 100%);
+}
+
+.hero-bg {
+  @apply absolute inset-0 bg-cover bg-center;
+}
+
+.hero-overlay {
+  @apply absolute inset-0;
+  background: linear-gradient(
+    105deg,
+    rgba(6, 8, 14, 0.94) 0%,
+    rgba(6, 8, 14, 0.55) 45%,
+    rgba(6, 8, 14, 0.75) 100%
+  );
+}
+
+.hero-inner {
+  @apply relative z-10 mx-auto w-full max-w-[1400px] px-6 py-12 md:px-8 md:py-16;
+}
+
+/* Legacy: constrained hero inside app-shell (prefer hero-full + hero-inner) */
+.hero-wrap {
+  @apply relative w-full overflow-hidden border border-border;
+  background: linear-gradient(180deg, rgba(3, 6, 12, 0.45) 0%, rgba(3, 6, 12, 0.9) 90%);
+}
+
+.panel {
+  @apply border border-border bg-panel/95 shadow-soft;
+}
+
+.type-eyebrow {
+  @apply text-[11px] font-semibold uppercase tracking-[0.22em] text-gold;
+}
+
+.type-display {
+  @apply text-3xl font-bold uppercase tracking-[0.06em] text-white md:text-4xl lg:text-5xl;
+}
+
+.font-display {
+  font-family: var(--font-display), "Georgia", serif;
+}
+
+.type-tagline {
+  @apply text-base italic text-accent md:text-lg;
+}
+
+.type-section {
+  @apply text-[11px] font-semibold uppercase tracking-[0.2em] text-white;
+}
+
+.type-meta {
+  @apply text-sm text-muted;
+}
+

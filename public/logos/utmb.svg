@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 48" fill="none">
+  <rect width="80" height="48" fill="#1a0a0a"/>
+  <rect x="8" y="8" width="64" height="32" stroke="#c41e3a" stroke-width="2" fill="none"/>
+  <text x="40" y="32" text-anchor="middle" fill="#ffffff" font-family="system-ui,sans-serif" font-size="14" font-weight="700">UTMB</text>
+</svg>
