@@ -104,39 +104,32 @@ export function StravaActivityCard({
 
   if (linkToPortfolio) {
     return (
-      <Link
-        href={`/activities/${activity.strava_id}`}
+      <div
         className={cn(
-          "block border border-border bg-[#0d0d0f] p-4 text-left transition hover:border-accent/40 hover:bg-black/50",
+          "border border-border bg-[#0d0d0f] transition hover:border-accent/40 hover:bg-black/50",
           className
         )}
       >
-        {inner}
-        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wider text-white hover:underline">
+        <Link
+          href={`/activities/${activity.strava_id}`}
+          className="block p-4 pb-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        >
+          {inner}
+          <p className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-white/90">
             Race portfolio page →
-          </span>
-          <span
-            role="link"
-            tabIndex={0}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              window.open(activity.strava_url, "_blank", "noopener,noreferrer");
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                window.open(activity.strava_url, "_blank", "noopener,noreferrer");
-              }
-            }}
-            className="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
+          </p>
+        </Link>
+        <div className="border-t border-white/10 px-4 pb-3 pt-2">
+          <a
+            href={activity.strava_url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
           >
             Open in Strava
-          </span>
+          </a>
         </div>
-      </Link>
+      </div>
     );
   }
 
