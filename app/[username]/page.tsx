@@ -2,16 +2,23 @@ import { isDynamicServerError } from "next/dist/client/components/hooks-server-c
 import { AppNavbar } from "@/components/app-navbar";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { ProfileHero } from "@/components/profile-hero";
+import { ProfileMediumMatchStrip } from "@/components/profile-medium-match-strip";
 import { ProfileTopRaces } from "@/components/profile-top-races";
 import { RaceJourney } from "@/components/race-journey";
 import { StravaProfileBlock } from "@/components/strava-profile-block";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { demoRaces, demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
+import {
+  extractMediumStravaMatchesForProfile,
+  mergeOwnerPortfolioCompleted
+} from "@/lib/profile-portfolio";
+import { applyHighConfidenceStravaBucketSync } from "@/lib/profile-strava-bucket-sync";
 import { resolveProfileHeroPhoto } from "@/lib/profile-hero-asset";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { getStravaFeed } from "@/lib/strava-feed";
-import type { StravaFeedActivity, StravaFeedStats } from "@/types";
+import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
+import type { StravaFeedStats, StravaRaceCandidate } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -22,12 +29,21 @@ type Props = {
 export default async function PublicProfilePage({ params }: Props) {
   const profileHeroPhoto = resolveProfileHeroPhoto();
   const { username } = await params;
+  const profilePath = `/${username}`;
+
   let runner: { id: string; name: string } | null = { id: demoUser.id, name: username || demoUser.name };
   let allRaces = [...demoRaces];
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
   );
-  let ownProfileStrava: { activities: StravaFeedActivity[]; stats: StravaFeedStats } | null = null;
+  let ownProfileStrava: {
+    raceCandidates: StravaRaceCandidate[];
+    raceCandidateStats: StravaFeedStats;
+    matchedMajorDiscoverIds: string[];
+    stravaOk: boolean;
+  } | null = null;
+  let isOwnProfile = false;
+  let stravaEnriched: StravaRaceCandidate[] = [];
 
   if (isSupabaseConfigured()) {
     try {
@@ -50,9 +66,30 @@ export default async function PublicProfilePage({ params }: Props) {
       }
 
       const { user } = await getServerAuthUser();
-      if (user?.id && runner && user.id === runner.id) {
+      isOwnProfile = Boolean(user?.id && runner && user.id === runner.id);
+
+      if (isOwnProfile) {
         const feed = await getStravaFeed();
-        ownProfileStrava = { activities: feed.activities, stats: feed.stats };
+        stravaEnriched = feed.ok
+          ? enrichRaceCandidatesWithCatalogMatches(feed.raceCandidates, allRaces ?? [])
+          : [];
+        if (feed.ok && stravaEnriched.length > 0) {
+          await applyHighConfidenceStravaBucketSync(supabase, runner!.id, stravaEnriched);
+          const refreshed = await supabase
+            .from("races")
+            .select("*")
+            .eq("user_id", runner!.id)
+            .order("date", { ascending: false });
+          if (!refreshed.error && refreshed.data) {
+            allRaces = refreshed.data;
+          }
+        }
+        ownProfileStrava = {
+          raceCandidates: stravaEnriched,
+          raceCandidateStats: feed.raceCandidateStats,
+          matchedMajorDiscoverIds: dedupeHighConfidenceDiscoverIds(stravaEnriched),
+          stravaOk: feed.ok
+        };
       }
     } catch (e) {
       if (isDynamicServerError(e)) throw e;
@@ -62,8 +99,17 @@ export default async function PublicProfilePage({ params }: Props) {
     }
   }
 
-  const completed = (allRaces ?? []).filter((r) => r.is_completed);
+  const dbCompleted = (allRaces ?? []).filter((r) => r.is_completed);
   const future = (allRaces ?? []).filter((r) => !r.is_completed);
+
+  const mergedCompleted =
+    isOwnProfile && stravaEnriched.length > 0 && runner
+      ? mergeOwnerPortfolioCompleted(dbCompleted, stravaEnriched, runner.id)
+      : dbCompleted;
+
+  const mediumMatches =
+    isOwnProfile && stravaEnriched.length > 0 ? extractMediumStravaMatchesForProfile(stravaEnriched) : [];
+
   const displayName = runner?.name ?? decodeURIComponent(username);
 
   return (
@@ -73,19 +119,23 @@ export default async function PublicProfilePage({ params }: Props) {
         <ProfileHero key={profileHeroPhoto} displayName={displayName} imageSrc={profileHeroPhoto} />
 
         <div className="mx-auto w-full max-w-[1400px] px-0">
-          <ProfileTopRaces races={completed} />
+          <ProfileTopRaces completedRaces={mergedCompleted} />
+
+          {mediumMatches.length > 0 ? <ProfileMediumMatchStrip matches={mediumMatches} profilePath={profilePath} /> : null}
 
           {ownProfileStrava ? (
             <StravaProfileBlock
-              activities={ownProfileStrava.activities}
-              stats={ownProfileStrava.stats}
+              raceCandidates={ownProfileStrava.raceCandidates}
+              raceCandidateStats={ownProfileStrava.raceCandidateStats}
+              matchedMajorDiscoverIds={ownProfileStrava.matchedMajorDiscoverIds}
               stravaOAuthConfigured={stravaOAuthConfigured}
+              stravaOk={ownProfileStrava.stravaOk}
             />
           ) : null}
 
           <div className="grid gap-0 border-x border-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-            <RaceJourney races={allRaces} />
-            <ProfileBucketList completed={completed} future={future} />
+            <RaceJourney races={[...mergedCompleted, ...future]} />
+            <ProfileBucketList completed={dbCompleted} future={future} />
           </div>
         </div>
       </main>

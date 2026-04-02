@@ -153,7 +153,9 @@ export function FindRacesExplorer() {
                     key={race.id}
                     className="flex flex-col border border-white/10 bg-[#0d0d0f] p-4 transition hover:border-white/20"
                   >
-                    <p className="font-semibold text-white">{race.name}</p>
+                    <Link href={`/races/${race.id}`} className="font-semibold text-white hover:text-accent">
+                      {race.name}
+                    </Link>
                     <p className="type-meta mt-1 text-xs">{race.location}</p>
                     <div className="mt-3 flex flex-wrap gap-2">
                       <span

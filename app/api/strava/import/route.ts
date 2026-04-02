@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getMockStravaActivities } from "@/lib/mock-strava";
-import { formatStravaMovingTime, parseStravaActivityId } from "@/lib/strava-api";
+import { formatStravaMovingTime, parseStravaActivityId, pickStravaPrimaryPhotoUrl } from "@/lib/strava-api";
 import { getStravaTokensFromCookies } from "@/lib/strava-cookies";
 import { fetchStravaActivityWithRecovery } from "@/lib/strava-resolve-access";
 import type { Activity } from "@/types";
@@ -28,7 +28,8 @@ function mapStravaToActivity(
     elevation_m:
       raw.total_elevation_gain != null && !Number.isNaN(raw.total_elevation_gain)
         ? Math.round(raw.total_elevation_gain)
-        : null
+        : null,
+    primary_photo_url: pickStravaPrimaryPhotoUrl(raw)
   };
 }
 

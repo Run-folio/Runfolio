@@ -15,6 +15,7 @@ export function stravaFeedToActivity(feed: StravaFeedActivity, userId = "strava-
     polyline: feed.summary_polyline,
     description: null,
     created_at: new Date().toISOString(),
-    elevation_m: feed.elevation_m
+    elevation_m: feed.elevation_m,
+    primary_photo_url: feed.primary_photo_url ?? undefined
   };
 }

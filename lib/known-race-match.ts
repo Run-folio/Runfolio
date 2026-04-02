@@ -2,6 +2,9 @@ import type { DiscoverRace } from "@/lib/discover-races";
 import { discoverRaces } from "@/lib/discover-races";
 import type { ActivityMatchInput, Race, RaceMatchCandidate, RaceMatchConfidence } from "@/types";
 
+/** Score at or above this is treated as “high confidence” in UI (still requires confirm for bucket mutations). */
+export const RACE_MATCH_HIGH_SCORE = 0.72;
+
 /** Extra tokens / phrases → discover race id (lowercase). */
 export const DISCOVER_RACE_ALIASES: Record<string, string[]> = {
   "disc-ccc": ["ccc", "utmb ccc", "courmayeur", "chamonix ccc", "100k utmb"],
@@ -14,8 +17,15 @@ export const DISCOVER_RACE_ALIASES: Record<string, string[]> = {
   "disc-hardrock": ["hardrock", "hard rock 100", "hardrock100"],
   "disc-leadville": ["leadville", "lt100", "leadville trail"],
   "disc-diagonale": ["diagonale", "grand raid", "réunion", "reunion", "diagonale des fous"],
-  "disc-boston": ["boston marathon", "boston strong", "boston 26.2"],
-  "disc-chicago": ["chicago marathon", "bank of america chicago"],
+  "disc-boston": ["boston marathon", "boston strong", "boston 26.2", "boston", "bq"],
+  "disc-chicago": [
+    "chicago marathon",
+    "bank of america chicago",
+    "bank of america chicago marathon",
+    "chicago",
+    "chicago pb",
+    "windy city marathon"
+  ],
   "disc-nyc": ["tcs nyc", "new york marathon", "nyc marathon", "new york city marathon"],
   "disc-london": ["london marathon", "virgin money london", "london landmarks"],
   "disc-berlin": ["berlin marathon"],
@@ -29,6 +39,29 @@ export const DISCOVER_RACE_ALIASES: Record<string, string[]> = {
   "disc-moab": ["moab 240", "moab"],
   "disc-pikes": ["pikes peak", "pikes peak marathon"],
   "disc-two-oceans": ["two oceans", "cape town ultra"]
+};
+
+/**
+ * Typical calendar months (1–12) when the event usually occurs — used as a soft signal with distance/title.
+ */
+export const DISCOVER_TYPICAL_MONTHS: Record<string, number[]> = {
+  "disc-tokyo": [3],
+  "disc-boston": [4],
+  "disc-london": [4],
+  "disc-paris": [4],
+  "disc-mds": [4],
+  "disc-wser": [6, 7],
+  "disc-hardrock": [7],
+  "disc-utmb": [8, 9],
+  "disc-ccc": [8, 9],
+  "disc-occ": [8, 9],
+  "disc-tds": [8, 9],
+  "disc-etr": [8, 9],
+  "disc-leadville": [8],
+  "disc-berlin": [9],
+  "disc-chicago": [10],
+  "disc-nyc": [11],
+  "disc-valencia": [12]
 };
 
 function normalize(s: string): string {
@@ -86,6 +119,41 @@ function distanceScore(discoverKm: number, actKm: number): { score: number; reas
   return { score: 0, reasons: [] };
 }
 
+function aliasMatchesDiscoverTitle(act: ActivityMatchInput, discover: DiscoverRace, aliasRaw: string): boolean {
+  const na = normalize(aliasRaw);
+  const t = normalize(act.name);
+  if (na.length < 2 || !t.includes(na)) return false;
+
+  const ratio =
+    discover.distance_km > 0 ? Math.abs(act.distance_km - discover.distance_km) / discover.distance_km : 1;
+
+  if (na.length <= 10) {
+    if (discover.surface === "road" && Math.abs(discover.distance_km - 42.2) < 3) {
+      if (ratio > 0.16) return false;
+    } else if (ratio > 0.3) return false;
+  }
+  return true;
+}
+
+function dateProximityScore(discoverId: string, isoDate: string): { score: number; reasons: string[] } {
+  const months = DISCOVER_TYPICAL_MONTHS[discoverId];
+  if (!months?.length || !isoDate) return { score: 0, reasons: [] };
+  const d = new Date(`${isoDate}T12:00:00`);
+  if (Number.isNaN(d.getTime())) return { score: 0, reasons: [] };
+  const m = d.getMonth() + 1;
+  if (months.includes(m)) {
+    return { score: 0.14, reasons: ["Date lines up with the usual race month"] };
+  }
+  for (const tm of months) {
+    const prev = tm === 1 ? 12 : tm - 1;
+    const next = tm === 12 ? 1 : tm + 1;
+    if (m === prev || m === next) {
+      return { score: 0.07, reasons: ["Date is close to the typical race season"] };
+    }
+  }
+  return { score: 0, reasons: [] };
+}
+
 function titleScore(discover: DiscoverRace, act: ActivityMatchInput): { score: number; reasons: string[] } {
   const reasons: string[] = [];
   const t = normalize(act.name);
@@ -106,8 +174,9 @@ function titleScore(discover: DiscoverRace, act: ActivityMatchInput): { score: n
   }
   const aliases = DISCOVER_RACE_ALIASES[discover.id] ?? [];
   for (const a of aliases) {
+    if (!aliasMatchesDiscoverTitle(act, discover, a)) continue;
     const na = normalize(a);
-    if (na.length > 1 && t.includes(na)) {
+    if (na.length > 1) {
       s += 0.4;
       reasons.push(`Title matches known alias (“${a}”)`);
       break;
@@ -134,7 +203,7 @@ function sportBonus(discover: DiscoverRace, act: ActivityMatchInput): number {
 }
 
 function confidenceFromScore(score: number): RaceMatchConfidence {
-  if (score >= 0.72) return "high";
+  if (score >= RACE_MATCH_HIGH_SCORE) return "high";
   if (score >= 0.48) return "medium";
   return "low";
 }
@@ -177,9 +246,10 @@ export function rankKnownRaceMatches(
     const l = locationScore(discover, activity);
     const e = elevationBonus(discover, activity);
     const sp = sportBonus(discover, activity);
-    const score = Math.min(1, t.score + d.score + l.score + e.score + sp);
+    const dt = dateProximityScore(discover.id, activity.date);
+    const score = Math.min(1, t.score + d.score + l.score + e.score + sp + dt.score);
     if (score < minScore) continue;
-    const reasons = [...t.reasons, ...d.reasons, ...l.reasons, ...e.reasons];
+    const reasons = [...t.reasons, ...d.reasons, ...l.reasons, ...e.reasons, ...dt.reasons];
     if (sp > 0) reasons.push("Sport type fits the event");
     const bucket = findBucketListRace(userRaces, discover);
     out.push({

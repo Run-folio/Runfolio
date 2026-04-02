@@ -1,24 +1,32 @@
-import type { StravaFeedActivity, StravaFeedStats } from "@/types";
-import { StravaRecentActivitiesSection } from "@/components/strava-recent-activities-section";
+import type { StravaFeedStats, StravaRaceCandidate } from "@/types";
+import { StravaRacePortfolioSection } from "@/components/strava-race-portfolio-section";
 
 type Props = {
-  activities: StravaFeedActivity[];
-  stats: StravaFeedStats;
+  raceCandidates: StravaRaceCandidate[];
+  raceCandidateStats: StravaFeedStats;
+  matchedMajorDiscoverIds: string[];
   stravaOAuthConfigured?: boolean;
+  stravaOk: boolean;
 };
 
-/** Owner-only block on public profile — real Strava data when you view your own URL. */
-export function StravaProfileBlock({ activities, stats, stravaOAuthConfigured }: Props) {
+/** Owner-only block on public profile — curated long-run feed when you view your own URL. */
+export function StravaProfileBlock({
+  raceCandidates,
+  raceCandidateStats,
+  matchedMajorDiscoverIds,
+  stravaOAuthConfigured,
+  stravaOk
+}: Props) {
   return (
     <div className="border-x border-b border-border bg-[#080a0e] px-5 py-8 md:px-8 md:py-10">
-      <StravaRecentActivitiesSection
-        activities={activities}
-        stats={stats}
-        title="My Strava activities"
-        eyebrow="Live sync"
-        limit={6}
+      <StravaRacePortfolioSection
+        candidates={raceCandidates}
+        raceCandidateStats={raceCandidateStats}
+        matchedMajorDiscoverIds={matchedMajorDiscoverIds}
+        recentlyCompletedCatalog={[]}
         stravaOAuthConfigured={stravaOAuthConfigured}
-        emptyHint="Connect Strava from Add race to show your activities on your public profile."
+        stravaOk={stravaOk}
+        layout="profile"
       />
     </div>
   );

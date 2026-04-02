@@ -30,12 +30,41 @@ export type StravaActivityJson = {
   name: string;
   distance: number;
   moving_time: number;
+  elapsed_time?: number;
   total_elevation_gain?: number | null;
   start_date: string;
   description?: string | null;
+  type?: string | null;
+  sport_type?: string | null;
+  location_city?: string | null;
+  location_country?: string | null;
+  average_speed?: number | null;
+  kudos_count?: number | null;
+  achievement_count?: number | null;
   map?: { summary_polyline?: string | null };
   start_latlng?: [number, number] | null;
+  photos?: {
+    count?: number;
+    primary?: {
+      unique_id?: string;
+      urls?: Record<string, string> | null;
+    } | null;
+  } | null;
 };
+
+export function pickStravaPrimaryPhotoUrl(raw: { photos?: StravaActivityJson["photos"] }): string | null {
+  const urls = raw.photos?.primary?.urls;
+  if (!urls) return null;
+  return urls["600"] ?? urls["500"] ?? urls["1000"] ?? Object.values(urls).find(Boolean) ?? null;
+}
+
+/** Strava activity detail usually exposes one primary with multiple size URLs — not a full multi-photo album. */
+export function collectStravaActivityPhotoUrls(photos: StravaActivityJson["photos"] | null | undefined): string[] {
+  const urls = photos?.primary?.urls;
+  if (!urls) return [];
+  const vals = Object.values(urls).filter((u): u is string => Boolean(u && typeof u === "string"));
+  return [...new Set(vals)];
+}
 
 export async function fetchStravaActivity(activityId: string, accessToken: string): Promise<StravaActivityJson> {
   const res = await fetch(`https://www.strava.com/api/v3/activities/${activityId}`, {
@@ -77,6 +106,7 @@ export type StravaSummaryActivityJson = {
   kudos_count?: number | null;
   achievement_count?: number | null;
   map?: { summary_polyline?: string | null };
+  photos?: StravaActivityJson["photos"];
 };
 
 export async function fetchStravaAthleteActivities(

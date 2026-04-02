@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { RaceJourney } from "@/components/race-journey";
-import { StravaRecentActivitiesSection } from "@/components/strava-recent-activities-section";
+import { StravaRacePortfolioSection } from "@/components/strava-race-portfolio-section";
 import { Card } from "@/components/ui/card";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
@@ -13,6 +13,7 @@ import { demoRaces, demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { getStravaFeed } from "@/lib/strava-feed";
+import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,15 @@ export default async function DashboardPage() {
   const future = (races ?? []).filter((race) => !race.is_completed);
   const featured = (races ?? [])[0];
   const totalKm = completed.reduce((acc, race) => acc + (race.distance_km ?? 0), 0);
+
+  const stravaRaceEnriched = stravaFeed.ok
+    ? enrichRaceCandidatesWithCatalogMatches(stravaFeed.raceCandidates, races ?? [])
+    : [];
+  const matchedMajorDiscoverIds = dedupeHighConfidenceDiscoverIds(stravaRaceEnriched);
+  const recentlyCompletedCatalog = (completed ?? [])
+    .filter((r) => Boolean(r.discover_race_id))
+    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
+    .slice(0, 6);
 
   return (
     <>
@@ -145,10 +155,13 @@ export default async function DashboardPage() {
           </div>
         </section>
 
-        <StravaRecentActivitiesSection
-          activities={stravaFeed.activities}
-          stats={stravaFeed.stats}
+        <StravaRacePortfolioSection
+          candidates={stravaRaceEnriched}
+          raceCandidateStats={stravaFeed.raceCandidateStats}
+          matchedMajorDiscoverIds={matchedMajorDiscoverIds}
+          recentlyCompletedCatalog={recentlyCompletedCatalog}
           stravaOAuthConfigured={stravaOAuthConfigured}
+          stravaOk={stravaFeed.ok}
         />
 
         <div className="relative left-1/2 w-screen max-w-[100vw] -translate-x-1/2 right-auto border-y border-border bg-[#05070c]">
@@ -259,16 +272,20 @@ export default async function DashboardPage() {
           {stravaFeed.ok ? (
             <>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Strava distance</p>
-                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{stravaFeed.stats.totalDistanceKm} km</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Race candidate km</p>
+                <p className="mt-2 text-3xl font-bold tabular-nums text-white">
+                  {stravaFeed.raceCandidateStats.totalDistanceKm} km
+                </p>
+                <p className="type-meta mt-1 text-[10px]">≥21 km runs only</p>
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Strava activities</p>
-                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{stravaFeed.stats.activityCount}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Race candidates</p>
+                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{stravaFeed.raceCandidateStats.activityCount}</p>
+                <p className="type-meta mt-1 text-[10px]">{stravaFeed.stats.activityCount} total loaded</p>
               </div>
               <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Strava elevation</p>
-                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{stravaFeed.stats.totalElevationM} m</p>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Candidate elevation</p>
+                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{stravaFeed.raceCandidateStats.totalElevationM} m</p>
               </div>
             </>
           ) : null}

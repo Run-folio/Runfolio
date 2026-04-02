@@ -80,7 +80,7 @@ export function StravaRecentActivitiesSection({
           <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold">Longest efforts (top 3)</p>
           <div className="grid gap-3 md:grid-cols-3">
             {stats.topByDistance.map((a) => (
-              <StravaActivityCard key={`top-${a.strava_id}`} activity={a} />
+              <StravaActivityCard key={`top-${a.strava_id}`} activity={a} linkToPortfolio />
             ))}
           </div>
         </div>
@@ -90,7 +90,7 @@ export function StravaRecentActivitiesSection({
         <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Recent</p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {slice.map((a) => (
-            <StravaActivityCard key={a.strava_id} activity={a} />
+            <StravaActivityCard key={a.strava_id} activity={a} linkToPortfolio />
           ))}
         </div>
       </div>

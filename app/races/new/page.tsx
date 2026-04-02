@@ -10,15 +10,18 @@ import { demoRaces, isSupabaseConfigured } from "@/lib/demo-mode";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { hasStravaConnection } from "@/lib/strava-access-server";
 import { getStravaFeed } from "@/lib/strava-feed";
+import { isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 
 export const dynamic = "force-dynamic";
 
 type PageProps = {
-  searchParams: Promise<{ strava?: string; strava_error?: string }>;
+  searchParams: Promise<{ strava?: string; strava_error?: string; discover?: string }>;
 };
 
 export default async function NewRacePage({ searchParams }: PageProps) {
   const q = await searchParams;
+  const initialDiscoverRaceId =
+    q.discover && isDiscoverCatalogRaceId(q.discover) ? q.discover : undefined;
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
   );
@@ -68,7 +71,8 @@ export default async function NewRacePage({ searchParams }: PageProps) {
           stravaOAuthConfigured={stravaOAuthConfigured}
           stravaConnected={stravaConnected}
           stravaError={q.strava_error ? decodeURIComponent(q.strava_error) : undefined}
-          recentStravaActivities={stravaFeed.activities}
+          recentStravaActivities={stravaFeed.raceCandidates}
+          initialDiscoverRaceId={initialDiscoverRaceId}
         />
       </main>
     </>

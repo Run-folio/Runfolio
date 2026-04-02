@@ -89,11 +89,19 @@ export default async function RaceActivityPage({ params }: Props) {
           </div>
         ) : null}
 
-        <p className="text-sm text-muted">
+        <div className="flex flex-col gap-2 text-sm text-muted sm:flex-row sm:flex-wrap sm:gap-6">
+          {race.strava_activity_id?.trim() ? (
+            <Link
+              href={`/activities/${race.strava_activity_id.trim()}`}
+              className="font-semibold text-accent underline-offset-4 hover:underline"
+            >
+              Full race portfolio (Strava + story)
+            </Link>
+          ) : null}
           <Link href={`/races/${raceId}/info`} className="text-[#d4af37] underline-offset-4 hover:underline">
             Race information & signup
           </Link>
-        </p>
+        </div>
       </main>
     </>
   );

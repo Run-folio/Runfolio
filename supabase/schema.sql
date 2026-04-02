@@ -91,3 +91,15 @@ create policy "Users can manage own links"
 -- Strava ↔ known-race confirmation (run migration_race_strava_discover.sql on existing DBs)
 alter table races add column if not exists strava_activity_id text;
 alter table races add column if not exists discover_race_id text;
+
+-- Activity portfolio / reflections (run migration_activity_portfolio.sql)
+alter table races add column if not exists race_subtitle text;
+alter table races add column if not exists reflection_toughest text;
+alter table races add column if not exists reflection_learned text;
+alter table races add column if not exists reflection_mattered text;
+alter table races add column if not exists finish_notes text;
+alter table races add column if not exists manual_photo_urls text[];
+alter table races add column if not exists tag_pb boolean default false;
+alter table races add column if not exists tag_career_highlight boolean default false;
+alter table races add column if not exists tag_hardest boolean default false;
+alter table races add column if not exists tag_bucket_list_done boolean default false;

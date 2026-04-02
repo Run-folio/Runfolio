@@ -1,14 +1,16 @@
-import type { StravaFeedActivity, StravaFeedStats } from "@/types";
+import type { StravaFeedActivity, StravaFeedResult, StravaFeedStats } from "@/types";
 import { runfolioLog } from "@/lib/runfolio-log";
 import {
   fetchStravaAthleteActivities,
   formatStravaMovingTime,
+  pickStravaPrimaryPhotoUrl,
   type StravaSummaryActivityJson
 } from "@/lib/strava-api";
 import { getValidStravaAccessToken } from "@/lib/strava-access-server";
 import { getStravaClientCredentials } from "@/lib/strava-env";
 import { getStravaTokensFromCookies, persistStravaTokensToCookies } from "@/lib/strava-cookies";
 import { refreshStravaAccessToken } from "@/lib/strava-oauth";
+import { computeStravaFeedStats, filterStravaRaceCandidates } from "@/lib/strava-race-candidates";
 
 const RUN_LIKE = new Set([
   "Run",
@@ -52,26 +54,25 @@ export function normalizeStravaSummary(raw: StravaSummaryActivityJson): StravaFe
     kudos_count: raw.kudos_count ?? 0,
     achievement_count: raw.achievement_count ?? 0,
     summary_polyline: raw.map?.summary_polyline ?? null,
-    strava_url: `https://www.strava.com/activities/${id}`
+    strava_url: `https://www.strava.com/activities/${id}`,
+    primary_photo_url: pickStravaPrimaryPhotoUrl(raw) ?? null
   };
 }
 
-function emptyStats(): StravaFeedStats {
+function emptyFeedResult(errorMessage?: string): StravaFeedResult {
+  const empty = computeStravaFeedStats([]);
   return {
-    activityCount: 0,
-    runCount: 0,
-    totalDistanceKm: 0,
-    totalElevationM: 0,
-    totalMovingTimeSec: 0,
-    longestActivityKm: 0,
-    highestElevationM: 0,
-    topByDistance: []
+    activities: [],
+    raceCandidates: [],
+    stats: empty,
+    raceCandidateStats: empty,
+    ok: false,
+    errorMessage
   };
 }
 
-function computeStats(activities: StravaFeedActivity[]): StravaFeedStats {
-  if (activities.length === 0) return emptyStats();
-  const runs = activities.filter(isRunLike);
+function computeLegacyStats(activities: StravaFeedActivity[]): StravaFeedStats {
+  if (activities.length === 0) return computeStravaFeedStats([]);
   let totalDistanceKm = 0;
   let totalElevationM = 0;
   let totalMovingTimeSec = 0;
@@ -86,6 +87,7 @@ function computeStats(activities: StravaFeedActivity[]): StravaFeedStats {
       highestElevationM = Math.max(highestElevationM, a.elevation_m);
     }
   }
+  const runs = activities.filter(isRunLike);
   const runPool = runs.length > 0 ? runs : activities;
   const topByDistance = [...runPool].sort((a, b) => b.distance_km - a.distance_km).slice(0, 3);
   return {
@@ -100,12 +102,10 @@ function computeStats(activities: StravaFeedActivity[]): StravaFeedStats {
   };
 }
 
-export type StravaFeedResult = {
-  activities: StravaFeedActivity[];
-  stats: StravaFeedStats;
-  ok: boolean;
-  errorMessage?: string;
-};
+function isUnauthorizedMessage(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return m.includes("401") || m.includes("unauthorized");
+}
 
 async function listWithToken(access: string): Promise<StravaSummaryActivityJson[]> {
   const first = await fetchStravaAthleteActivities(access, { page: 1, perPage: 50 });
@@ -120,25 +120,31 @@ async function listWithToken(access: string): Promise<StravaSummaryActivityJson[
   return [...first, ...second];
 }
 
-function isUnauthorizedMessage(msg: string): boolean {
-  const m = msg.toLowerCase();
-  return m.includes("401") || m.includes("unauthorized");
+function buildFeedResult(activities: StravaFeedActivity[]): StravaFeedResult {
+  const raceCandidates = filterStravaRaceCandidates(activities);
+  return {
+    activities,
+    raceCandidates,
+    stats: computeLegacyStats(activities),
+    raceCandidateStats: computeStravaFeedStats(raceCandidates),
+    ok: true
+  };
 }
 
 /**
  * Fetch recent Strava activities for the current request (cookies / env token).
- * Safe to call from RSC: failures return empty feed without throwing.
+ * `activities` is the full loaded set; `raceCandidates` is filtered (≥21 km, Run / Trail Run / Race only).
  */
 export async function getStravaFeed(): Promise<StravaFeedResult> {
   let access = await getValidStravaAccessToken();
   if (!access) {
-    return { activities: [], stats: emptyStats(), ok: false };
+    return emptyFeedResult();
   }
 
   try {
     const raw = await listWithToken(access);
     const activities = raw.map(normalizeStravaSummary).sort((a, b) => b.start_date.localeCompare(a.start_date));
-    return { activities, stats: computeStats(activities), ok: true };
+    return buildFeedResult(activities);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Strava list failed";
     const cred = getStravaClientCredentials();
@@ -151,7 +157,7 @@ export async function getStravaFeed(): Promise<StravaFeedResult> {
         await persistStravaTokensToCookies(t);
         const raw = await listWithToken(t.access_token);
         const activities = raw.map(normalizeStravaSummary).sort((a, b) => b.start_date.localeCompare(a.start_date));
-        return { activities, stats: computeStats(activities), ok: true };
+        return buildFeedResult(activities);
       } catch (e2) {
         runfolioLog.warn("strava.feed", "retry after refresh failed", {
           detail: e2 instanceof Error ? e2.message : "unknown"
@@ -161,6 +167,6 @@ export async function getStravaFeed(): Promise<StravaFeedResult> {
       runfolioLog.warn("strava.feed", message);
     }
 
-    return { activities: [], stats: emptyStats(), ok: false, errorMessage: message };
+    return emptyFeedResult(message);
   }
 }

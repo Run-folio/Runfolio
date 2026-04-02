@@ -1,19 +1,52 @@
 import Link from "next/link";
-import type { StravaFeedActivity } from "@/types";
+import type { CatalogRaceSuggestion, StravaFeedActivity } from "@/types";
 import { cn } from "@/lib/utils";
 
 type Props = {
   activity: StravaFeedActivity;
   onSelect?: () => void;
   className?: string;
+  /** Best catalog match for display — does not persist until the user confirms. */
+  catalogSuggestion?: CatalogRaceSuggestion | null;
+  /** Whole card links to `/activities/[id]` (dashboard / profile portfolio). */
+  linkToPortfolio?: boolean;
 };
 
-export function StravaActivityCard({ activity, onSelect, className }: Props) {
+function confidenceShort(c: CatalogRaceSuggestion["confidence"]): string {
+  if (c === "high") return "High match";
+  if (c === "medium") return "Possible match";
+  return "Weak match";
+}
+
+export function StravaActivityCard({
+  activity,
+  onSelect,
+  className,
+  catalogSuggestion,
+  linkToPortfolio = false
+}: Props) {
   const loc = [activity.location_city, activity.location_country].filter(Boolean).join(", ") || "—";
   const sport = activity.sport_type || activity.type || "Activity";
+  const photo = activity.primary_photo_url;
 
   const inner = (
     <>
+      {photo ? (
+        <div
+          className="-mx-4 -mt-4 mb-3 h-28 w-[calc(100%+2rem)] max-w-none bg-cover bg-center"
+          style={{ backgroundImage: `url("${photo.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")` }}
+        />
+      ) : null}
+      {catalogSuggestion ? (
+        <div className="mb-3 border border-accent/35 bg-accent/10 px-2.5 py-2">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-accent">Likely major race</p>
+          <p className="mt-1 text-sm font-semibold leading-snug text-white">{catalogSuggestion.displayTitle}</p>
+          <p className="type-meta mt-1 text-[10px]">
+            {confidenceShort(catalogSuggestion.confidence)} · {Math.round(catalogSuggestion.score * 100)}% ·{" "}
+            {catalogSuggestion.onUserBucketList ? "On your bucket list" : "Not on bucket list"}
+          </p>
+        </div>
+      ) : null}
       <div className="flex items-start justify-between gap-2">
         <p className="font-semibold leading-snug text-white line-clamp-2">{activity.name}</p>
         <span className="shrink-0 border border-white/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted">
@@ -66,6 +99,44 @@ export function StravaActivityCard({ activity, onSelect, className }: Props) {
         {inner}
         <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-accent">Use for race →</p>
       </button>
+    );
+  }
+
+  if (linkToPortfolio) {
+    return (
+      <Link
+        href={`/activities/${activity.strava_id}`}
+        className={cn(
+          "block border border-border bg-[#0d0d0f] p-4 text-left transition hover:border-accent/40 hover:bg-black/50",
+          className
+        )}
+      >
+        {inner}
+        <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-white hover:underline">
+            Race portfolio page →
+          </span>
+          <span
+            role="link"
+            tabIndex={0}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              window.open(activity.strava_url, "_blank", "noopener,noreferrer");
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                window.open(activity.strava_url, "_blank", "noopener,noreferrer");
+              }
+            }}
+            className="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
+          >
+            Open in Strava
+          </span>
+        </div>
+      </Link>
     );
   }
 

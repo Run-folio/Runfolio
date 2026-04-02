@@ -1,15 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
-import type { Activity, ActivityMatchInput, Race, StravaFeedActivity } from "@/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Activity, ActivityMatchInput, CatalogRaceSuggestion, Race, StravaFeedActivity } from "@/types";
 import { createRaceAction } from "@/lib/actions";
 import { stravaFeedToActivity } from "@/lib/strava-feed-to-activity";
 import { StravaActivityCard } from "@/components/strava-activity-card";
 import { RaceMatchConfirmation } from "@/components/race-match-confirmation";
 import { asFormAction } from "@/lib/server-action-form";
 import { suggestRaceMatch } from "@/lib/match-races";
-import { rankKnownRaceMatches } from "@/lib/known-race-match";
+import { getDiscoverRaceById, rankKnownRaceMatches } from "@/lib/known-race-match";
+import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -19,8 +20,10 @@ type Props = {
   stravaOAuthConfigured?: boolean;
   stravaConnected?: boolean;
   stravaError?: string;
-  /** Recent activities from connected Strava (server-fetched). */
+  /** Race-candidate Strava activities (≥21 km, Run / Trail Run / Race). */
   recentStravaActivities?: StravaFeedActivity[];
+  /** Prefill from Find a Race → catalog detail. */
+  initialDiscoverRaceId?: string;
 };
 
 export function CreateRaceForm({
@@ -28,7 +31,8 @@ export function CreateRaceForm({
   stravaOAuthConfigured = false,
   stravaConnected = false,
   stravaError,
-  recentStravaActivities = []
+  recentStravaActivities = [],
+  initialDiscoverRaceId
 }: Props) {
   const [form, setForm] = useState({
     name: "",
@@ -47,6 +51,42 @@ export function CreateRaceForm({
   const [hasRoutePreview, setHasRoutePreview] = useState(false);
   const [pendingMatchInput, setPendingMatchInput] = useState<ActivityMatchInput | null>(null);
   const [matchDismissedForStravaId, setMatchDismissedForStravaId] = useState<string | null>(null);
+  const [stravaHeroPhoto, setStravaHeroPhoto] = useState<string | null>(null);
+  const appliedDiscoverRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!initialDiscoverRaceId || appliedDiscoverRef.current === initialDiscoverRaceId) return;
+    const disc = getDiscoverRaceById(initialDiscoverRaceId);
+    if (!disc) return;
+    appliedDiscoverRef.current = initialDiscoverRaceId;
+    const title = getCatalogDisplayTitle(initialDiscoverRaceId);
+    setForm((prev) => ({
+      ...prev,
+      name: prev.name || title,
+      distance_km: prev.distance_km || String(disc.distance_km),
+      location: prev.location || disc.location
+    }));
+  }, [initialDiscoverRaceId]);
+
+  const raceEffortsWithHints = useMemo(() => {
+    return recentStravaActivities.map((a) => {
+      const ranked = rankKnownRaceMatches(toMatchInputFromFeed(a), existingRaces, 0.28);
+      const top = ranked[0];
+      if (!top || top.score < 0.34) {
+        return { activity: a, catalogSuggestion: null as CatalogRaceSuggestion | null };
+      }
+      const catalogSuggestion: CatalogRaceSuggestion = {
+        discoverRaceId: top.discoverRaceId,
+        displayTitle: getCatalogDisplayTitle(top.discoverRaceId),
+        confidence: top.confidence,
+        score: top.score,
+        reasons: top.reasons,
+        onUserBucketList: top.onUserBucketList,
+        userRaceId: top.userRaceId
+      };
+      return { activity: a, catalogSuggestion };
+    });
+  }, [recentStravaActivities, existingRaces]);
 
   const match = useMemo(() => {
     if (!form.distance_km || !form.date) return null;
@@ -105,6 +145,7 @@ export function CreateRaceForm({
 
   const applyActivity = (activity: Activity) => {
     setHasRoutePreview(Boolean(activity.polyline));
+    setStravaHeroPhoto(activity.primary_photo_url ?? null);
     setForm((prev) => ({
       ...prev,
       name: prev.name || activity.name,
@@ -234,13 +275,20 @@ export function CreateRaceForm({
               Uses your Strava access token on the server (see README). Activities you can see must be allowed for that
               token. Nothing is written to Strava.
             </p>
-            {stravaConnected && recentStravaActivities.length > 0 ? (
+            {stravaConnected && raceEffortsWithHints.length > 0 ? (
               <div className="mt-5 border-t border-white/10 pt-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">Your recent Strava activities</p>
-                <p className="mt-1 text-xs text-muted">Tap one to autofill the race form (newest first).</p>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">Your race candidates</p>
+                <p className="mt-1 text-xs text-muted">
+                  ≥21 km · Run / Trail Run / Race only — tap to autofill and confirm a catalog match if suggested.
+                </p>
                 <div className="mt-3 grid max-h-[340px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
-                  {recentStravaActivities.slice(0, 12).map((a) => (
-                    <StravaActivityCard key={a.strava_id} activity={a} onSelect={() => applyFromStravaFeed(a)} />
+                  {raceEffortsWithHints.slice(0, 12).map(({ activity: a, catalogSuggestion }) => (
+                    <StravaActivityCard
+                      key={a.strava_id}
+                      activity={a}
+                      catalogSuggestion={catalogSuggestion}
+                      onSelect={() => applyFromStravaFeed(a)}
+                    />
                   ))}
                 </div>
               </div>
@@ -379,7 +427,15 @@ export function CreateRaceForm({
               <span className="text-xs text-green">Auto-filled (8)</span>
             </div>
             <div className="grid grid-cols-4 gap-2">
-              {[1, 2, 3, 4].map((i) => (
+              <div
+                className="h-16 border border-border bg-cover bg-center"
+                style={{
+                  backgroundImage: stravaHeroPhoto
+                    ? `url("${stravaHeroPhoto.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}")`
+                    : "url('/reference/hero-1.png')"
+                }}
+              />
+              {[2, 3, 4].map((i) => (
                 <div key={i} className="h-16 border border-border bg-cover bg-center" style={{ backgroundImage: "url('/reference/hero-1.png')" }} />
               ))}
             </div>
