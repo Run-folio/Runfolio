@@ -3,7 +3,7 @@ import { STRAVA_OAUTH_STATE_COOKIE } from "@/lib/strava-cookies";
 import { getStravaClientCredentials, getStravaRedirectUri } from "@/lib/strava-env";
 import { stravaAuthorizeUrl } from "@/lib/strava-oauth";
 
-export async function GET() {
+export async function GET(request: Request) {
   const cred = getStravaClientCredentials();
   if (!cred) {
     return NextResponse.json(
@@ -13,7 +13,7 @@ export async function GET() {
   }
 
   const state = crypto.randomUUID();
-  const redirectUri = getStravaRedirectUri();
+  const redirectUri = getStravaRedirectUri(request);
   const authorize = stravaAuthorizeUrl({ clientId: cred.clientId, redirectUri, state });
   const res = NextResponse.redirect(authorize);
   res.cookies.set(STRAVA_OAUTH_STATE_COOKIE, state, {

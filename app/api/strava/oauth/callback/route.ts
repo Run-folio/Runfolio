@@ -35,7 +35,7 @@ export async function GET(request: Request) {
     return redirectWith("/races/new?strava_error=no_client");
   }
 
-  const redirectUri = getStravaRedirectUri();
+  const redirectUri = getStravaRedirectUri(request);
 
   try {
     const tokens = await exchangeStravaCode(code, cred.clientId, cred.clientSecret, redirectUri);
