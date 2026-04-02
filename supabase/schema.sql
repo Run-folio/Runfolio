@@ -87,3 +87,7 @@ create policy "Users can manage own links"
       and races.user_id = auth.uid()
     )
   );
+
+-- Strava ↔ known-race confirmation (run migration_race_strava_discover.sql on existing DBs)
+alter table races add column if not exists strava_activity_id text;
+alter table races add column if not exists discover_race_id text;

@@ -8,6 +8,8 @@ import { createClient } from "@/lib/supabase/server";
 import type { Race } from "@/types";
 import { demoRaces, isSupabaseConfigured } from "@/lib/demo-mode";
 import { runfolioLog } from "@/lib/runfolio-log";
+import { hasStravaConnection } from "@/lib/strava-access-server";
+import { getStravaFeed } from "@/lib/strava-feed";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +22,9 @@ export default async function NewRacePage({ searchParams }: PageProps) {
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
   );
+  const stravaFeed = await getStravaFeed();
+  const stravaConnected =
+    (await hasStravaConnection()) || q.strava === "connected";
 
   let existingRaces: Race[] = demoRaces;
   if (isSupabaseConfigured()) {
@@ -61,8 +66,9 @@ export default async function NewRacePage({ searchParams }: PageProps) {
         <CreateRaceForm
           existingRaces={existingRaces}
           stravaOAuthConfigured={stravaOAuthConfigured}
-          stravaConnected={q.strava === "connected"}
+          stravaConnected={stravaConnected}
           stravaError={q.strava_error ? decodeURIComponent(q.strava_error) : undefined}
+          recentStravaActivities={stravaFeed.activities}
         />
       </main>
     </>

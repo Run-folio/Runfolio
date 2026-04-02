@@ -37,4 +37,13 @@ export function applyStravaTokensToResponse(res: NextResponse, tokens: StravaTok
   res.cookies.set(EXPIRES, String(tokens.expires_at), { ...cookieBase, maxAge });
 }
 
+/** Persist rotated tokens during a Server Component / server action (no Response object). */
+export async function persistStravaTokensToCookies(tokens: StravaTokenResponse): Promise<void> {
+  const jar = await cookies();
+  const maxAge = Math.max(60, tokens.expires_in);
+  jar.set(ACCESS, tokens.access_token, { ...cookieBase, maxAge });
+  jar.set(REFRESH, tokens.refresh_token, { ...cookieBase, maxAge: 60 * 60 * 24 * 180 });
+  jar.set(EXPIRES, String(tokens.expires_at), { ...cookieBase, maxAge });
+}
+
 export const STRAVA_OAUTH_STATE_COOKIE = "strava_oauth_state";

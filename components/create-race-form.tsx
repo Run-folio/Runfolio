@@ -2,10 +2,14 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import type { Activity, Race } from "@/types";
+import type { Activity, ActivityMatchInput, Race, StravaFeedActivity } from "@/types";
 import { createRaceAction } from "@/lib/actions";
+import { stravaFeedToActivity } from "@/lib/strava-feed-to-activity";
+import { StravaActivityCard } from "@/components/strava-activity-card";
+import { RaceMatchConfirmation } from "@/components/race-match-confirmation";
 import { asFormAction } from "@/lib/server-action-form";
 import { suggestRaceMatch } from "@/lib/match-races";
+import { rankKnownRaceMatches } from "@/lib/known-race-match";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
@@ -15,13 +19,16 @@ type Props = {
   stravaOAuthConfigured?: boolean;
   stravaConnected?: boolean;
   stravaError?: string;
+  /** Recent activities from connected Strava (server-fetched). */
+  recentStravaActivities?: StravaFeedActivity[];
 };
 
 export function CreateRaceForm({
   existingRaces,
   stravaOAuthConfigured = false,
   stravaConnected = false,
-  stravaError
+  stravaError,
+  recentStravaActivities = []
 }: Props) {
   const [form, setForm] = useState({
     name: "",
@@ -37,13 +44,67 @@ export function CreateRaceForm({
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [hasRoutePreview, setHasRoutePreview] = useState(false);
+  const [pendingMatchInput, setPendingMatchInput] = useState<ActivityMatchInput | null>(null);
+  const [matchDismissedForStravaId, setMatchDismissedForStravaId] = useState<string | null>(null);
 
   const match = useMemo(() => {
     if (!form.distance_km || !form.date) return null;
     return suggestRaceMatch(existingRaces, Number(form.distance_km), form.date);
   }, [existingRaces, form.date, form.distance_km]);
 
+  const matchCandidates = useMemo(() => {
+    if (!pendingMatchInput) return [];
+    return rankKnownRaceMatches(pendingMatchInput, existingRaces);
+  }, [pendingMatchInput, existingRaces]);
+
+  function toMatchInputFromActivity(activity: Activity): ActivityMatchInput {
+    return {
+      strava_id: activity.strava_id,
+      name: activity.name,
+      distance_km: activity.distance_km,
+      date: activity.date,
+      elevation_m: activity.elevation_m ?? null,
+      location_city: null,
+      location_country: null,
+      sport_type: null,
+      type: null
+    };
+  }
+
+  function toMatchInputFromFeed(feed: StravaFeedActivity): ActivityMatchInput {
+    return {
+      strava_id: feed.strava_id,
+      name: feed.name,
+      distance_km: feed.distance_km,
+      date: feed.start_date.slice(0, 10),
+      elevation_m: feed.elevation_m,
+      location_city: feed.location_city,
+      location_country: feed.location_country,
+      sport_type: feed.sport_type,
+      type: feed.type
+    };
+  }
+
+  function openMatcher(input: ActivityMatchInput) {
+    if (!input.strava_id?.trim()) {
+      setPendingMatchInput(null);
+      return;
+    }
+    if (input.strava_id === matchDismissedForStravaId) {
+      setPendingMatchInput(null);
+      return;
+    }
+    const ranked = rankKnownRaceMatches(input, existingRaces);
+    if (ranked.length === 0) {
+      setPendingMatchInput(null);
+      return;
+    }
+    setPendingMatchInput(input);
+  }
+
   const applyActivity = (activity: Activity) => {
+    setHasRoutePreview(Boolean(activity.polyline));
     setForm((prev) => ({
       ...prev,
       name: prev.name || activity.name,
@@ -56,6 +117,18 @@ export function CreateRaceForm({
           : prev.elevation_m,
       description: activity.description ?? prev.description
     }));
+  };
+
+  const applyFromStravaFeed = (feed: StravaFeedActivity) => {
+    const act = stravaFeedToActivity(feed);
+    applyActivity(act);
+    const loc = [feed.location_city, feed.location_country].filter(Boolean).join(", ");
+    if (loc) {
+      setForm((prev) => ({ ...prev, location: prev.location || loc }));
+    }
+    setImportNotice(`Loaded “${feed.name}” from your Strava activities.`);
+    setImportError(null);
+    openMatcher(toMatchInputFromFeed(feed));
   };
 
   const handleStravaImport = async () => {
@@ -80,6 +153,7 @@ export function CreateRaceForm({
       }
       if (data.activity) {
         applyActivity(data.activity);
+        openMatcher(toMatchInputFromActivity(data.activity));
       }
       if (data.warning) setImportNotice(data.warning);
       else if (data.source === "strava") setImportNotice("Imported from Strava.");
@@ -90,7 +164,17 @@ export function CreateRaceForm({
     }
   };
 
+  const formSnap = {
+    date: form.date,
+    distance_km: form.distance_km,
+    elevation_m: form.elevation_m,
+    time: form.time,
+    location: form.location,
+    description: form.description
+  };
+
   return (
+    <>
     <form action={asFormAction(createRaceAction)} className="space-y-4">
       <Card className="bg-panelAlt/85 p-0">
         <div className="grid gap-4 p-5 lg:grid-cols-[1.4fr_1fr]">
@@ -150,6 +234,17 @@ export function CreateRaceForm({
               Uses your Strava access token on the server (see README). Activities you can see must be allowed for that
               token. Nothing is written to Strava.
             </p>
+            {stravaConnected && recentStravaActivities.length > 0 ? (
+              <div className="mt-5 border-t border-white/10 pt-4">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">Your recent Strava activities</p>
+                <p className="mt-1 text-xs text-muted">Tap one to autofill the race form (newest first).</p>
+                <div className="mt-3 grid max-h-[340px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
+                  {recentStravaActivities.slice(0, 12).map((a) => (
+                    <StravaActivityCard key={a.strava_id} activity={a} onSelect={() => applyFromStravaFeed(a)} />
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="border border-border bg-black/30 p-4">
             <p className="text-sm font-semibold">How it works</p>
@@ -239,10 +334,42 @@ export function CreateRaceForm({
             <div className="p-4">
               <h3 className="text-sm font-semibold uppercase tracking-[0.1em]">Course Map</h3>
             </div>
-            <div className="h-60 bg-cover bg-center" style={{ backgroundImage: "url('/reference/hero-3.png')" }} />
+            <div
+              className={`relative h-60 bg-cover bg-center ${hasRoutePreview ? "border-b border-accent/25" : ""}`}
+              style={
+                hasRoutePreview
+                  ? {
+                      backgroundImage:
+                        "linear-gradient(145deg, rgba(232,122,61,0.15) 0%, rgba(5,7,12,0.95) 45%, #05070c 100%)"
+                    }
+                  : { backgroundImage: "url('/reference/hero-3.png')" }
+              }
+            >
+              {hasRoutePreview ? (
+                <div className="flex h-full flex-col justify-end p-4">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-accent">Route data</p>
+                  <p className="mt-1 text-xs text-muted">
+                    Polyline from Strava — open the activity on Strava for the full interactive map.
+                  </p>
+                </div>
+              ) : null}
+            </div>
             <div className="flex items-center justify-between p-4 text-sm">
-              <p>{form.distance_km || "171.2"} km &nbsp; {form.elevation_m || "10,040"} m+</p>
-              <span className="text-accent">View on Strava</span>
+              <p>
+                {form.distance_km || "—"} km &nbsp; {form.elevation_m || "—"} m+
+              </p>
+              <a
+                href={
+                  form.name
+                    ? `https://www.strava.com/search/results?q=${encodeURIComponent(form.name)}`
+                    : "https://www.strava.com"
+                }
+                className="text-accent hover:underline"
+                target="_blank"
+                rel="noreferrer"
+              >
+                Strava
+              </a>
             </div>
           </Card>
 
@@ -281,5 +408,21 @@ export function CreateRaceForm({
         </div>
       </Card>
     </form>
+
+    {pendingMatchInput && matchCandidates.length > 0 ? (
+      <div className="mt-6">
+        <RaceMatchConfirmation
+          candidates={matchCandidates}
+          stravaActivityId={pendingMatchInput.strava_id}
+          activityTitle={pendingMatchInput.name}
+          formSnap={formSnap}
+          onDismiss={() => {
+            setMatchDismissedForStravaId(pendingMatchInput.strava_id);
+            setPendingMatchInput(null);
+          }}
+        />
+      </div>
+    ) : null}
+    </>
   );
 }

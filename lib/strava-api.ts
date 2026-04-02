@@ -15,6 +15,16 @@ export function formatStravaMovingTime(seconds: number): string {
   return [h, m, sec].map((n) => String(n).padStart(2, "0")).join(":");
 }
 
+/** Human-readable aggregate duration (e.g. totals). */
+export function formatDurationFromSeconds(totalSec: number): string {
+  const s = Math.max(0, Math.floor(totalSec));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (h >= 48) return `${Math.floor(h / 24)}d ${h % 24}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 export type StravaActivityJson = {
   id: number;
   name: string;
@@ -46,4 +56,52 @@ export async function fetchStravaActivity(activityId: string, accessToken: strin
     throw new Error(detail || `Strava API error ${res.status}`);
   }
   return JSON.parse(text) as StravaActivityJson;
+}
+
+/** Summary object returned by GET /athlete/activities (subset of full activity). */
+export type StravaSummaryActivityJson = {
+  id: number;
+  name: string;
+  distance: number;
+  moving_time: number;
+  elapsed_time?: number;
+  total_elevation_gain?: number | null;
+  type?: string | null;
+  sport_type?: string | null;
+  start_date: string;
+  start_date_local?: string | null;
+  location_city?: string | null;
+  location_country?: string | null;
+  average_speed?: number | null;
+  max_speed?: number | null;
+  kudos_count?: number | null;
+  achievement_count?: number | null;
+  map?: { summary_polyline?: string | null };
+};
+
+export async function fetchStravaAthleteActivities(
+  accessToken: string,
+  opts?: { page?: number; perPage?: number }
+): Promise<StravaSummaryActivityJson[]> {
+  const page = opts?.page ?? 1;
+  const perPage = Math.min(Math.max(opts?.perPage ?? 50, 1), 100);
+  const url = new URL("https://www.strava.com/api/v3/athlete/activities");
+  url.searchParams.set("page", String(page));
+  url.searchParams.set("per_page", String(perPage));
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    next: { revalidate: 0 }
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    let detail = text;
+    try {
+      const j = JSON.parse(text) as { message?: string };
+      detail = j.message ?? text;
+    } catch {
+      /* keep */
+    }
+    throw new Error(detail || `Strava list error ${res.status}`);
+  }
+  return JSON.parse(text) as StravaSummaryActivityJson[];
 }

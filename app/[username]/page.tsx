@@ -4,10 +4,14 @@ import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { ProfileHero } from "@/components/profile-hero";
 import { ProfileTopRaces } from "@/components/profile-top-races";
 import { RaceJourney } from "@/components/race-journey";
+import { StravaProfileBlock } from "@/components/strava-profile-block";
+import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { demoRaces, demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
 import { resolveProfileHeroPhoto } from "@/lib/profile-hero-asset";
 import { runfolioLog } from "@/lib/runfolio-log";
+import { getStravaFeed } from "@/lib/strava-feed";
+import type { StravaFeedActivity, StravaFeedStats } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +24,11 @@ export default async function PublicProfilePage({ params }: Props) {
   const { username } = await params;
   let runner: { id: string; name: string } | null = { id: demoUser.id, name: username || demoUser.name };
   let allRaces = [...demoRaces];
+  const stravaOAuthConfigured = Boolean(
+    process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
+  );
+  let ownProfileStrava: { activities: StravaFeedActivity[]; stats: StravaFeedStats } | null = null;
+
   if (isSupabaseConfigured()) {
     try {
       const supabase = await createClient();
@@ -38,6 +47,12 @@ export default async function PublicProfilePage({ params }: Props) {
         allRaces = racesResult.data ?? [];
       } else {
         allRaces = [];
+      }
+
+      const { user } = await getServerAuthUser();
+      if (user?.id && runner && user.id === runner.id) {
+        const feed = await getStravaFeed();
+        ownProfileStrava = { activities: feed.activities, stats: feed.stats };
       }
     } catch (e) {
       if (isDynamicServerError(e)) throw e;
@@ -59,6 +74,14 @@ export default async function PublicProfilePage({ params }: Props) {
 
         <div className="mx-auto w-full max-w-[1400px] px-0">
           <ProfileTopRaces races={completed} />
+
+          {ownProfileStrava ? (
+            <StravaProfileBlock
+              activities={ownProfileStrava.activities}
+              stats={ownProfileStrava.stats}
+              stravaOAuthConfigured={stravaOAuthConfigured}
+            />
+          ) : null}
 
           <div className="grid gap-0 border-x border-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
             <RaceJourney races={allRaces} />
