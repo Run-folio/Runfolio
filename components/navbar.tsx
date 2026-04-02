@@ -11,12 +11,14 @@ const links = [
   { href: "/dashboard", label: "Overview" },
   { href: "/races/new", label: "Add race" },
   { href: "/races/find", label: "Find a race" },
+  { href: "/collections", label: "Collections" },
   { href: "/bucket-list", label: "Bucket List" }
 ] as const;
 
 function isNavActive(pathname: string | null, href: string) {
   if (!pathname) return false;
   if (pathname === href) return true;
+  if (href === "/collections") return pathname.startsWith("/collections");
   if (href === "/dashboard") return pathname === "/dashboard";
   return pathname.startsWith(`${href}/`);
 }

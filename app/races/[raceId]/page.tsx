@@ -3,12 +3,14 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { AppNavbar } from "@/components/app-navbar";
+import { raceIsBucketListFutureGoal, raceIsBucketListItem } from "@/lib/bucket-list-model";
 import { getDiscoverRaceDetail, isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 import { formatDiscoverDistance } from "@/lib/discover-races";
 import { getRaceById } from "@/lib/get-race-by-id";
+import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/demo-mode";
+import { demoRaces, isSupabaseConfigured } from "@/lib/demo-mode";
 import type { Race } from "@/types";
 
 type Props = {
@@ -36,6 +38,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
     if (!detail) notFound();
 
     let userMatch: Race | null = null;
+    let bucketFuture: Race | null = null;
     if (isSupabaseConfigured()) {
       try {
         const { user } = await getServerAuthUser();
@@ -51,10 +54,26 @@ export default async function RaceIdRouterPage({ params }: Props) {
             .limit(1)
             .maybeSingle();
           userMatch = (data as Race | null) ?? null;
+
+          const { data: openRows } = await supabase
+            .from("races")
+            .select("*")
+            .eq("user_id", user.id)
+            .eq("discover_race_id", raceId)
+            .eq("is_completed", false);
+          const incomplete = (openRows as Race[] | null) ?? [];
+          bucketFuture = incomplete.find((r) => raceIsBucketListFutureGoal(r)) ?? null;
         }
       } catch {
         userMatch = null;
+        bucketFuture = null;
       }
+    } else {
+      userMatch = demoRaces.find((r) => r.discover_race_id === raceId && r.is_completed) ?? null;
+      bucketFuture =
+        demoRaces.find(
+          (r) => r.discover_race_id === raceId && !r.is_completed && raceIsBucketListFutureGoal(r)
+        ) ?? null;
     }
 
     return (
@@ -89,6 +108,15 @@ export default async function RaceIdRouterPage({ params }: Props) {
               <span className="border border-white/20 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
                 {formatDiscoverDistance(detail.distanceKm, detail.multiDay)}
               </span>
+              {userMatch ? (
+                <span className="border border-green-500/55 bg-green-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-green-300">
+                  In your portfolio
+                </span>
+              ) : bucketFuture ? (
+                <span className="border border-amber-500/45 bg-amber-500/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-200">
+                  On your bucket list
+                </span>
+              ) : null}
             </div>
           </div>
         </section>
@@ -118,17 +146,45 @@ export default async function RaceIdRouterPage({ params }: Props) {
                 </ul>
               </div>
               <div className="border border-white/10 bg-[#0d0d0d] p-6">
-                <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">Bucket list</h2>
-                <p className="mt-3 text-sm text-slate-300">
-                  Add this event to your portfolio or bucket list from Add race — we&apos;ll pre-fill distance and
-                  location.
-                </p>
-                <Link
-                  href={`/races/new?discover=${encodeURIComponent(raceId)}`}
-                  className="mt-5 flex w-full items-center justify-center rounded-[12px] bg-accent px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
-                >
-                  Add to portfolio / bucket list
-                </Link>
+                <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">Your Runfolio</h2>
+                {userMatch ? (
+                  <>
+                    <p className="mt-3 text-sm text-slate-300">
+                      You&apos;ve logged a confirmed finish for this event. It matches your profile, journey, and bucket
+                      rules (bucket completed only if it was a bucket goal).
+                    </p>
+                    <Link
+                      href={portfolioRaceHref(userMatch)}
+                      className="mt-5 flex w-full items-center justify-center rounded-[12px] border border-gold/40 bg-gold/10 px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-gold transition hover:bg-gold/15"
+                    >
+                      Open your finish
+                    </Link>
+                    <Link
+                      href={`/races/new?discover=${encodeURIComponent(raceId)}`}
+                      className="mt-3 flex w-full items-center justify-center rounded-[12px] border border-white/15 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted transition hover:border-white/25 hover:text-white"
+                    >
+                      Log another year / edition
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <p className="mt-3 text-sm text-slate-300">
+                      Add this event to your portfolio or bucket list from Add race — we&apos;ll pre-fill distance and
+                      location.
+                    </p>
+                    {bucketFuture ? (
+                      <p className="mt-3 border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-100/90">
+                        This race is already on your bucket list as a future goal.
+                      </p>
+                    ) : null}
+                    <Link
+                      href={`/races/new?discover=${encodeURIComponent(raceId)}`}
+                      className="mt-5 flex w-full items-center justify-center rounded-[12px] bg-accent px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
+                    >
+                      Add to portfolio / bucket list
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -136,10 +192,24 @@ export default async function RaceIdRouterPage({ params }: Props) {
           {userMatch ? (
             <div className="border border-green-500/40 bg-green-950/25 p-6 md:p-8">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-green-400">You completed this</p>
+              {raceIsBucketListItem(userMatch) ? (
+                <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-gold">
+                  Bucket list · completed (was on your list)
+                </p>
+              ) : (
+                <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-white/60">
+                  Confirmed finish · not counted toward bucket list completed (add via bucket first for that badge)
+                </p>
+              )}
               <p className="mt-3 text-lg font-semibold text-white">
                 Logged as <span className="text-accent">{userMatch.name}</span>
                 {userMatch.date ? ` · ${userMatch.date}` : null}
               </p>
+              {userMatch.description ? (
+                <p className="mt-4 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-white/85">
+                  {userMatch.description}
+                </p>
+              ) : null}
               <dl className="mt-4 grid gap-3 sm:grid-cols-3">
                 <div>
                   <dt className="text-[10px] uppercase tracking-wider text-muted">Distance</dt>
@@ -149,31 +219,47 @@ export default async function RaceIdRouterPage({ params }: Props) {
                   <dt className="text-[10px] uppercase tracking-wider text-muted">Time</dt>
                   <dd className="mt-1 font-semibold text-white">{userMatch.time ?? "—"}</dd>
                 </div>
-                <div>
-                  <dt className="text-[10px] uppercase tracking-wider text-muted">Strava</dt>
-                  <dd className="mt-1">
+                <div className="sm:col-span-3">
+                  <dt className="text-[10px] uppercase tracking-wider text-muted">Strava & portfolio</dt>
+                  <dd className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
                     {userMatch.strava_activity_id ? (
-                      <a
-                        href={`https://www.strava.com/activities/${userMatch.strava_activity_id}`}
-                        className="font-semibold text-accent hover:underline"
-                        target="_blank"
-                        rel="noreferrer"
-                      >
-                        View activity
-                      </a>
+                      <>
+                        <a
+                          href={`https://www.strava.com/activities/${userMatch.strava_activity_id}`}
+                          className="font-semibold text-accent hover:underline"
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open on Strava
+                        </a>
+                        <Link
+                          href={`/activities/${userMatch.strava_activity_id}`}
+                          className="font-semibold text-gold hover:underline"
+                        >
+                          Runfolio activity page →
+                        </Link>
+                      </>
                     ) : (
-                      <span className="text-muted">—</span>
+                      <span className="text-muted">No Strava link — manual or pre-Strava entry</span>
                     )}
                   </dd>
                 </div>
               </dl>
               <div className="mt-6 flex flex-wrap gap-3">
                 <Link
-                  href={`/races/${userMatch.id}/activity`}
+                  href={portfolioRaceHref(userMatch)}
                   className="rounded-[12px] border border-border bg-panelAlt px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-slate-800"
                 >
-                  Open your race story
+                  {userMatch.strava_activity_id ? "Open race portfolio" : "Open your race story"}
                 </Link>
+                {userMatch.strava_activity_id ? (
+                  <Link
+                    href={`/races/${userMatch.id}/activity`}
+                    className="rounded-[12px] border border-white/15 px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted transition hover:border-white/30 hover:text-white"
+                  >
+                    Classic race page
+                  </Link>
+                ) : null}
                 <Link href="/races/new" className="rounded-[12px] px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-muted transition hover:text-white">
                   Add reflection / edit
                 </Link>

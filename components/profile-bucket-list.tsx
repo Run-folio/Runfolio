@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Race } from "@/types";
 import { formatRaceMonth } from "@/lib/format-race-date";
+import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { getRaceLogoPath } from "@/lib/race-logos";
 import { cn } from "@/lib/utils";
 
@@ -16,7 +17,41 @@ function BucketRaceCard({
   const src = getRaceLogoPath(race.name);
 
   const href =
-    variant === "completed" ? `/races/${race.id}/activity` : `/races/${race.id}/info`;
+    variant === "completed" ? portfolioRaceHref(race) : `/races/${race.id}/info`;
+  const isExternal = href.startsWith("http");
+
+  const linkClass = "group flex flex-1 flex-col focus-visible:outline-none";
+  const main = (
+    <>
+      <div
+        className={cn(
+          "flex h-[72px] w-full items-center justify-center border-b border-white/10 px-2 py-2",
+          variant === "completed" ? "bg-[#121212]" : "bg-[#0f0f0f]"
+        )}
+      >
+        <Image
+          src={src}
+          alt=""
+          width={120}
+          height={56}
+          className={cn(
+            "h-12 w-auto max-w-[90%] object-contain transition group-hover:brightness-110",
+            variant === "completed" && "brightness-110 contrast-95"
+          )}
+        />
+      </div>
+      <div className="flex flex-1 flex-col gap-1 p-3">
+        <p className="text-center text-[12px] font-semibold leading-tight text-white">{race.name}</p>
+        {variant === "completed" && month ? (
+          <p className="text-center text-[11px] text-muted">
+            <span className="inline-flex items-center justify-center gap-1 text-[#d4af37]">
+              <span className="text-[7px]">●</span> {month}
+            </span>
+          </p>
+        ) : null}
+      </div>
+    </>
+  );
 
   return (
     <div
@@ -24,38 +59,15 @@ function BucketRaceCard({
         "flex flex-col border border-white/10 bg-[#0d0d0d] transition hover:border-white/25 focus-within:ring-2 focus-within:ring-[#d4af37]/45"
       )}
     >
-      <Link
-        href={href}
-        className="group flex flex-1 flex-col focus-visible:outline-none"
-      >
-        <div
-          className={cn(
-            "flex h-[72px] w-full items-center justify-center border-b border-white/10 px-2 py-2",
-            variant === "completed" ? "bg-[#121212]" : "bg-[#0f0f0f]"
-          )}
-        >
-          <Image
-            src={src}
-            alt=""
-            width={120}
-            height={56}
-            className={cn(
-              "h-12 w-auto max-w-[90%] object-contain transition group-hover:brightness-110",
-              variant === "completed" && "brightness-110 contrast-95"
-            )}
-          />
-        </div>
-        <div className="flex flex-1 flex-col gap-1 p-3">
-          <p className="text-center text-[12px] font-semibold leading-tight text-white">{race.name}</p>
-          {variant === "completed" && month ? (
-            <p className="text-center text-[11px] text-muted">
-              <span className="inline-flex items-center justify-center gap-1 text-[#d4af37]">
-                <span className="text-[7px]">●</span> {month}
-              </span>
-            </p>
-          ) : null}
-        </div>
-      </Link>
+      {isExternal ? (
+        <a href={href} target="_blank" rel="noreferrer" className={linkClass}>
+          {main}
+        </a>
+      ) : (
+        <Link href={href} className={linkClass}>
+          {main}
+        </Link>
+      )}
       {variant === "completed" && race.discover_race_id ? (
         <Link
           href={`/races/${race.discover_race_id}`}

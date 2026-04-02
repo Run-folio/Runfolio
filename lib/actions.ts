@@ -10,6 +10,10 @@ import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { runfolioLog } from "@/lib/runfolio-log";
+import { fetchStravaActivity } from "@/lib/strava-api";
+import { getValidStravaAccessToken } from "@/lib/strava-access-server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Race } from "@/types";
 
 export async function signUpAction(formData: FormData) {
   if (!isSupabaseConfigured()) redirect("/dashboard");
@@ -80,6 +84,7 @@ export async function createRaceAction(formData: FormData) {
     if (authError || !user) redirect("/auth/login");
     const supabase = await createClient();
 
+    const isCompleted = formData.get("is_completed") === "on";
     const payload = {
       user_id: user.id,
       name: String(formData.get("name") ?? ""),
@@ -89,7 +94,9 @@ export async function createRaceAction(formData: FormData) {
       elevation_m: Number(formData.get("elevation_m") ?? 0),
       time: String(formData.get("time") ?? ""),
       description: String(formData.get("description") ?? ""),
-      is_completed: formData.get("is_completed") === "on"
+      is_completed: isCompleted,
+      /** Future goals and normal adds count toward bucket list UI; Strava-only rows use confirm flow. */
+      is_bucket_list_item: true
     };
 
     const { error } = await supabase.from("races").insert(payload);
@@ -106,8 +113,56 @@ export async function createRaceAction(formData: FormData) {
   }
 }
 
+function mergeRacePortfolioFromOrphan(
+  base: Record<string, unknown>,
+  orphan: Race | null
+): Record<string, unknown> {
+  if (!orphan) return base;
+  const out = { ...base };
+  const strFields = [
+    "description",
+    "race_subtitle",
+    "reflection_toughest",
+    "reflection_learned",
+    "reflection_mattered",
+    "finish_notes"
+  ] as const;
+  for (const k of strFields) {
+    const cur = out[k];
+    const o = orphan[k];
+    if (typeof cur === "string" && cur.trim()) continue;
+    if (o != null && String(o).trim()) out[k] = o;
+  }
+  const bManual = Array.isArray(base.manual_photo_urls)
+    ? (base.manual_photo_urls as string[])
+    : [];
+  const oManual = Array.isArray(orphan.manual_photo_urls) ? orphan.manual_photo_urls : [];
+  const mergedPhotos = [...new Set([...bManual, ...oManual].filter(Boolean))];
+  if (mergedPhotos.length > 0) out.manual_photo_urls = mergedPhotos;
+  return out;
+}
+
+async function revalidateRaceMatchSurfaces(
+  supabase: SupabaseClient,
+  userId: string,
+  discoverRaceId: string,
+  stravaActivityId: string,
+  returnTo: string
+) {
+  revalidatePath("/dashboard");
+  revalidatePath("/bucket-list");
+  revalidatePath(returnTo);
+  revalidatePath(`/races/${discoverRaceId}`);
+  revalidatePath(`/activities/${stravaActivityId}`);
+  const { data: profileRow } = await supabase.from("users").select("name").eq("id", userId).maybeSingle();
+  if (profileRow?.name) {
+    revalidatePath(`/${profileRow.name}`);
+  }
+}
+
 /**
- * After user confirms a suggested known-race match from Strava: update bucket list row or insert a completed race.
+ * Confirmed Strava ↔ catalog match: single durable row per (user, strava_activity_id).
+ * Bucket completion only updates an existing bucket row; never silently adds bucket completion for races not on the list.
  */
 export async function confirmKnownRaceMatchAction(formData: FormData) {
   if (!isSupabaseConfigured()) redirect("/dashboard");
@@ -125,7 +180,7 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
     const elevationM = Number(formData.get("elevation_m") ?? 0);
     const time = String(formData.get("time") ?? "").trim();
     const location = String(formData.get("location") ?? "").trim();
-    const description = String(formData.get("description") ?? "").trim();
+    let description = String(formData.get("description") ?? "").trim();
 
     if (!discoverRaceId || !stravaActivityId) {
       return { error: "Missing race or activity reference." };
@@ -134,6 +189,19 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
     const discover = getDiscoverRaceById(discoverRaceId);
     if (!discover) {
       return { error: "Unknown catalog race." };
+    }
+
+    if (!description) {
+      const access = await getValidStravaAccessToken();
+      if (access) {
+        try {
+          const detail = await fetchStravaActivity(stravaActivityId, access);
+          const d = detail.description?.trim();
+          if (d) description = d;
+        } catch {
+          /* Strava detail optional */
+        }
+      }
     }
 
     const basePayload = {
@@ -149,25 +217,12 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
       discover_race_id: discoverRaceId
     };
 
-    if (targetUserRaceId) {
-      const { data: row, error: selErr } = await supabase
-        .from("races")
-        .select("id, user_id")
-        .eq("id", targetUserRaceId)
-        .single();
-      if (selErr || !row || row.user_id !== user.id) {
-        return { error: "Could not update that bucket list item." };
-      }
-      const { error: upErr } = await supabase.from("races").update(basePayload).eq("id", targetUserRaceId);
-      if (upErr) return { error: upErr.message };
-    } else {
-      const insertPayload = {
-        ...basePayload,
-        user_id: user.id
-      };
-      const { error: insErr } = await supabase.from("races").insert(insertPayload);
-      if (insErr) return { error: insErr.message };
-    }
+    const { data: existingStravaRow } = await supabase
+      .from("races")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("strava_activity_id", stravaActivityId)
+      .maybeSingle();
 
     const returnToRaw = String(formData.get("return_to") ?? "").trim();
     const returnTo =
@@ -175,9 +230,50 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
         ? returnToRaw
         : "/dashboard";
 
-    revalidatePath("/dashboard");
-    revalidatePath("/bucket-list");
-    revalidatePath(returnTo);
+    const wantsBucketComplete = Boolean(targetUserRaceId);
+
+    if (wantsBucketComplete && targetUserRaceId) {
+      const { data: bucketRow, error: selErr } = await supabase
+        .from("races")
+        .select("id, user_id")
+        .eq("id", targetUserRaceId)
+        .single();
+      if (selErr || !bucketRow || bucketRow.user_id !== user.id) {
+        return { error: "Could not update that bucket list item." };
+      }
+
+      let updatePayload: Record<string, unknown> = {
+        ...basePayload,
+        is_bucket_list_item: true
+      };
+
+      if (existingStravaRow && existingStravaRow.id !== targetUserRaceId) {
+        updatePayload = mergeRacePortfolioFromOrphan(updatePayload, existingStravaRow as Race);
+        const { error: delErr } = await supabase.from("races").delete().eq("id", existingStravaRow.id);
+        if (delErr) return { error: delErr.message };
+      }
+
+      const { error: upErr } = await supabase.from("races").update(updatePayload).eq("id", targetUserRaceId);
+      if (upErr) return { error: upErr.message };
+    } else if (existingStravaRow) {
+      const { error: upErr } = await supabase
+        .from("races")
+        .update({
+          ...basePayload,
+          is_bucket_list_item: false
+        })
+        .eq("id", existingStravaRow.id);
+      if (upErr) return { error: upErr.message };
+    } else {
+      const { error: insErr } = await supabase.from("races").insert({
+        ...basePayload,
+        user_id: user.id,
+        is_bucket_list_item: false
+      });
+      if (insErr) return { error: insErr.message };
+    }
+
+    await revalidateRaceMatchSurfaces(supabase, user.id, discoverRaceId, stravaActivityId, returnTo);
     redirect(returnTo);
   } catch (e) {
     if (isDynamicServerError(e)) throw e;
@@ -251,7 +347,8 @@ export async function upsertActivityPortfolioAction(formData: FormData) {
         ...payload,
         user_id: user.id,
         strava_activity_id: stravaActivityId,
-        is_completed: true
+        is_completed: true,
+        is_bucket_list_item: false
       };
       const { error: insErr } = await supabase.from("races").insert(insertRow);
       if (insErr) return { error: insErr.message };
@@ -260,6 +357,9 @@ export async function upsertActivityPortfolioAction(formData: FormData) {
     revalidatePath(`/activities/${stravaActivityId}`);
     revalidatePath("/dashboard");
     revalidatePath("/bucket-list");
+    if (discoverRaceId) revalidatePath(`/races/${discoverRaceId}`);
+    const { data: profileRow } = await supabase.from("users").select("name").eq("id", user.id).maybeSingle();
+    if (profileRow?.name) revalidatePath(`/${profileRow.name}`);
     return { ok: true as const };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;

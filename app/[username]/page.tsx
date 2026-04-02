@@ -9,11 +9,9 @@ import { StravaProfileBlock } from "@/components/strava-profile-block";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { demoRaces, demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
-import {
-  extractMediumStravaMatchesForProfile,
-  mergeOwnerPortfolioCompleted
-} from "@/lib/profile-portfolio";
-import { applyHighConfidenceStravaBucketSync } from "@/lib/profile-strava-bucket-sync";
+import { extractMediumStravaMatchesForProfile } from "@/lib/profile-portfolio";
+import { persistedCompletedRaces } from "@/lib/portfolio-race";
+import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { resolveProfileHeroPhoto } from "@/lib/profile-hero-asset";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { getStravaFeed } from "@/lib/strava-feed";
@@ -73,17 +71,6 @@ export default async function PublicProfilePage({ params }: Props) {
         stravaEnriched = feed.ok
           ? enrichRaceCandidatesWithCatalogMatches(feed.raceCandidates, allRaces ?? [])
           : [];
-        if (feed.ok && stravaEnriched.length > 0) {
-          await applyHighConfidenceStravaBucketSync(supabase, runner!.id, stravaEnriched);
-          const refreshed = await supabase
-            .from("races")
-            .select("*")
-            .eq("user_id", runner!.id)
-            .order("date", { ascending: false });
-          if (!refreshed.error && refreshed.data) {
-            allRaces = refreshed.data;
-          }
-        }
         ownProfileStrava = {
           raceCandidates: stravaEnriched,
           raceCandidateStats: feed.raceCandidateStats,
@@ -101,11 +88,8 @@ export default async function PublicProfilePage({ params }: Props) {
 
   const dbCompleted = (allRaces ?? []).filter((r) => r.is_completed);
   const future = (allRaces ?? []).filter((r) => !r.is_completed);
-
-  const mergedCompleted =
-    isOwnProfile && stravaEnriched.length > 0 && runner
-      ? mergeOwnerPortfolioCompleted(dbCompleted, stravaEnriched, runner.id)
-      : dbCompleted;
+  /** Top Races + Race Journey: only durable Runfolio rows — unconfirmed Strava majors stay in the import section below. */
+  const profileCompleted = persistedCompletedRaces(dbCompleted);
 
   const mediumMatches =
     isOwnProfile && stravaEnriched.length > 0 ? extractMediumStravaMatchesForProfile(stravaEnriched) : [];
@@ -119,7 +103,7 @@ export default async function PublicProfilePage({ params }: Props) {
         <ProfileHero key={profileHeroPhoto} displayName={displayName} imageSrc={profileHeroPhoto} />
 
         <div className="mx-auto w-full max-w-[1400px] px-0">
-          <ProfileTopRaces completedRaces={mergedCompleted} />
+          <ProfileTopRaces completedRaces={profileCompleted} />
 
           {mediumMatches.length > 0 ? <ProfileMediumMatchStrip matches={mediumMatches} profilePath={profilePath} /> : null}
 
@@ -134,8 +118,11 @@ export default async function PublicProfilePage({ params }: Props) {
           ) : null}
 
           <div className="grid gap-0 border-x border-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-            <RaceJourney races={[...mergedCompleted, ...future]} />
-            <ProfileBucketList completed={dbCompleted} future={future} />
+            <RaceJourney races={profileCompleted} />
+            <ProfileBucketList
+              completed={dbCompleted.filter(raceCountsAsBucketListCompleted)}
+              future={future.filter(raceIsBucketListFutureGoal)}
+            />
           </div>
         </div>
       </main>

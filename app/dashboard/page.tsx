@@ -10,9 +10,11 @@ import { Card } from "@/components/ui/card";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { demoRaces, demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
+import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { getStravaFeed } from "@/lib/strava-feed";
+import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
 
 export const dynamic = "force-dynamic";
@@ -49,8 +51,9 @@ export default async function DashboardPage() {
   }
 
   const completed = (races ?? []).filter((race) => race.is_completed);
+  const completedSorted = [...completed].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
   const future = (races ?? []).filter((race) => !race.is_completed);
-  const featured = (races ?? [])[0];
+  const featured = completedSorted[0];
   const totalKm = completed.reduce((acc, race) => acc + (race.distance_km ?? 0), 0);
 
   const stravaRaceEnriched = stravaFeed.ok
@@ -132,7 +135,7 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {(races ?? []).slice(0, 4).map((race, i) => (
+            {completedSorted.slice(0, 4).map((race, i) => (
               <Card
                 key={race.id}
                 className={`overflow-hidden p-0 ${i === 0 ? "border-accent ring-1 ring-accent/40" : ""}`}
@@ -167,8 +170,11 @@ export default async function DashboardPage() {
         <div className="relative left-1/2 w-screen max-w-[100vw] -translate-x-1/2 right-auto border-y border-border bg-[#05070c]">
           <div className="mx-auto w-full max-w-[1400px] border-x border-border">
             <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-              <RaceJourney races={races ?? []} />
-              <ProfileBucketList completed={completed} future={future} />
+              <RaceJourney races={completedSorted} />
+              <ProfileBucketList
+                completed={completed.filter(raceCountsAsBucketListCompleted)}
+                future={future.filter(raceIsBucketListFutureGoal)}
+              />
             </div>
           </div>
         </div>
@@ -210,12 +216,24 @@ export default async function DashboardPage() {
                 </div>
               </div>
               <div className="border-t border-border p-6 lg:border-l lg:border-t-0 md:p-8">
-                <p className="type-section text-sm">Strava activity</p>
+                <p className="type-section text-sm">Linked finish</p>
                 <div
                   className="mt-3 h-40 bg-cover bg-center"
                   style={{ backgroundImage: `url('${getRaceSceneImagePath(featured.name)}')` }}
                 />
-                <p className="type-meta mt-4 text-xs">GPS trace · tap-through when linked</p>
+                <p className="type-meta mt-4 text-xs">
+                  {featured.strava_activity_id
+                    ? "Strava-linked — open your full race portfolio for photos and story."
+                    : "Add a Strava match on Add race to unlock the activity portfolio page."}
+                </p>
+                {featured.strava_activity_id ? (
+                  <Link
+                    href={portfolioRaceHref(featured)}
+                    className="mt-4 inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-accent hover:underline"
+                  >
+                    Open race portfolio →
+                  </Link>
+                ) : null}
                 <div className="mt-6">
                   <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Splits</p>
                   <table className="mt-2 w-full text-left text-sm">
@@ -240,7 +258,7 @@ export default async function DashboardPage() {
               </div>
             </div>
             <div className="flex gap-2 overflow-x-auto border-t border-border px-4 py-4">
-              {(races ?? []).slice(0, 6).map((race) => (
+              {completedSorted.slice(0, 6).map((race) => (
                 <div
                   key={race.id}
                   className="h-16 w-28 shrink-0 bg-cover bg-center"

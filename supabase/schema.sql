@@ -103,3 +103,6 @@ alter table races add column if not exists tag_pb boolean default false;
 alter table races add column if not exists tag_career_highlight boolean default false;
 alter table races add column if not exists tag_hardest boolean default false;
 alter table races add column if not exists tag_bucket_list_done boolean default false;
+
+-- Bucket list membership vs Strava-only completion (migration_bucket_list_item.sql)
+alter table races add column if not exists is_bucket_list_item boolean default true;

@@ -472,6 +472,7 @@ export function CreateRaceForm({
           stravaActivityId={pendingMatchInput.strava_id}
           activityTitle={pendingMatchInput.name}
           formSnap={formSnap}
+          returnTo="/races/new"
           onDismiss={() => {
             setMatchDismissedForStravaId(pendingMatchInput.strava_id);
             setPendingMatchInput(null);

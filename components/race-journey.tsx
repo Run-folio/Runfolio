@@ -17,7 +17,7 @@ function groupByYear(races: Race[]): { year: string; items: Race[] }[] {
 }
 
 type Props = {
-  /** Includes completed (DB + Strava-merged) for timeline; incomplete rows ignored. */
+  /** Completed races saved in Runfolio (confirmed or manual); incomplete rows ignored. */
   races: Race[];
 };
 
@@ -75,7 +75,8 @@ export function RaceJourney({ races }: Props) {
     <section className="border border-border bg-[#0a0a0a] px-5 py-8 md:px-6 md:py-8">
       <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white">Race Journey</h2>
       <p className="type-meta mt-2 text-xs">
-        Major finishes over time — catalog-linked when we know the event, Strava-linked for high-confidence matches not yet saved.
+        Finishes you&apos;ve saved in Runfolio — confirm Strava matches on Add race to add them here. Unconfirmed imports
+        stay in your Strava portfolio block above.
       </p>
       <div className="relative mt-8 pl-4 md:pl-6">
         <div className="absolute bottom-2 left-[7px] top-2 w-px bg-gold/50 md:left-[11px]" aria-hidden />

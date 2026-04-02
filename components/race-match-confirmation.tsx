@@ -22,6 +22,8 @@ type Props = {
   activityTitle: string;
   formSnap: FormSnap;
   onDismiss: () => void;
+  /** Passed to the server action for `revalidatePath` after redirect. */
+  returnTo?: string;
 };
 
 function confidenceLabel(c: RaceMatchCandidate["confidence"]): string {
@@ -34,7 +36,7 @@ function buildFormData(
   c: RaceMatchCandidate,
   stravaActivityId: string,
   snap: FormSnap,
-  options: { completeBucket: boolean }
+  options: { completeBucket: boolean; returnTo: string }
 ): FormData {
   const fd = new FormData();
   fd.set("discover_race_id", c.discoverRaceId);
@@ -48,10 +50,18 @@ function buildFormData(
   fd.set("time", snap.time);
   fd.set("location", snap.location);
   fd.set("description", snap.description);
+  fd.set("return_to", options.returnTo);
   return fd;
 }
 
-export function RaceMatchConfirmation({ candidates, stravaActivityId, activityTitle, formSnap, onDismiss }: Props) {
+export function RaceMatchConfirmation({
+  candidates,
+  stravaActivityId,
+  activityTitle,
+  formSnap,
+  onDismiss,
+  returnTo = "/races/new"
+}: Props) {
   const [mode, setMode] = useState<"top" | "pick">("top");
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -62,7 +72,7 @@ export function RaceMatchConfirmation({ candidates, stravaActivityId, activityTi
   const runConfirm = (c: RaceMatchCandidate, completeBucket: boolean) => {
     setError(null);
     startTransition(async () => {
-      const fd = buildFormData(c, stravaActivityId, formSnap, { completeBucket });
+      const fd = buildFormData(c, stravaActivityId, formSnap, { completeBucket, returnTo });
       const res = await confirmKnownRaceMatchAction(fd);
       if (res && "error" in res && res.error) {
         setError(res.error);

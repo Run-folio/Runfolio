@@ -30,6 +30,7 @@ export const demoRaces: Race[] = [
     time: "23:57:13",
     description: "One step at a time in the mountains.",
     is_completed: true,
+    discover_race_id: "disc-utmb",
     created_at: new Date().toISOString()
   },
   {
@@ -43,6 +44,7 @@ export const demoRaces: Race[] = [
     time: "2:58:12",
     description: "A lifelong goal met with gratitude.",
     is_completed: true,
+    discover_race_id: "disc-boston",
     created_at: new Date().toISOString()
   },
   {
@@ -83,6 +85,7 @@ export const demoRaces: Race[] = [
     time: null,
     description: null,
     is_completed: false,
+    discover_race_id: "disc-london",
     signup_url: "https://www.tcslondonmarathon.com",
     created_at: new Date().toISOString()
   },
@@ -111,6 +114,7 @@ export const demoRaces: Race[] = [
     time: null,
     description: null,
     is_completed: false,
+    discover_race_id: "disc-chicago",
     signup_url: "https://www.chicagomarathon.com",
     created_at: new Date().toISOString()
   },
@@ -125,6 +129,7 @@ export const demoRaces: Race[] = [
     time: null,
     description: null,
     is_completed: false,
+    discover_race_id: "disc-nyc",
     signup_url: "https://www.nyrr.org/tcsnycmarathon",
     created_at: new Date().toISOString()
   },

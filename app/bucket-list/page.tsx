@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { demoRaces, isSupabaseConfigured } from "@/lib/demo-mode";
+import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { runfolioLog } from "@/lib/runfolio-log";
 
 export const dynamic = "force-dynamic";
@@ -34,8 +35,8 @@ export default async function BucketListPage() {
       races = demoRaces;
     }
   }
-  const completed = (races ?? []).filter((race) => race.is_completed);
-  const future = (races ?? []).filter((race) => !race.is_completed);
+  const completed = (races ?? []).filter(raceCountsAsBucketListCompleted);
+  const future = (races ?? []).filter(raceIsBucketListFutureGoal);
 
   return (
     <>

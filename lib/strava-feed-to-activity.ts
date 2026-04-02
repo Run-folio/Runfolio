@@ -13,7 +13,7 @@ export function stravaFeedToActivity(feed: StravaFeedActivity, userId = "strava-
     start_lat: null,
     start_lng: null,
     polyline: feed.summary_polyline,
-    description: null,
+    description: feed.description?.trim() ? feed.description.trim() : null,
     created_at: new Date().toISOString(),
     elevation_m: feed.elevation_m,
     primary_photo_url: feed.primary_photo_url ?? undefined

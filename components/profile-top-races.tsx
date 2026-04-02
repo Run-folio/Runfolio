@@ -90,7 +90,7 @@ function TopRaceCard({
 }
 
 type Props = {
-  /** Completed majors (DB + merged Strava high-confidence for owner). */
+  /** Durable completed races (database); unconfirmed Strava suggestions excluded. */
   completedRaces: Race[];
 };
 
@@ -109,8 +109,8 @@ export function ProfileTopRaces({ completedRaces }: Props) {
         <div>
           <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white">Top Races</h2>
           <p className="type-meta mt-2 max-w-xl text-xs">
-            Your defining efforts — ranked by prestige (majors, UTMB, hundreds), distance, vert, confirmed catalog
-            matches, and story tags. Recency is a light tie-breaker, not the main signal.
+            Saved finishes only — ranked by prestige (majors, UTMB, hundreds), distance, vert, catalog links, and story
+            tags. Confirm a Strava match to land a race here; recency is a light tie-breaker.
           </p>
         </div>
         <Link href="/races/new" className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold hover:text-white">

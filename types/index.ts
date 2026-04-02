@@ -21,6 +21,11 @@ export type Race = {
   tag_hardest?: boolean;
   /** User marked bucket-list goal completed (distinct from `is_completed` on the row). */
   tag_bucket_list_done?: boolean;
+  /**
+   * When false, this completed race is a Strava-confirmed major effort only — not a bucket-list selection.
+   * Undefined/true: counts toward bucket list UI (legacy + normal goals).
+   */
+  is_bucket_list_item?: boolean | null;
   /** Short line under the title on the activity portfolio page */
   race_subtitle?: string | null;
   reflection_toughest?: string | null;
@@ -124,6 +129,8 @@ export type StravaFeedActivity = {
   strava_url: string;
   /** When available from Strava (detail API); list feed usually omits. */
   primary_photo_url?: string | null;
+  /** Strava activity notes; list endpoint may omit — detail fetch fills on confirm/import. */
+  description?: string | null;
 };
 
 /** Catalog match hint for a long run — UI only until the user confirms. */

@@ -107,6 +107,8 @@ export type StravaSummaryActivityJson = {
   achievement_count?: number | null;
   map?: { summary_polyline?: string | null };
   photos?: StravaActivityJson["photos"];
+  /** Present on some API responses; often empty on list endpoint. */
+  description?: string | null;
 };
 
 export async function fetchStravaAthleteActivities(

@@ -55,7 +55,8 @@ export function normalizeStravaSummary(raw: StravaSummaryActivityJson): StravaFe
     achievement_count: raw.achievement_count ?? 0,
     summary_polyline: raw.map?.summary_polyline ?? null,
     strava_url: `https://www.strava.com/activities/${id}`,
-    primary_photo_url: pickStravaPrimaryPhotoUrl(raw) ?? null
+    primary_photo_url: pickStravaPrimaryPhotoUrl(raw) ?? null,
+    description: raw.description?.trim() ? raw.description.trim() : null
   };
 }
 
@@ -107,17 +108,26 @@ function isUnauthorizedMessage(msg: string): boolean {
   return m.includes("401") || m.includes("unauthorized");
 }
 
+/** Strava returns newest-first; paginate for multi-year major-race discovery (rate-limit aware cap). */
+const STRAVA_FEED_MAX_PAGES = 25;
+const STRAVA_FEED_PER_PAGE = 50;
+const STRAVA_FEED_MAX_ACTIVITIES = 900;
+
 async function listWithToken(access: string): Promise<StravaSummaryActivityJson[]> {
-  const first = await fetchStravaAthleteActivities(access, { page: 1, perPage: 50 });
-  let second: StravaSummaryActivityJson[] = [];
-  if (first.length === 50) {
+  const all: StravaSummaryActivityJson[] = [];
+  for (let page = 1; page <= STRAVA_FEED_MAX_PAGES && all.length < STRAVA_FEED_MAX_ACTIVITIES; page++) {
     try {
-      second = await fetchStravaAthleteActivities(access, { page: 2, perPage: 50 });
+      const batch = await fetchStravaAthleteActivities(access, {
+        page,
+        perPage: STRAVA_FEED_PER_PAGE
+      });
+      all.push(...batch);
+      if (batch.length < STRAVA_FEED_PER_PAGE) break;
     } catch {
-      /* one page is enough */
+      break;
     }
   }
-  return [...first, ...second];
+  return all;
 }
 
 function buildFeedResult(activities: StravaFeedActivity[]): StravaFeedResult {

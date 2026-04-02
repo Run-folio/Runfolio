@@ -226,12 +226,34 @@ export function ActivityPortfolioClient({
             </p>
           </div>
           {photos.length === 0 ? (
-            <Card className="border border-dashed border-white/20 bg-[#0d0d0d] p-10 text-center">
-              <p className="text-sm text-white/70">No photos from Strava for this activity yet.</p>
-              <p className="mt-2 text-xs text-muted">
-                Use <strong className="text-white/80">Edit story</strong> and paste HTTPS image links (one per line).
-              </p>
+            <Card className="overflow-hidden border border-dashed border-white/15 bg-[#0a0a0a]">
+              <div className="relative aspect-[2.2/1] max-h-52 w-full border-b border-white/10">
+                <Image src={heroScene} alt="" fill className="object-cover opacity-35 saturate-50" sizes="(max-width:768px) 100vw, 896px" />
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/85 via-black/45 to-black/25 px-6 text-center">
+                  <p className="text-sm font-medium text-white/90">No Strava images returned for this activity</p>
+                  <p className="mt-2 max-w-md text-xs leading-relaxed text-white/55">
+                    The API often exposes only a primary shot, or none. Your hero uses course art until you add photos.
+                  </p>
+                </div>
+              </div>
+              <div className="p-8 text-center">
+                <p className="text-sm text-white/70">
+                  Add your own images: open <strong className="text-white/90">Edit story</strong> and paste HTTPS links
+                  (one per line).
+                </p>
+              </div>
             </Card>
+          ) : photos.length === 1 ? (
+            <figure className="mx-auto max-w-3xl border border-white/12 bg-gradient-to-b from-white/[0.05] to-transparent p-3 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-4">
+              <div className="relative aspect-[16/9] overflow-hidden border border-white/10 bg-black">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photos[0]} alt="" className="h-full w-full object-cover" />
+                <div className="pointer-events-none absolute inset-3 border border-gold/20 md:inset-4" aria-hidden />
+              </div>
+              <figcaption className="mt-4 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-white/45">
+                Primary from Strava · add more in Edit story
+              </figcaption>
+            </figure>
           ) : (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {photos.map((url, i) => (
@@ -239,7 +261,7 @@ export function ActivityPortfolioClient({
                   key={`${url}-${i}`}
                   className={cn(
                     "relative overflow-hidden border border-white/10 bg-black/40",
-                    i === 0 ? "sm:col-span-2 sm:row-span-2 min-h-[240px]" : "aspect-[4/3]"
+                    i === 0 ? "min-h-[240px] sm:col-span-2 sm:row-span-2" : "aspect-[4/3]"
                   )}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}

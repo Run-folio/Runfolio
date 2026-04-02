@@ -49,7 +49,11 @@ export function ProfileMediumMatchStrip({ matches: initialMatches, profilePath }
       <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-amber-200/90">Needs your confirmation</p>
       <h2 className="type-section mt-2 text-base text-white md:text-lg">Possible major races from Strava</h2>
       <p className="type-meta mt-2 max-w-2xl text-sm">
-        Medium-confidence matches won&apos;t move bucket list items or fill your portfolio until you confirm. High-confidence matches are already reflected above.
+        Medium-confidence matches stay suggestions until you confirm. Nothing is written to your bucket list or portfolio automatically — use the buttons below or confirm on{" "}
+        <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">
+          Add race
+        </Link>
+        .
       </p>
       {error ? (
         <p className="mt-3 text-sm text-red-300" role="alert">
