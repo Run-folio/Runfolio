@@ -5,6 +5,7 @@ import {
   type ActivityForCanonicalMatch,
   type CanonicalMatchScoreBreakdown
 } from "@/lib/strava-canonical-match/score-activity-canonical";
+import { CANONICAL_MATCH_MIN_SCORE } from "@/lib/strava-canonical-match/match-policy";
 import { loadCanonicalRacesByNameToken, loadCanonicalRacesInDateWindow } from "@/lib/strava-canonical-match/load-candidates";
 import type { CanonicalRace } from "@/lib/races/canonical/types";
 import type { RaceMatchConfidence } from "@/types";
@@ -64,11 +65,9 @@ function rankMatches(act: ActivityForCanonicalMatch, races: CanonicalRace[]) {
   return scored;
 }
 
-/** Minimum 0–100 score for any surfaced catalog suggestion (Match & Import + overview). */
-export const CANONICAL_MATCH_MIN_SCORE = 60;
-/** Primary “suggested match” band (80–100 on the canonical 0–100 scale). */
-export const CANONICAL_SUGGESTED_HIGH_MIN_SCORE = 80;
-const ALTERNATIVE_MIN_SCORE = 60;
+export { CANONICAL_MATCH_MIN_SCORE, CANONICAL_SUGGESTED_HIGH_MIN_SCORE } from "@/lib/strava-canonical-match/match-policy";
+
+const ALTERNATIVE_MIN_SCORE = CANONICAL_MATCH_MIN_SCORE;
 
 export function suggestionFromRanked(
   row: StravaSyncedActivityRow,

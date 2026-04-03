@@ -179,8 +179,11 @@ export async function allocateUniqueSlug(base: string): Promise<RepositoryResult
     if (!data) return { ok: true, data: candidate };
     candidate = `${base}-v${i + 2}`.slice(0, 120);
   }
-  const { randomUUID } = await import("node:crypto");
-  return { ok: true, data: `${base}-${randomUUID().slice(0, 8)}`.slice(0, 120) };
+  const id =
+    typeof globalThis.crypto?.randomUUID === "function"
+      ? globalThis.crypto.randomUUID().slice(0, 8)
+      : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+  return { ok: true, data: `${base}-${id}`.slice(0, 120) };
 }
 
 export async function getCanonicalRaceById(id: string): Promise<RepositoryResult<CanonicalRace | null>> {

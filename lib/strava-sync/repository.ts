@@ -1,3 +1,5 @@
+import "server-only";
+
 import type { StravaSummaryActivityJson } from "@/lib/strava-api";
 import { normalizeStravaSummary } from "@/lib/strava-feed";
 import { computePotentialRaceActivity } from "@/lib/strava-sync/race-candidate-heuristics";

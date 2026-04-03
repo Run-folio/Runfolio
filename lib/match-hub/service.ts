@@ -1,11 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { CANONICAL_MATCH_MIN_SCORE, CANONICAL_SUGGESTED_HIGH_MIN_SCORE } from "@/lib/strava-canonical-match/match-policy";
 import type { CanonicalStravaRaceMatch, CanonicalStravaSuggestion } from "@/lib/strava-canonical-match/suggestions";
-import {
-  CANONICAL_MATCH_MIN_SCORE,
-  CANONICAL_SUGGESTED_HIGH_MIN_SCORE,
-  rankCanonicalMatchesForSyncedRow,
-  suggestionFromRanked
-} from "@/lib/strava-canonical-match/suggestions";
+import { rankCanonicalMatchesForSyncedRow, suggestionFromRanked } from "@/lib/strava-canonical-match/suggestions";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { listDismissedCanonicalStravaIds, listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
 import type { Race } from "@/types";
@@ -151,7 +147,4 @@ export async function loadMatchHubBundle(
   };
 }
 
-export {
-  CANONICAL_MATCH_MIN_SCORE,
-  CANONICAL_SUGGESTED_HIGH_MIN_SCORE
-} from "@/lib/strava-canonical-match/suggestions";
+export { CANONICAL_MATCH_MIN_SCORE, CANONICAL_SUGGESTED_HIGH_MIN_SCORE } from "@/lib/strava-canonical-match/match-policy";
