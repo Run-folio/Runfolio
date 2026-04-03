@@ -10,6 +10,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { loadMatchHubBundle } from "@/lib/match-hub/service";
 import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
+import { buildSetupUrl } from "@/lib/setup-url";
+import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import { withRaceLinkedCelebration } from "@/lib/profile-race-linked-celebration";
 import type { Race } from "@/types";
 
@@ -22,8 +24,12 @@ export const metadata: Metadata = {
 
 export default async function MatchHubPage() {
   if (!isSupabaseConfigured()) {
-    return <DataBackendSetupGate title="Match &amp; Import" featureLabel="Match &amp; Import" />;
+    return (
+      <DataBackendSetupGate title="Match &amp; Import" featureLabel="Match &amp; Import" returnTo="/matches" />
+    );
   }
+
+  await requirePersistenceReadyOrRedirect("/matches");
 
   const { user, authError } = await getServerAuthUser();
   if (authError || !user) {
@@ -90,7 +96,13 @@ export default async function MatchHubPage() {
               <p className="mt-6 max-w-2xl text-sm text-white/55">
                 {stravaOAuthConfigured
                   ? "No Strava activities stored in Runfolio yet. Sync above after a race effort — long runs and “race” types are what we look at."
-                  : "Strava OAuth isn’t set on this server, so nothing has been imported automatically. Use Browse verified races or Add a race manually, or configure STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET for sync."}
+                  : "Strava OAuth isn’t set on this server, so nothing has been imported automatically. Use Browse verified races or Add a race manually, or configure STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET for sync."}{" "}
+                <Link
+                  href={buildSetupUrl("/matches")}
+                  className="font-semibold text-accent underline-offset-4 hover:underline"
+                >
+                  Open setup guide
+                </Link>
               </p>
             ) : (
               <p className="mt-6 max-w-2xl text-sm text-white/55">

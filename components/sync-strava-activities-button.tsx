@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { syncStravaActivitiesAction } from "@/lib/actions";
 import { usePersistence } from "@/components/persistence-context";
+import { buildSetupUrl } from "@/lib/setup-url";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
 export function SyncStravaActivitiesButton() {
@@ -25,7 +27,7 @@ export function SyncStravaActivitiesButton() {
           start(async () => {
             const res = await syncStravaActivitiesAction();
             if ("error" in res && res.error) {
-              setMsg(res.error);
+              setMsg(`Sync didn’t finish. ${res.error}`);
               return;
             }
             if ("ok" in res && res.ok) {
@@ -46,7 +48,10 @@ export function SyncStravaActivitiesButton() {
       ) : null}
       {!persistenceAvailable && reason ? (
         <p className="max-w-md text-[11px] text-amber-200/90" role="status">
-          {reason}
+          {reason}{" "}
+          <Link href={buildSetupUrl("/dashboard")} className="font-semibold text-accent underline-offset-4 hover:underline">
+            Open setup
+          </Link>
         </p>
       ) : null}
     </div>

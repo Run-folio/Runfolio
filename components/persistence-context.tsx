@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, type ReactNode } from "react";
-import type { PersistenceSnapshot } from "@/lib/persistence-snapshot";
+import type { PersistenceSnapshot } from "@/lib/persistence-readiness";
 
 const PersistenceContext = createContext<PersistenceSnapshot | null>(null);
 
@@ -20,7 +20,14 @@ export function usePersistence(): PersistenceSnapshot {
   const ctx = useContext(PersistenceContext);
   if (!ctx) {
     return {
+      status: "misconfigured",
+      canPersist: false,
       persistenceAvailable: false,
+      userId: null,
+      message: "",
+      shortMessage: "",
+      ctaHref: null,
+      ctaLabel: null,
       offlineDemo: false,
       missingSupabaseEnv: true,
       reason: "App configuration is not ready — saves may not work."

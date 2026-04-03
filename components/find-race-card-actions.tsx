@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { addCatalogRaceToBucketListAction } from "@/lib/actions";
 import { usePersistence } from "@/components/persistence-context";
+import { buildSetupUrl } from "@/lib/setup-url";
 import type { CatalogDiscoverViewerState } from "@/lib/catalog-discover-user-state";
 import { cn } from "@/lib/utils";
 
@@ -50,7 +51,7 @@ export function FindRaceCardActions({ discoverId, state }: Props) {
     startTransition(async () => {
       const res = await addCatalogRaceToBucketListAction(fd);
       if ("error" in res && res.error) {
-        setMsg(res.error);
+        setMsg(`Couldn’t save. ${res.error}`);
         return;
       }
       if ("already" in res && res.already) {
@@ -73,7 +74,7 @@ export function FindRaceCardActions({ discoverId, state }: Props) {
               "rounded-[10px] border border-accent/50 bg-accent/15 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent transition hover:bg-accent/25 disabled:opacity-50"
             )}
           >
-            {pending ? "…" : "Add to bucket list"}
+            {pending ? "Saving…" : "Add to bucket list"}
           </button>
         ) : null}
         {state.status === "bucket" ? (
@@ -93,7 +94,19 @@ export function FindRaceCardActions({ discoverId, state }: Props) {
           Details
         </Link>
       </div>
-      {msg ? <p className="text-[11px] text-amber-200/90">{msg}</p> : null}
+      {!persistenceAvailable ? (
+        <p className="text-[11px] text-white/55">
+          <Link href={buildSetupUrl("/races/find")} className="font-semibold text-accent underline-offset-4 hover:underline">
+            Finish setup
+          </Link>{" "}
+          to save goals and sync Strava.
+        </p>
+      ) : null}
+      {msg ? (
+        <p className="text-[11px] text-amber-200/90" role="status">
+          {msg}
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
+import { buildSetupUrl } from "@/lib/setup-url";
 
 type Props = {
   candidates: StravaRaceCandidate[];
@@ -49,8 +50,12 @@ export function StravaRacePortfolioSection({
             Strava isn&apos;t connected or the feed couldn&apos;t load. Hook it up from{" "}
             <Link href="/matches" className="font-semibold text-accent underline-offset-4 hover:underline">
               Match &amp; import hub
-            </Link>{" "}
-            or{" "}
+            </Link>
+            , the{" "}
+            <Link href={buildSetupUrl("/dashboard")} className="font-semibold text-white/85 underline-offset-4 hover:underline">
+              setup guide
+            </Link>
+            , or{" "}
             <Link href="/races/new" className="font-semibold text-white/70 underline-offset-4 hover:underline">
               Add race
             </Link>{" "}

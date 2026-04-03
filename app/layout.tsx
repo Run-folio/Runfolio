@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
 import { PersistenceProvider } from "@/components/persistence-context";
-import { getPersistenceSnapshot } from "@/lib/persistence-snapshot";
+import { clientPersistenceFromReadiness, getServerPersistenceReadiness } from "@/lib/persistence-readiness";
 import "./globals.css";
 
 const inter = Inter({
@@ -21,10 +21,11 @@ export const metadata: Metadata = {
   description: "A curated running portfolio platform."
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
-  const persistence = getPersistenceSnapshot();
+  const readiness = await getServerPersistenceReadiness();
+  const persistence = clientPersistenceFromReadiness(readiness);
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
       <body className={`${inter.className} font-sans`}>

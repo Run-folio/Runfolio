@@ -7,6 +7,7 @@ import { addCatalogRaceToBucketListAction, deleteFutureBucketGoalAction } from "
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { StravaActivityMatchModal } from "@/components/strava-activity-match-modal";
 import { usePersistence } from "@/components/persistence-context";
+import { buildSetupUrl } from "@/lib/setup-url";
 import type { DiscoverStravaActivityCandidate, Race } from "@/types";
 
 type Props = {
@@ -51,7 +52,7 @@ export function RaceDiscoverPortfolioActions({
     startTransition(async () => {
       const res = await addCatalogRaceToBucketListAction(fd);
       if ("error" in res && res.error) {
-        setMsg(res.error);
+        setMsg(`Couldn’t save. ${res.error}`);
         return;
       }
       if ("already" in res && res.already) {
@@ -73,7 +74,7 @@ export function RaceDiscoverPortfolioActions({
     startTransition(async () => {
       const res = await deleteFutureBucketGoalAction(fd);
       if ("error" in res && res.error) {
-        setMsg(res.error);
+        setMsg(`Couldn’t save. ${res.error}`);
         return;
       }
       setLinkOpen(false);
@@ -150,7 +151,10 @@ export function RaceDiscoverPortfolioActions({
 
       {!persistenceAvailable ? (
         <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
-          {persistenceReason ?? "Database not connected — portfolio actions are disabled."}
+          {persistenceReason ?? "Database not connected — portfolio actions are disabled."}{" "}
+          <Link href={buildSetupUrl(returnTo)} className="font-semibold text-amber-50 underline-offset-4 hover:underline">
+            Continue setup
+          </Link>
         </p>
       ) : null}
 
@@ -203,7 +207,7 @@ export function RaceDiscoverPortfolioActions({
           onClick={runRemoveBucket}
           className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted underline-offset-4 hover:text-white hover:underline disabled:opacity-50"
         >
-          {pending ? "…" : "Remove from bucket list"}
+          {pending ? "Saving…" : "Remove from bucket list"}
         </button>
       ) : null}
 

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { addCanonicalRaceToBucketListAction, markCanonicalBucketGoalCompletedAction } from "@/lib/actions";
 import { usePersistence } from "@/components/persistence-context";
+import { buildSetupUrl } from "@/lib/setup-url";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -51,7 +52,7 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
       fd.set("canonical_race_id", canonicalRaceId);
       const r = await addCanonicalRaceToBucketListAction(fd);
       if ("error" in r && r.error) {
-        setMsg(r.error);
+        setMsg(`Couldn’t save. ${r.error}`);
         return;
       }
       router.refresh();
@@ -70,7 +71,7 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
       fd.set("goal_id", bucketGoal.id);
       const r = await markCanonicalBucketGoalCompletedAction(fd);
       if ("error" in r && r.error) {
-        setMsg(r.error);
+        setMsg(`Couldn’t save. ${r.error}`);
         return;
       }
       router.refresh();
@@ -138,7 +139,10 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
       <div className="flex flex-col gap-4">
         {!persistenceAvailable ? (
           <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-100/90">
-            {persistenceReason ?? "Saving isn’t available."}
+            {persistenceReason ?? "Saving isn’t available."}{" "}
+            <Link href={buildSetupUrl(`/races/${slug}`)} className="font-semibold text-amber-50 underline-offset-4 hover:underline">
+              Continue setup
+            </Link>
           </p>
         ) : null}
         <span className="w-fit rounded-lg border border-amber-400/45 bg-amber-500/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/90">
@@ -146,7 +150,7 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
         </span>
         <div className="flex flex-wrap gap-3">
           <Button type="button" onClick={runMarkComplete} disabled={pending || !persistenceAvailable} variant="secondary">
-            Mark as complete
+            {pending ? "Saving…" : "Mark as complete"}
           </Button>
           <Link
             href="/dashboard"
@@ -174,11 +178,14 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
     <div className="space-y-3">
       {!persistenceAvailable ? (
         <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-100/90">
-          {persistenceReason ?? "Connect the database to save bucket goals."}
+          {persistenceReason ?? "Connect the database to save bucket goals."}{" "}
+          <Link href={buildSetupUrl(`/races/${slug}`)} className="font-semibold text-amber-50 underline-offset-4 hover:underline">
+            Continue setup
+          </Link>
         </p>
       ) : null}
       <Button type="button" onClick={runAdd} disabled={pending || !persistenceAvailable}>
-        Add to bucket list
+        {pending ? "Saving…" : "Add to bucket list"}
       </Button>
       {msg ? (
         <p className="text-sm text-amber-200/90" role="alert">

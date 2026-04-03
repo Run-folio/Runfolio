@@ -14,6 +14,7 @@ import { rankKnownRaceMatches } from "@/lib/known-race-match";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
+import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import { fetchStravaActivityWithRecovery } from "@/lib/strava-resolve-access";
 import { parseStravaActivityId } from "@/lib/strava-api";
 import type { ActivityMatchInput } from "@/types";
@@ -34,8 +35,16 @@ export default async function ActivityPortfolioPage({ params }: Props) {
   if (!stravaId) notFound();
 
   if (!isSupabaseConfigured()) {
-    return <DataBackendSetupGate title="Race activity" featureLabel="Saving finishes and catalog links" />;
+    return (
+      <DataBackendSetupGate
+        title="Race activity"
+        featureLabel="Saving finishes and catalog links"
+        returnTo={`/activities/${stravaId}`}
+      />
+    );
   }
+
+  await requirePersistenceReadyOrRedirect(`/activities/${stravaId}`);
 
   const { user, authError } = await getServerAuthUser();
   if (authError || !user) {

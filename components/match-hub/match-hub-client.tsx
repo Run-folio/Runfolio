@@ -19,6 +19,7 @@ import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { buildSetupUrl } from "@/lib/setup-url";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -544,13 +545,21 @@ function SyncHint({ stravaOAuthConfigured }: { stravaOAuthConfigured: boolean })
         <Link href="/races/find" className="font-medium text-accent underline-offset-4 hover:underline">
           Find a race
         </Link>{" "}
-        to add goals and finishes manually.
+        to add goals and finishes manually, or open the{" "}
+        <Link href={buildSetupUrl("/matches")} className="font-medium text-accent underline-offset-4 hover:underline">
+          setup guide
+        </Link>
+        .
       </p>
     );
   }
   return (
     <p className="w-full text-center text-[11px] text-white/40">
-      Use <strong className="font-medium text-white/55">Sync from Strava</strong> in the page header after a big effort.
+      New to imports? See the{" "}
+      <Link href={buildSetupUrl("/matches")} className="font-medium text-white/60 underline-offset-4 hover:underline">
+        setup checklist
+      </Link>
+      . After a big effort, use <strong className="font-medium text-white/55">Sync from Strava</strong> in the header.
     </p>
   );
 }

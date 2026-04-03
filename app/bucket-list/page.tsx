@@ -13,6 +13,7 @@ import { discoverRaces } from "@/lib/discover-races";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
+import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import { getStravaFeed } from "@/lib/strava-feed";
 import type { Race } from "@/types";
 
@@ -20,8 +21,12 @@ export const dynamic = "force-dynamic";
 
 export default async function BucketListPage() {
   if (!isSupabaseConfigured()) {
-    return <DataBackendSetupGate title="Bucket List" featureLabel="Bucket list goals and Strava links" />;
+    return (
+      <DataBackendSetupGate title="Bucket List" featureLabel="Bucket list goals and Strava links" returnTo="/bucket-list" />
+    );
   }
+
+  await requirePersistenceReadyOrRedirect("/bucket-list");
 
   let races: Race[] = [];
   let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];

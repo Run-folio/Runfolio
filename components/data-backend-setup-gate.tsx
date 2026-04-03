@@ -1,14 +1,17 @@
 import Link from "next/link";
 import { AppNavbar } from "@/components/app-navbar";
 import { BACKEND_NOT_CONNECTED_USER_MESSAGE } from "@/lib/backend-config-messages";
+import { buildSetupUrl } from "@/lib/setup-url";
 
 type Props = {
   title: string;
   /** Short label for the feature (e.g. "Match & Import"). */
   featureLabel: string;
+  /** Where the user wanted to go — used for guided setup `next` param */
+  returnTo?: string;
 };
 
-export function DataBackendSetupGate({ title, featureLabel }: Props) {
+export function DataBackendSetupGate({ title, featureLabel, returnTo = "/dashboard" }: Props) {
   const offlineDemo =
     process.env.RUNFOLIO_OFFLINE_DEMO?.trim().toLowerCase() === "1" ||
     process.env.RUNFOLIO_OFFLINE_DEMO?.trim().toLowerCase() === "true";
@@ -53,10 +56,16 @@ export function DataBackendSetupGate({ title, featureLabel }: Props) {
 
           <div className="mt-10 flex flex-wrap gap-3">
             <Link
-              href="/dashboard"
+              href={buildSetupUrl(returnTo)}
               className="inline-flex items-center justify-center rounded-[12px] bg-accent px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
             >
-              Back to overview
+              Guided setup
+            </Link>
+            <Link
+              href="/dashboard"
+              className="inline-flex items-center justify-center rounded-[12px] border border-white/18 px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-muted transition hover:border-white/35 hover:text-white"
+            >
+              Overview
             </Link>
             <Link
               href="/auth/login"

@@ -8,11 +8,9 @@ import { raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { getDiscoverRaceDetail, isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 import { getDiscoverRaceById } from "@/lib/known-race-match";
 import { getRaceByStravaActivityId } from "@/lib/get-race-by-strava-activity";
-import { BACKEND_SAVE_FAILED_SHORT } from "@/lib/backend-config-messages";
-import { getServerAuthUser, getServerAuthUserForWrite } from "@/lib/auth-server";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
+import { getEnvPersistenceFailure, requireActionPersistence } from "@/lib/persistence-readiness";
 import { createClient } from "@/lib/supabase/server";
-import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { fetchStravaActivity, formatStravaMovingTime } from "@/lib/strava-api";
 import { dismissCanonicalMatchSuggestion } from "@/lib/strava-sync/repository";
@@ -62,8 +60,12 @@ function profilePublishPayload() {
 
 export async function signUpAction(formData: FormData) {
   const nextPath = parseSafeRedirectPath(String(formData.get("next") ?? "")) ?? "/dashboard";
-  if (!isSupabaseConfigured()) {
-    redirect(`/auth/signup?next=${encodeURIComponent(nextPath)}&supabase=missing`);
+  const envBlock = getEnvPersistenceFailure();
+  if (envBlock) {
+    runfolioLog.warn("actions.signUp", "env block", { status: envBlock.status });
+    redirect(
+      `/auth/signup?next=${encodeURIComponent(nextPath)}&setup=${encodeURIComponent(envBlock.status)}`
+    );
   }
   try {
     const email = String(formData.get("email") ?? "");
@@ -96,8 +98,10 @@ export async function signUpAction(formData: FormData) {
 
 export async function signInAction(formData: FormData) {
   const nextPath = parseSafeRedirectPath(String(formData.get("next") ?? "")) ?? "/dashboard";
-  if (!isSupabaseConfigured()) {
-    redirect(`/auth/login?next=${encodeURIComponent(nextPath)}&supabase=missing`);
+  const envBlock = getEnvPersistenceFailure();
+  if (envBlock) {
+    runfolioLog.warn("actions.signIn", "env block", { status: envBlock.status });
+    redirect(`/auth/login?next=${encodeURIComponent(nextPath)}&setup=${encodeURIComponent(envBlock.status)}`);
   }
   try {
     const email = String(formData.get("email") ?? "");
@@ -116,7 +120,11 @@ export async function signInAction(formData: FormData) {
 }
 
 export async function signOutAction() {
-  if (!isSupabaseConfigured()) redirect("/");
+  const envBlock = getEnvPersistenceFailure();
+  if (envBlock) {
+    runfolioLog.warn("actions.signOut", "no supabase client", { status: envBlock.status });
+    redirect("/");
+  }
   try {
     const supabase = await createClient();
     await supabase.auth.signOut();
@@ -130,11 +138,10 @@ export async function signOutAction() {
 }
 
 export async function createRaceAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/dashboard");
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) redirect("/auth/login");
-    const supabase = await createClient();
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
 
     const isCompleted = formData.get("is_completed") === "on";
     const nowIso = new Date().toISOString();
@@ -217,11 +224,10 @@ async function revalidateRaceMatchSurfaces(
  * Bucket completion only updates an existing bucket row; never silently adds bucket completion for races not on the list.
  */
 export async function confirmKnownRaceMatchAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUserForWrite();
-    if (authError || !user) return { error: "Sign in required." };
-    const supabase = await createClient();
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     runfolioLog.info("actions.confirmKnownRaceMatch", "start", {
       userId: user.id,
       discoverRaceId: String(formData.get("discover_race_id") ?? "").slice(0, 8)
@@ -355,11 +361,10 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
  * User can rename; `discover_race_id` stays null until they link a catalog race later.
  */
 export async function confirmCustomMajorEffortAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUserForWrite();
-    if (authError || !user) return { error: "Sign in required." };
-    const supabase = await createClient();
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
 
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
     if (!stravaActivityId) {
@@ -447,13 +452,10 @@ function numFromForm(formData: FormData, key: string): number | null {
  * Does not redirect — client should `router.refresh()`.
  */
 export async function upsertActivityPortfolioAction(formData: FormData) {
-  if (!isSupabaseConfigured()) {
-    return { error: BACKEND_SAVE_FAILED_SHORT };
-  }
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) redirect("/auth/login");
-    const supabase = await createClient();
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
 
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
     if (!stravaActivityId) return { error: "Missing Strava activity id." };
@@ -535,13 +537,12 @@ async function requireOwnedRace(
 
 /** Deletes a portfolio row entirely (wrong match, duplicate, or mistaken goal). */
 export async function deleteUserRacePortfolioAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const raceId = String(formData.get("race_id") ?? "").trim();
     if (!raceId) return { error: "Missing race." };
-    const supabase = await createClient();
     const row = await requireOwnedRace(supabase, user.id, raceId);
     if (!row) return { error: "Race not found." };
 
@@ -566,13 +567,12 @@ export async function deleteUserRacePortfolioAction(formData: FormData) {
  * Does not delete the row.
  */
 export async function markRaceNotCompletedPortfolioAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const raceId = String(formData.get("race_id") ?? "").trim();
     if (!raceId) return { error: "Missing race." };
-    const supabase = await createClient();
     const row = await requireOwnedRace(supabase, user.id, raceId);
     if (!row) return { error: "Race not found." };
 
@@ -602,13 +602,12 @@ export async function markRaceNotCompletedPortfolioAction(formData: FormData) {
 
 /** Completed row: stop treating as bucket-list item (finish still counts in portfolio). */
 export async function clearBucketListAffiliationAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const raceId = String(formData.get("race_id") ?? "").trim();
     if (!raceId) return { error: "Missing race." };
-    const supabase = await createClient();
     const row = await requireOwnedRace(supabase, user.id, raceId);
     if (!row) return { error: "Race not found." };
     if (!row.is_completed) return { error: "Only completed races use this action." };
@@ -635,13 +634,12 @@ export async function clearBucketListAffiliationAction(formData: FormData) {
 
 /** Removes an incomplete future bucket goal row (catalog-linked). */
 export async function deleteFutureBucketGoalAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const raceId = String(formData.get("race_id") ?? "").trim();
     if (!raceId) return { error: "Missing race." };
-    const supabase = await createClient();
     const row = await requireOwnedRace(supabase, user.id, raceId);
     if (!row) return { error: "Race not found." };
     if (row.is_completed) return { error: "Use other actions for completed races." };
@@ -664,15 +662,14 @@ export async function deleteFutureBucketGoalAction(formData: FormData) {
 
 /** Creates an incomplete catalog-linked row as a future bucket goal (no silent completion). */
 export async function addCatalogRaceToBucketListAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUserForWrite();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const discoverId = String(formData.get("discover_race_id") ?? "").trim();
     if (!discoverId || !isDiscoverCatalogRaceId(discoverId)) return { error: "Invalid race." };
     const detail = getDiscoverRaceDetail(discoverId);
     if (!detail) return { error: "Unknown race." };
-    const supabase = await createClient();
 
     const { data: openRows } = await supabase
       .from("races")
@@ -719,11 +716,10 @@ export async function addCatalogRaceToBucketListAction(formData: FormData) {
  * Catalog/library goals must use `confirmKnownRaceMatchAction` so the race id stays canonical.
  */
 export async function completeBucketGoalWithStravaAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUserForWrite();
-    if (authError || !user) return { error: "Sign in required." };
-    const supabase = await createClient();
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     runfolioLog.info("actions.completeBucketGoalWithStrava", "start", { userId: user.id });
 
     const raceId = String(formData.get("user_race_id") ?? "").trim();
@@ -819,10 +815,10 @@ export async function completeBucketGoalWithStravaAction(formData: FormData) {
 
 /** Hide an imported Strava race candidate from the profile pending queue (durable). */
 export async function dismissStravaProfileCandidateAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const stravaId = String(formData.get("strava_activity_id") ?? "").trim();
     if (!stravaId) return { error: "Missing activity." };
     const returnToRaw = String(formData.get("return_to") ?? "").trim();
@@ -830,8 +826,6 @@ export async function dismissStravaProfileCandidateAction(formData: FormData) {
       returnToRaw.startsWith("/") && !returnToRaw.startsWith("//") && !returnToRaw.includes("://")
         ? returnToRaw
         : "/dashboard";
-
-    const supabase = await createClient();
     const { error } = await supabase.from("strava_profile_dismissals").upsert({
       user_id: user.id,
       strava_activity_id: stravaId
@@ -850,14 +844,13 @@ export async function dismissStravaProfileCandidateAction(formData: FormData) {
 
 /** Add an **active** canonical race to Future Goals (stable internal race id). */
 export async function addCanonicalRaceToBucketListAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUserForWrite();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const canonicalRaceId = String(formData.get("canonical_race_id") ?? "").trim();
     if (!canonicalRaceId) return { error: "Missing race." };
 
-    const supabase = await createClient();
     runfolioLog.info("bucketList.addCanonical.request", "add goal", { userId: user.id, canonicalRaceId });
     const { data: race, error: raceErr } = await supabase
       .from("canonical_races")
@@ -905,13 +898,12 @@ export async function addCanonicalRaceToBucketListAction(formData: FormData) {
 }
 
 export async function removeCanonicalBucketGoalAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const goalId = String(formData.get("goal_id") ?? "").trim();
     if (!goalId) return { error: "Missing goal." };
-    const supabase = await createClient();
     const { error: delErr } = await supabase
       .from("user_bucket_list_goals")
       .delete()
@@ -930,13 +922,12 @@ export async function removeCanonicalBucketGoalAction(formData: FormData) {
 
 /** First completion step: goal done in the real world; Strava link optional later. */
 export async function markCanonicalBucketGoalCompletedAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const goalId = String(formData.get("goal_id") ?? "").trim();
     if (!goalId) return { error: "Missing goal." };
-    const supabase = await createClient();
     const now = new Date().toISOString();
     const { data: updated, error: upErr } = await supabase
       .from("user_bucket_list_goals")
@@ -972,13 +963,12 @@ export async function markCanonicalBucketGoalCompletedAction(formData: FormData)
 }
 
 export async function undoCanonicalBucketCompletionAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const goalId = String(formData.get("goal_id") ?? "").trim();
     if (!goalId) return { error: "Missing goal." };
-    const supabase = await createClient();
     const { data: undone, error: upErr } = await supabase
       .from("user_bucket_list_goals")
       .update({
@@ -1005,15 +995,14 @@ export async function undoCanonicalBucketCompletionAction(formData: FormData) {
 
 /** Pull Strava activities into `strava_synced_activities` (incremental by payload hash). */
 export async function syncStravaActivitiesAction() {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const res = await syncStravaActivitiesForUserId(user.id);
     if (!res.ok) {
       return { error: res.error };
     }
-    const supabase = await createClient();
     await revalidatePortfolioSurfaces(supabase, user.id, {
       alsoPaths: ["/dashboard", "/bucket-list", "/races/find"]
     });
@@ -1034,13 +1023,12 @@ export async function syncStravaActivitiesAction() {
 
 /** User says a synced activity is training / not an event — persistent hub exclusion. */
 export async function markStravaActivityNotRaceAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
     if (!stravaActivityId) return { error: "Missing activity." };
-    const supabase = await createClient();
     const now = new Date().toISOString();
     const { error } = await supabase
       .from("strava_synced_activities")
@@ -1061,13 +1049,12 @@ export async function markStravaActivityNotRaceAction(formData: FormData) {
 
 /** Defer an activity out of the active review queue (still synced, not linked). */
 export async function snoozeStravaActivityMatchHubAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
     if (!stravaActivityId) return { error: "Missing activity." };
-    const supabase = await createClient();
     const now = new Date().toISOString();
     const { error } = await supabase
       .from("strava_synced_activities")
@@ -1088,13 +1075,12 @@ export async function snoozeStravaActivityMatchHubAction(formData: FormData) {
 
 /** Return deferred items to the active hub queue. */
 export async function unsnoozeStravaActivityMatchHubAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
     if (!stravaActivityId) return { error: "Missing activity." };
-    const supabase = await createClient();
     const now = new Date().toISOString();
     const { error } = await supabase
       .from("strava_synced_activities")
@@ -1114,13 +1100,12 @@ export async function unsnoozeStravaActivityMatchHubAction(formData: FormData) {
 }
 
 export async function dismissCanonicalStravaMatchAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUserForWrite();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
     if (!stravaActivityId) return { error: "Missing activity." };
-    const supabase = await createClient();
     const res = await dismissCanonicalMatchSuggestion(supabase, user.id, stravaActivityId);
     if (!res.ok) return { error: res.error };
     await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/dashboard", "/matches"] });
@@ -1140,22 +1125,22 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
   const responseMode = String(formData.get("response_mode") ?? "").trim();
   const isHub = responseMode === "hub";
 
-  if (!isSupabaseConfigured()) {
-    runfolioLog.warn("actions.confirmCanonicalStravaMatch", "supabase not configured", { isHub });
-    return { error: BACKEND_SAVE_FAILED_SHORT };
-  }
-
   try {
-    const { user, authError } = await getServerAuthUserForWrite();
-    if (authError || !user) {
-      if (isHub) {
-        return { error: authError ? `Sign in required (${authError})` : "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) {
+      runfolioLog.warn("actions.confirmCanonicalStravaMatch", "blocked", {
+        isHub,
+        code: gate.code
+      });
+      if (isHub) return { error: gate.error };
+      if (gate.code === "auth_required") {
+        const loginNext = parseSafeRedirectPath(String(formData.get("return_to") ?? "")) ?? "/dashboard";
+        redirect(`/auth/login?next=${encodeURIComponent(loginNext)}`);
       }
-      const loginNext = parseSafeRedirectPath(String(formData.get("return_to") ?? "")) ?? "/dashboard";
-      redirect(`/auth/login?next=${encodeURIComponent(loginNext)}`);
+      return { error: gate.error };
     }
 
-    const supabase = await createClient();
+    const { user, supabase } = gate;
     runfolioLog.info("actions.confirmCanonicalStravaMatch", "start", {
       userId: user.id,
       isHub,
@@ -1375,11 +1360,10 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
 }
 
 export async function updateProfileIdentityAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
-    const supabase = await createClient();
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const tagline = String(formData.get("profile_tagline") ?? "").trim() || null;
     const location = String(formData.get("profile_location") ?? "").trim() || null;
     const profile_public = String(formData.get("profile_public") ?? "true") !== "false";
@@ -1404,13 +1388,12 @@ export async function updateProfileIdentityAction(formData: FormData) {
 }
 
 export async function publishRaceToProfileAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const raceId = String(formData.get("race_id") ?? "").trim();
     if (!raceId) return { error: "Missing race." };
-    const supabase = await createClient();
     const row = await requireOwnedRace(supabase, user.id, raceId);
     if (!row) return { error: "Race not found." };
     if (!isConfirmedPortfolioCompletion(row)) {
@@ -1439,13 +1422,12 @@ export async function publishRaceToProfileAction(formData: FormData) {
 }
 
 export async function hideRaceFromProfileAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const raceId = String(formData.get("race_id") ?? "").trim();
     if (!raceId) return { error: "Missing race." };
-    const supabase = await createClient();
     const row = await requireOwnedRace(supabase, user.id, raceId);
     if (!row) return { error: "Race not found." };
     const { error } = await supabase
@@ -1471,14 +1453,13 @@ export async function hideRaceFromProfileAction(formData: FormData) {
 }
 
 export async function setRaceProfileFeaturedAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const raceId = String(formData.get("race_id") ?? "").trim();
     if (!raceId) return { error: "Missing race." };
     const featured = String(formData.get("profile_featured") ?? "") === "true";
-    const supabase = await createClient();
     const row = await requireOwnedRace(supabase, user.id, raceId);
     if (!row) return { error: "Race not found." };
     if (!row.profile_approved_at?.trim()) {
@@ -1504,14 +1485,13 @@ export async function setRaceProfileFeaturedAction(formData: FormData) {
 }
 
 export async function setSyncedActivityProfileIncludeAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) return { error: "Sign in required." };
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
     if (!stravaActivityId) return { error: "Missing activity." };
     const include = String(formData.get("profile_include") ?? "") === "true";
-    const supabase = await createClient();
     const { error } = await supabase
       .from("strava_synced_activities")
       .update({ profile_include: include, updated_at: new Date().toISOString() })

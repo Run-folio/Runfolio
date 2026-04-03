@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOutAction } from "@/lib/actions";
 import { usePersistence } from "@/components/persistence-context";
+import { buildSetupUrl } from "@/lib/setup-url";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -34,20 +35,36 @@ type NavbarProps = {
 
 export function Navbar({ profileHref, profileInitial }: NavbarProps) {
   const pathname = usePathname();
-  const { persistenceAvailable, reason } = usePersistence();
+  const { canPersist, reason, status, message, ctaHref, ctaLabel } = usePersistence();
+  const hidePersistenceBanner =
+    pathname === "/" || (pathname?.startsWith("/auth") ?? false);
+  const showPersistenceBanner = !hidePersistenceBanner && !canPersist && Boolean(reason ?? message);
+  const bannerTone =
+    status === "auth_required"
+      ? "border-sky-500/35 bg-sky-950/45 text-sky-50/95"
+      : "border-amber-500/35 bg-amber-950/50 text-amber-50/95";
+  const kickerClass =
+    status === "auth_required"
+      ? "font-semibold uppercase tracking-wider text-sky-200/90"
+      : "font-semibold uppercase tracking-wider text-amber-200/90";
+  const linkClass =
+    status === "auth_required"
+      ? "font-semibold text-sky-100 underline-offset-2 hover:underline"
+      : "font-semibold text-amber-100 underline-offset-2 hover:underline";
 
   return (
     <header className="sticky top-0 z-30 w-full border-b border-border bg-[#1e2029]/95 backdrop-blur">
-      {!persistenceAvailable && reason ? (
-        <div
-          className="w-full border-b border-amber-500/35 bg-amber-950/50 px-4 py-2.5 text-center text-[11px] leading-snug text-amber-50/95"
-          role="status"
-        >
-          <span className="font-semibold uppercase tracking-wider text-amber-200/90">Saves disabled · </span>
-          {reason}{" "}
-          <Link href="/dashboard" className="font-semibold text-amber-100 underline-offset-2 hover:underline">
-            Open setup overview
-          </Link>
+      {showPersistenceBanner ? (
+        <div className={cn("w-full border-b px-4 py-2.5 text-center text-[11px] leading-snug", bannerTone)} role="status">
+          <span className={kickerClass}>
+            {status === "auth_required" ? "Sign in to save · " : "Saves unavailable · "}
+          </span>
+          {reason ?? message}{" "}
+          {ctaHref ? (
+            <Link href={ctaHref} className={linkClass}>
+              {ctaLabel ?? "Next step"}
+            </Link>
+          ) : null}
         </div>
       ) : null}
       <div className="mx-auto flex w-full max-w-[1400px] flex-wrap items-center justify-between gap-4 px-6 py-4">
@@ -80,6 +97,14 @@ export function Navbar({ profileHref, profileInitial }: NavbarProps) {
           })}
         </nav>
         <div className="flex shrink-0 items-center gap-3">
+          {!canPersist && pathname !== "/setup" ? (
+            <Link
+              href={buildSetupUrl(pathname && pathname !== "/" ? pathname : "/dashboard")}
+              className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-accent hover:text-white sm:inline"
+            >
+              Setup
+            </Link>
+          ) : null}
           <Link
             href={profileHref}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-panelAlt font-display text-sm font-semibold text-white ring-1 ring-white/10 transition hover:border-accent"

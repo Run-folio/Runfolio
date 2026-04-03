@@ -8,7 +8,9 @@ import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import type { Race } from "@/types";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
+import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import { runfolioLog } from "@/lib/runfolio-log";
+import { buildSetupUrl } from "@/lib/setup-url";
 import { hasStravaConnection } from "@/lib/strava-access-server";
 import { getStravaFeed } from "@/lib/strava-feed";
 import { isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
@@ -21,8 +23,12 @@ type PageProps = {
 
 export default async function NewRacePage({ searchParams }: PageProps) {
   if (!isSupabaseConfigured()) {
-    return <DataBackendSetupGate title="Add race" featureLabel="Creating and saving races" />;
+    return (
+      <DataBackendSetupGate title="Add race" featureLabel="Creating and saving races" returnTo="/races/new" />
+    );
   }
+
+  await requirePersistenceReadyOrRedirect("/races/new");
 
   const q = await searchParams;
   const initialDiscoverRaceId =
@@ -39,7 +45,7 @@ export default async function NewRacePage({ searchParams }: PageProps) {
     try {
       const { user, authError } = await getServerAuthUser();
       if (authError) throw new Error(authError);
-      if (!user) redirect("/auth/login");
+      if (!user) redirect(buildSetupUrl("/races/new"));
       const supabase = await createClient();
       const result = await supabase.from("races").select("*").eq("user_id", user.id);
       if (result.error) {

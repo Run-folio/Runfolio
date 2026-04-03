@@ -27,14 +27,23 @@ import {
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
 import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
+import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import type { Race } from "@/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   if (!isSupabaseConfigured()) {
-    return <DataBackendSetupGate title="Overview" featureLabel="Your dashboard, bucket list, and Strava sync" />;
+    return (
+      <DataBackendSetupGate
+        title="Overview"
+        featureLabel="Your dashboard, bucket list, and Strava sync"
+        returnTo="/dashboard"
+      />
+    );
   }
+
+  await requirePersistenceReadyOrRedirect("/dashboard");
 
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
