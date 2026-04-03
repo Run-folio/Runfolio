@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
 import { ActivityPortfolioClient } from "@/components/activity-portfolio-client";
+import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import {
   buildActivityPortfolioStravaView,
   buildActivityPortfolioStravaViewFromRace
@@ -33,12 +34,12 @@ export default async function ActivityPortfolioPage({ params }: Props) {
   if (!stravaId) notFound();
 
   if (!isSupabaseConfigured()) {
-    redirect("/dashboard");
+    return <DataBackendSetupGate title="Race activity" featureLabel="Saving finishes and catalog links" />;
   }
 
   const { user, authError } = await getServerAuthUser();
   if (authError || !user) {
-    redirect(`/auth/login?redirect=${encodeURIComponent(`/activities/${stravaId}`)}`);
+    redirect(`/auth/login?next=${encodeURIComponent(`/activities/${stravaId}`)}`);
   }
 
   const race = await getRaceByStravaActivityId(stravaId, user.id);

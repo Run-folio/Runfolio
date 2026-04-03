@@ -8,16 +8,16 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      /* Sharp UI: no rounded corners except `rounded-full` for avatars */
+      /* Minor rounding: interactive panels, fields, chips (avatars still use rounded-full) */
       borderRadius: {
         none: "0",
-        sm: "0",
-        DEFAULT: "0",
-        md: "0",
-        lg: "0",
-        xl: "0",
-        "2xl": "0",
-        "3xl": "0",
+        sm: "0.1875rem",
+        DEFAULT: "0.25rem",
+        md: "0.375rem",
+        lg: "0.5rem",
+        xl: "0.75rem",
+        "2xl": "1rem",
+        "3xl": "1.5rem",
         full: "9999px"
       },
       fontFamily: {

@@ -46,7 +46,7 @@ body {
 }
 
 .panel {
-  @apply border border-border bg-panel/95 shadow-soft;
+  @apply rounded-lg border border-border bg-panel/95 shadow-soft;
 }
 
 .type-eyebrow {

@@ -285,7 +285,7 @@ export function FindRacesExplorer({
                   return (
                     <li
                       key={race.id}
-                      className="flex flex-col border border-white/10 bg-[#0d0d0f] p-4 transition hover:border-white/20"
+                      className="flex flex-col rounded-lg border border-white/10 bg-[#0d0d0f] p-4 transition hover:border-white/20"
                     >
                       <Link href={`/races/${race.id}`} className="font-semibold text-white hover:text-accent">
                         {race.name}

@@ -170,7 +170,7 @@ export function StravaRacePortfolioSection({
               <Link
                 key={race.id}
                 href={portfolioRaceHref(race)}
-                className="group flex overflow-hidden border border-white/10 bg-[#0d0d0f] transition hover:border-green-500/40"
+                className="group flex overflow-hidden rounded-lg border border-white/10 bg-[#0d0d0f] transition hover:border-green-500/40"
               >
                 <div
                   className="h-24 w-28 shrink-0 bg-cover bg-center"

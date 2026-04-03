@@ -8,6 +8,7 @@ import {
   confirmKnownRaceMatchAction,
   dismissStravaProfileCandidateAction
 } from "@/lib/actions";
+import { usePersistence } from "@/components/persistence-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ProfilePendingRaceCandidate, RaceMatchCandidate } from "@/types";
@@ -86,6 +87,7 @@ function buildCustomMajorFd(
 
 export function ProfilePendingRaceCandidates({ candidates: initial, profilePath }: Props) {
   const router = useRouter();
+  const { persistenceAvailable, reason: persistenceReason } = usePersistence();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [openAlt, setOpenAlt] = useState<string | null>(null);
@@ -94,6 +96,10 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
   if (initial.length === 0) return null;
 
   const runConfirm = (fd: FormData) => {
+    if (!persistenceAvailable) {
+      setError(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
     setError(null);
     startTransition(async () => {
       const res = await confirmKnownRaceMatchAction(fd);
@@ -102,6 +108,10 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
   };
 
   const runCustomMajor = (fd: FormData) => {
+    if (!persistenceAvailable) {
+      setError(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
     setError(null);
     startTransition(async () => {
       const res = await confirmCustomMajorEffortAction(fd);
@@ -110,6 +120,10 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
   };
 
   const runDismiss = (stravaId: string) => {
+    if (!persistenceAvailable) {
+      setError(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
     setError(null);
     const fd = new FormData();
     fd.set("strava_activity_id", stravaId);
@@ -132,6 +146,11 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
         Approve what belongs on your public portfolio. Nothing here appears in Top Races or Race Journey until you confirm.
         Dismiss efforts that aren&apos;t meaningful races for your story.
       </p>
+      {!persistenceAvailable ? (
+        <p className="mt-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90" role="status">
+          {persistenceReason ?? "Database not connected — confirm and dismiss actions are disabled."}
+        </p>
+      ) : null}
       {error ? (
         <p className="mt-4 text-sm text-red-300" role="alert">
           {error}
@@ -201,7 +220,7 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
                   {m.onUserBucketList && m.userRaceId ? (
                     <Button
                       type="button"
-                      disabled={pending}
+                      disabled={pending || !persistenceAvailable}
                       className="bg-green-800 hover:bg-green-700"
                       onClick={() =>
                         runConfirm(buildConfirmFd(m.suggestedDiscoverId!, m, profilePath, true))
@@ -212,20 +231,25 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
                   ) : null}
                   <Button
                     type="button"
-                    disabled={pending}
+                    disabled={pending || !persistenceAvailable}
                     onClick={() => runConfirm(buildConfirmFd(m.suggestedDiscoverId!, m, profilePath, false))}
                   >
                     Confirm for profile
                   </Button>
                 </>
               ) : null}
-              <Button type="button" variant="secondary" disabled={pending} onClick={() => runDismiss(m.stravaId)}>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={pending || !persistenceAvailable}
+                onClick={() => runDismiss(m.stravaId)}
+              >
                 Not this race
               </Button>
               <Button
                 type="button"
                 variant="ghost"
-                disabled={pending}
+                disabled={pending || !persistenceAvailable}
                 onClick={() => setOpenAlt((prev) => (prev === m.stravaId ? null : m.stravaId))}
               >
                 {openAlt === m.stravaId ? "Hide options" : "Choose another race"}
@@ -257,7 +281,7 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
                         {alt.onUserBucketList && alt.userRaceId ? (
                           <Button
                             type="button"
-                            disabled={pending}
+                            disabled={pending || !persistenceAvailable}
                             className="bg-green-800 px-3 py-1.5 text-[11px] hover:bg-green-700"
                             onClick={() =>
                               runConfirm(buildConfirmFdFromCandidate(alt.discoverRaceId, alt, m, profilePath, true))
@@ -268,7 +292,7 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
                         ) : null}
                         <Button
                           type="button"
-                          disabled={pending}
+                          disabled={pending || !persistenceAvailable}
                           className="px-3 py-1.5 text-[11px]"
                           onClick={() =>
                             runConfirm(buildConfirmFdFromCandidate(alt.discoverRaceId, alt, m, profilePath, false))
@@ -325,7 +349,7 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
                   <Button
                     type="button"
                     variant="secondary"
-                    disabled={pending}
+                    disabled={pending || !persistenceAvailable}
                     onClick={() =>
                       runCustomMajor(
                         buildCustomMajorFd(

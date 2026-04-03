@@ -4,6 +4,7 @@ import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { confirmCanonicalStravaMatchAction, dismissCanonicalStravaMatchAction } from "@/lib/actions";
+import { usePersistence } from "@/components/persistence-context";
 import type { CanonicalStravaSuggestion } from "@/lib/strava-canonical-match/suggestions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,6 +25,7 @@ function confidenceLabel(c: string) {
 
 export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfirm = "/dashboard" }: Props) {
   const router = useRouter();
+  const { persistenceAvailable, reason: persistenceReason } = usePersistence();
   const [dismissPending, startDismiss] = useTransition();
   const [confirmPending, startConfirm] = useTransition();
   const [confirmErr, setConfirmErr] = useState<{ id: string; message: string } | null>(null);
@@ -38,6 +40,11 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
         <p className="type-meta mt-2 max-w-2xl text-sm">
           We lined up your Strava efforts with verified events. One tap adds the finish to your story.
         </p>
+        {!persistenceAvailable ? (
+          <p className="mt-3 max-w-2xl rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
+            {persistenceReason ?? "Saving isn’t available — matches are view-only."}
+          </p>
+        ) : null}
       </div>
       <ul className="grid gap-4 md:grid-cols-2">
         {suggestions.map((s) => {
@@ -71,6 +78,13 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
+                      if (!persistenceAvailable) {
+                        setConfirmErr({
+                          id: s.stravaActivityId,
+                          message: persistenceReason ?? "Saving isn’t available."
+                        });
+                        return;
+                      }
                       const fd = new FormData(e.currentTarget);
                       setConfirmErr(null);
                       startConfirm(async () => {
@@ -97,7 +111,7 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
                     <input type="hidden" name="return_to" value={returnAfterConfirm} />
                     <Button
                       type="submit"
-                      disabled={confirmPending}
+                      disabled={confirmPending || !persistenceAvailable}
                       className="bg-accent text-[11px] font-semibold uppercase tracking-wider"
                     >
                       {confirmPending ? "Saving…" : "Yes, link this race"}
@@ -106,6 +120,7 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
                   <form
                     onSubmit={(e) => {
                       e.preventDefault();
+                      if (!persistenceAvailable) return;
                       const fd = new FormData(e.currentTarget);
                       startDismiss(async () => {
                         await dismissCanonicalStravaMatchAction(fd);
@@ -117,7 +132,7 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
                     <Button
                       type="submit"
                       variant="ghost"
-                      disabled={dismissPending}
+                      disabled={dismissPending || !persistenceAvailable}
                       className="text-[11px] text-muted hover:text-white"
                     >
                       {dismissPending ? "…" : "Not this one"}

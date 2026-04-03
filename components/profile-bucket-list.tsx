@@ -59,7 +59,7 @@ function BucketRaceCard({
   return (
     <div
       className={cn(
-        "flex flex-col border border-white/10 bg-[#0d0d0d] transition hover:border-white/25 focus-within:ring-2 focus-within:ring-[#d4af37]/45"
+        "flex flex-col overflow-hidden rounded-lg border border-white/10 bg-[#0d0d0d] transition hover:border-white/25 focus-within:ring-2 focus-within:ring-[#d4af37]/45"
       )}
     >
       {isExternal ? (
@@ -137,7 +137,7 @@ function CanonicalBucketStripCard({ goal, variant }: { goal: CanonicalBucketGoal
   return (
     <div
       className={cn(
-        "flex flex-col border border-white/10 bg-[#0d0d0d] transition hover:border-white/25 focus-within:ring-2 focus-within:ring-[#d4af37]/45"
+        "flex flex-col overflow-hidden rounded-lg border border-white/10 bg-[#0d0d0d] transition hover:border-white/25 focus-within:ring-2 focus-within:ring-[#d4af37]/45"
       )}
     >
       <Link href={raceHref} className="group flex flex-1 flex-col focus-visible:outline-none">
@@ -163,7 +163,7 @@ type Props = {
 
 export function ProfileBucketList({ completed, future, canonicalFuture = [], canonicalCompleted = [] }: Props) {
   return (
-    <section className="flex h-full flex-col border border-border bg-[#0a0a0a]">
+    <section className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-[#0a0a0a]">
       <div className="flex flex-col gap-4 border-b border-white/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white">Bucket List</h2>
         <Link

@@ -159,14 +159,14 @@ export function CanonicalRaceDetailView({
                   <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Terrain & tags</p>
                   <ul className="mt-3 flex flex-wrap gap-2">
                     {race.surfaceType?.trim() ? (
-                      <li className="rounded-full border border-white/12 bg-white/[0.04] px-3 py-1 text-[11px] text-white/75">
+                      <li className="rounded-md border border-white/12 bg-white/[0.04] px-3 py-1 text-[11px] text-white/75">
                         {race.surfaceType}
                       </li>
                     ) : null}
                     {tags.map((t) => (
                       <li
                         key={t}
-                        className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-[11px] uppercase tracking-wide text-muted"
+                        className="rounded-md border border-white/10 bg-black/30 px-3 py-1 text-[11px] uppercase tracking-wide text-muted"
                       >
                         {t}
                       </li>

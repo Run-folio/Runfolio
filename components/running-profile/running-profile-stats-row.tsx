@@ -18,7 +18,7 @@ export function RunningProfileStatsRow({ stats }: Props) {
       {items.map((item) => (
         <div
           key={item.label}
-          className="border border-white/10 bg-black/35 px-4 py-3 backdrop-blur-sm md:border-white/15"
+          className="rounded-lg border border-white/10 bg-black/35 px-4 py-3 backdrop-blur-sm md:border-white/15"
         >
           <p className="text-[9px] font-semibold uppercase tracking-[0.2em] text-white/50">{item.label}</p>
           <p className="mt-1.5 font-display text-xl font-normal text-white md:text-2xl">{item.value}</p>

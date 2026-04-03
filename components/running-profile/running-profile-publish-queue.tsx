@@ -33,7 +33,7 @@ export function RunningProfilePublishQueue({ allRaces }: Props) {
               return (
                 <li
                   key={race.id}
-                  className="flex flex-col gap-3 border border-white/10 bg-black/25 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-3 rounded-lg border border-white/10 bg-black/25 px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="min-w-0">
                     <p className="font-display text-base text-white">{label}</p>
@@ -66,7 +66,7 @@ export function RunningProfilePublishQueue({ allRaces }: Props) {
               return (
                 <li
                   key={race.id}
-                  className="flex flex-col gap-2 border border-white/10 bg-black/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                  className="flex flex-col gap-2 rounded-lg border border-white/10 bg-black/20 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <p className="font-display text-sm text-white">{label}</p>
                   <ProfileRaceCurationToolbar

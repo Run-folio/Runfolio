@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOutAction } from "@/lib/actions";
+import { usePersistence } from "@/components/persistence-context";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -33,9 +34,22 @@ type NavbarProps = {
 
 export function Navbar({ profileHref, profileInitial }: NavbarProps) {
   const pathname = usePathname();
+  const { persistenceAvailable, reason } = usePersistence();
 
   return (
     <header className="sticky top-0 z-30 w-full border-b border-border bg-[#1e2029]/95 backdrop-blur">
+      {!persistenceAvailable && reason ? (
+        <div
+          className="w-full border-b border-amber-500/35 bg-amber-950/50 px-4 py-2.5 text-center text-[11px] leading-snug text-amber-50/95"
+          role="status"
+        >
+          <span className="font-semibold uppercase tracking-wider text-amber-200/90">Saves disabled · </span>
+          {reason}{" "}
+          <Link href="/dashboard" className="font-semibold text-amber-100 underline-offset-2 hover:underline">
+            Open setup overview
+          </Link>
+        </div>
+      ) : null}
       <div className="mx-auto flex w-full max-w-[1400px] flex-wrap items-center justify-between gap-4 px-6 py-4">
         <Link href="/dashboard" className="flex shrink-0 flex-col gap-1">
           <Image

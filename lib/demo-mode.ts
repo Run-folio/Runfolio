@@ -2,7 +2,7 @@ import type { Race } from "@/types";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 
 /** Set `RUNFOLIO_OFFLINE_DEMO=1` in `.env.local` to skip live Supabase (static demo only). */
-function isOfflineDemoMode() {
+export function isOfflineDemoMode() {
   const v = process.env.RUNFOLIO_OFFLINE_DEMO?.trim().toLowerCase();
   return v === "1" || v === "true" || v === "yes";
 }

@@ -36,7 +36,10 @@ export function RunningProfileSelectedEfforts({ activities, isOwner }: Props) {
               row.moving_time_sec != null ? formatStravaMovingTime(row.moving_time_sec) : "—";
 
             return (
-              <li key={row.strava_activity_id} className="flex flex-col overflow-hidden border border-white/10 bg-[#0c0d12]">
+              <li
+                key={row.strava_activity_id}
+                className="flex flex-col overflow-hidden rounded-lg border border-white/10 bg-[#0c0d12]"
+              >
                 <div className="relative aspect-[5/3] w-full">
                   <Image
                     src={src}

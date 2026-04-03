@@ -18,7 +18,7 @@ export function RunningProfileIdentityForm({ initialTagline, initialLocation, in
 
   return (
     <form
-      className="mt-6 space-y-4 border border-white/10 bg-black/30 p-4"
+      className="mt-6 space-y-4 rounded-lg border border-white/10 bg-black/30 p-4"
       onSubmit={(e) => {
         e.preventDefault();
         const fd = new FormData(e.currentTarget);

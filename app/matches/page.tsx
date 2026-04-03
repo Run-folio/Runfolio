@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { AppNavbar } from "@/components/app-navbar";
+import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { MatchHubClient } from "@/components/match-hub/match-hub-client";
 import { SyncStravaActivitiesButton } from "@/components/sync-strava-activities-button";
 import { getServerAuthUser } from "@/lib/auth-server";
@@ -21,7 +22,7 @@ export const metadata: Metadata = {
 
 export default async function MatchHubPage() {
   if (!isSupabaseConfigured()) {
-    redirect("/dashboard");
+    return <DataBackendSetupGate title="Match &amp; Import" featureLabel="Match &amp; Import" />;
   }
 
   const { user, authError } = await getServerAuthUser();
@@ -46,7 +47,10 @@ export default async function MatchHubPage() {
   );
 
   const totalAttention =
-    bundle.suggestedHigh.length + bundle.needsReview.length + bundle.unmatched.length;
+    bundle.suggestedHigh.length +
+    bundle.needsReview.length +
+    bundle.unmatched.length +
+    bundle.snoozed.length;
 
   return (
     <>
@@ -74,16 +78,25 @@ export default async function MatchHubPage() {
                 href="/races/new"
                 className="text-[12px] font-semibold uppercase tracking-[0.15em] text-muted hover:text-white"
               >
-                Quick add from Strava →
+                Add a race manually →
               </Link>
             </div>
             {totalAttention > 0 ? (
               <p className="mt-6 inline-flex items-center gap-2 rounded-full border border-amber-400/35 bg-amber-500/10 px-4 py-2 text-[12px] font-medium text-amber-100/90">
                 <span className="h-2 w-2 animate-pulse rounded-full bg-amber-300" aria-hidden />
-                {totalAttention} activit{totalAttention === 1 ? "y" : "ies"} waiting for you
+                {totalAttention} item{totalAttention === 1 ? "" : "s"} in the queue (review + snoozed)
+              </p>
+            ) : bundle.totalSyncedCount === 0 ? (
+              <p className="mt-6 max-w-2xl text-sm text-white/55">
+                {stravaOAuthConfigured
+                  ? "No Strava activities stored in Runfolio yet. Sync above after a race effort — long runs and “race” types are what we look at."
+                  : "Strava OAuth isn’t set on this server, so nothing has been imported automatically. Use Browse verified races or Add a race manually, or configure STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET for sync."}
               </p>
             ) : (
-              <p className="mt-6 text-sm text-white/45">You&apos;re all caught up — sync Strava after your next big day.</p>
+              <p className="mt-6 max-w-2xl text-sm text-white/55">
+                Nothing in the active queue right now — your synced activities are either already matched, marked as
+                training, snoozed, or not flagged as race-like.
+              </p>
             )}
           </div>
         </header>

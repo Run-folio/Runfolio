@@ -91,7 +91,21 @@ export function MatchHubClient({
   const [pending, start] = useTransition();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
 
-  const { suggestedHigh, needsReview, unmatched, snoozed, recentlyConfirmed } = initialBundle;
+  const { suggestedHigh, needsReview, unmatched, snoozed, recentlyConfirmed, totalSyncedCount } = initialBundle;
+
+  const serverQueueSize = useMemo(
+    () =>
+      initialBundle.suggestedHigh.length +
+      initialBundle.needsReview.length +
+      initialBundle.unmatched.length +
+      initialBundle.snoozed.length,
+    [initialBundle]
+  );
+
+  const showHubQuietExplainer =
+    hiddenIds.size === 0 &&
+    serverQueueSize === 0 &&
+    initialBundle.recentlyConfirmed.length === 0;
 
   useEffect(() => {
     setHiddenIds((prev) => {
@@ -303,7 +317,41 @@ export function MatchHubClient({
 
       {!stravaOAuthConfigured ? (
         <Card className="border-amber-500/25 bg-amber-950/15 p-5 text-sm text-amber-100/85">
-          Connect Strava in your environment to sync activities into this hub.
+          Strava OAuth isn&apos;t configured here (<code className="rounded bg-black/35 px-1 text-xs">STRAVA_CLIENT_ID</code> /{" "}
+          <code className="rounded bg-black/35 px-1 text-xs">SECRET</code>), so activities won&apos;t import automatically.
+          You can still add finishes from{" "}
+          <Link href="/races/find" className="font-medium text-amber-200 underline-offset-4 hover:underline">
+            Find a race
+          </Link>{" "}
+          or{" "}
+          <Link href="/races/new" className="font-medium text-amber-200 underline-offset-4 hover:underline">
+            Add a race manually
+          </Link>
+          .
+        </Card>
+      ) : null}
+
+      {showHubQuietExplainer ? (
+        <Card className="border border-white/12 bg-[#0a1018] p-5 text-sm leading-relaxed text-white/70">
+          {totalSyncedCount === 0 ? (
+            <>
+              <p className="font-medium text-white/90">No imported activities yet</p>
+              <p className="mt-2">
+                {stravaOAuthConfigured
+                  ? "Run Sync from Strava in the header after your next long run or race. We only surface efforts that look event-sized — it’s normal for this list to stay empty until something new lands in your sync table."
+                  : "On this deployment, Strava sync can’t run without OAuth keys. Use the links in the amber notice above, or try again in an environment where Strava is configured."}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="font-medium text-white/90">Queue is clear</p>
+              <p className="mt-2">
+                You have <strong className="text-white/85">{totalSyncedCount}</strong> Strava activit
+                {totalSyncedCount === 1 ? "y" : "ies"} on file. None are waiting here — they&apos;re already matched to your
+                portfolio, marked as training, snoozed, or not treated as race-like.
+              </p>
+            </>
+          )}
         </Card>
       ) : null}
 
@@ -318,7 +366,11 @@ export function MatchHubClient({
           <HubEmpty
             icon="◇"
             title="No slam-dunk matches right now"
-            body="When you sync Strava after a race day, we’ll float clear candidates here. Until then, check Needs review or search the library for your event."
+            body={
+              totalSyncedCount === 0
+                ? "There’s nothing in your Strava import yet — sync first, then high-confidence race matches appear here when the data warrants it."
+                : "No best-guess catalog lock yet for what’s in queue — check Needs review, or open an activity below to pick the verified race yourself."
+            }
           >
             <Link
               href="#needs-review"
@@ -326,7 +378,7 @@ export function MatchHubClient({
             >
               Jump to needs review
             </Link>
-            <SyncHint />
+            <SyncHint stravaOAuthConfigured={stravaOAuthConfigured} />
           </HubEmpty>
         ) : (
           <ul className="grid gap-6 lg:grid-cols-2">
@@ -356,9 +408,13 @@ export function MatchHubClient({
           <HubEmpty
             icon="◎"
             title="Nothing waiting on your judgment"
-            body="That’s either great news — our high-confidence picks covered you — or your next long run hasn’t synced yet."
+            body={
+              totalSyncedCount === 0
+                ? "Imports haven’t run yet, so there’s nothing to review. After a sync, softer suggestions show up here."
+                : "Either strong matches took the work, or remaining efforts didn’t get a tentative catalog mapping — try Unmatched or search the library."
+            }
           >
-            <SyncHint />
+            <SyncHint stravaOAuthConfigured={stravaOAuthConfigured} />
           </HubEmpty>
         ) : (
           <ul className="grid gap-5 md:grid-cols-2">
@@ -379,8 +435,12 @@ export function MatchHubClient({
         {counts.un === 0 ? (
           <HubEmpty
             icon="○"
-            title="No loose ends in this pile"
-            body="Every synced race-like effort either has a suggestion above or isn’t in the “maybe a race” bucket. Sync after your next event to surface more."
+            title="No unmatched race-like efforts"
+            body={
+              totalSyncedCount === 0
+                ? "We only list big days that are actually stored from Strava — sync first, then long efforts without a catalog hint land here."
+                : "Every imported race-sized effort either has a suggestion above, is linked, excluded, or didn’t cross the race-like threshold."
+            }
           >
             <Link href="/races/find" className="text-[11px] font-semibold uppercase tracking-wider text-accent hover:underline">
               Browse verified races
@@ -436,8 +496,8 @@ export function MatchHubClient({
         {recentlyConfirmed.length === 0 ? (
           <HubEmpty
             icon="✦"
-            title="Your confirmed finishes will land here"
-            body="After you confirm a match above, it appears in this list and on your profile’s completed races. One strong match is all it takes to get started."
+            title="No recent hub confirmations yet"
+            body="After you confirm a Strava ↔ verified race match from this page, it shows here and in your profile completed races. Older finishes added outside this hub won’t be replayed in this list."
           >
             <Link href={completedRacesHref} className="text-[11px] font-semibold uppercase tracking-wider text-emerald-300/90 hover:underline">
               Open completed races on profile →
@@ -476,10 +536,21 @@ export function MatchHubClient({
   );
 }
 
-function SyncHint() {
+function SyncHint({ stravaOAuthConfigured }: { stravaOAuthConfigured: boolean }) {
+  if (!stravaOAuthConfigured) {
+    return (
+      <p className="w-full text-center text-[11px] text-white/45">
+        Strava sync isn&apos;t wired on this server — use{" "}
+        <Link href="/races/find" className="font-medium text-accent underline-offset-4 hover:underline">
+          Find a race
+        </Link>{" "}
+        to add goals and finishes manually.
+      </p>
+    );
+  }
   return (
     <p className="w-full text-center text-[11px] text-white/40">
-      Use <strong className="font-medium text-white/55">Sync Strava</strong> in the header above after a race.
+      Use <strong className="font-medium text-white/55">Sync from Strava</strong> in the page header after a big effort.
     </p>
   );
 }

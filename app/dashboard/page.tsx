@@ -3,6 +3,7 @@ import { isDynamicServerError } from "next/dist/client/components/hooks-server-c
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
+import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { CanonicalStravaMatchSuggestions } from "@/components/canonical-strava-match-suggestions";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { RaceJourney } from "@/components/race-journey";
@@ -31,6 +32,10 @@ import type { Race } from "@/types";
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  if (!isSupabaseConfigured()) {
+    return <DataBackendSetupGate title="Overview" featureLabel="Your dashboard, bucket list, and Strava sync" />;
+  }
+
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
   );
@@ -42,51 +47,48 @@ export default async function DashboardPage() {
   let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
   let canonicalStravaSuggestions: Awaited<ReturnType<typeof buildCanonicalStravaSuggestionsForUser>> = [];
   let confirmReturnTo = "/dashboard";
-  if (isSupabaseConfigured()) {
-    try {
-      const { user, authError } = await getServerAuthUser();
-      if (authError) throw new Error(authError);
-      if (!user) redirect("/auth/login");
-      const supabase = await createClient();
-      userName = user.user_metadata?.name ?? "Your Runfolio";
-      const result = await supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false });
-      if (result.error) {
-        runfolioLog.warn("Dashboard.races", result.error.message ?? "query error");
-        races = [];
-      } else {
-        races = result.data ?? [];
-      }
-      const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
-      canonicalFuture = canon.future;
-      canonicalCompleted = canon.completed;
-      const profilePath = await resolveDefaultProfilePathForUser(supabase, user.id);
-      confirmReturnTo =
-        profilePath === "/dashboard" ? "/dashboard" : `${profilePath}#profile-completed-races`;
-      try {
-        const synced = await listSyncedActivitiesForUser(supabase, user.id);
-        const dismissed = await listDismissedCanonicalStravaIds(supabase, user.id);
-        const portfolioStravaIds = new Set(
-          (races ?? []).map((r) => r.strava_activity_id).filter((x): x is string => Boolean(x?.trim()))
-        );
-        canonicalStravaSuggestions = await buildCanonicalStravaSuggestionsForUser({
-          rows: synced,
-          dismissedStravaIds: dismissed,
-          portfolioStravaIds
-        });
-      } catch (matchErr) {
-        runfolioLog.warn(
-          "Dashboard.canonicalStravaSuggestions",
-          matchErr instanceof Error ? matchErr.message : "failed"
-        );
-        canonicalStravaSuggestions = [];
-      }
-    } catch (e) {
-      if (isDynamicServerError(e)) throw e;
-      if (isRedirectError(e)) throw e;
-      runfolioLog.error("Dashboard.supabase", e);
-      userName = demoUser.name;
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError) throw new Error(authError);
+    if (!user) redirect("/auth/login");
+    const supabase = await createClient();
+    userName = user.user_metadata?.name ?? "Your Runfolio";
+    const result = await supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false });
+    if (result.error) {
+      runfolioLog.warn("Dashboard.races", result.error.message ?? "query error");
       races = [];
+    } else {
+      races = result.data ?? [];
     }
+    const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
+    canonicalFuture = canon.future;
+    canonicalCompleted = canon.completed;
+    const profilePath = await resolveDefaultProfilePathForUser(supabase, user.id);
+    confirmReturnTo =
+      profilePath === "/dashboard" ? "/dashboard" : `${profilePath}#profile-completed-races`;
+    try {
+      const synced = await listSyncedActivitiesForUser(supabase, user.id);
+      const dismissed = await listDismissedCanonicalStravaIds(supabase, user.id);
+      const portfolioStravaIds = new Set(
+        (races ?? []).map((r) => r.strava_activity_id).filter((x): x is string => Boolean(x?.trim()))
+      );
+      canonicalStravaSuggestions = await buildCanonicalStravaSuggestionsForUser({
+        rows: synced,
+        dismissedStravaIds: dismissed,
+        portfolioStravaIds
+      });
+    } catch (matchErr) {
+      runfolioLog.warn(
+        "Dashboard.canonicalStravaSuggestions",
+        matchErr instanceof Error ? matchErr.message : "failed"
+      );
+      canonicalStravaSuggestions = [];
+    }
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("Dashboard.supabase", e);
+    throw e;
   }
 
   const completedSorted = [...confirmedCompletedPortfolioRaces(races ?? [])].sort((a, b) =>

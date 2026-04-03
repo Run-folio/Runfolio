@@ -2,6 +2,7 @@ import { isDynamicServerError } from "next/dist/client/components/hooks-server-c
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
+import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { CreateRaceForm } from "@/components/create-race-form";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
@@ -19,6 +20,10 @@ type PageProps = {
 };
 
 export default async function NewRacePage({ searchParams }: PageProps) {
+  if (!isSupabaseConfigured()) {
+    return <DataBackendSetupGate title="Add race" featureLabel="Creating and saving races" />;
+  }
+
   const q = await searchParams;
   const initialDiscoverRaceId =
     q.discover && isDiscoverCatalogRaceId(q.discover) ? q.discover : undefined;

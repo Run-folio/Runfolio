@@ -3,10 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { syncStravaActivitiesAction } from "@/lib/actions";
+import { usePersistence } from "@/components/persistence-context";
 import { Button } from "@/components/ui/button";
 
 export function SyncStravaActivitiesButton() {
   const router = useRouter();
+  const { persistenceAvailable, reason } = usePersistence();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -15,7 +17,8 @@ export function SyncStravaActivitiesButton() {
       <Button
         type="button"
         variant="secondary"
-        disabled={pending}
+        disabled={pending || !persistenceAvailable}
+        title={!persistenceAvailable ? reason ?? "Saving unavailable" : undefined}
         className="text-[11px] font-semibold uppercase tracking-wider"
         onClick={() => {
           setMsg(null);
@@ -39,6 +42,11 @@ export function SyncStravaActivitiesButton() {
       {msg ? (
         <p className="text-xs text-muted" role="status">
           {msg}
+        </p>
+      ) : null}
+      {!persistenceAvailable && reason ? (
+        <p className="max-w-md text-[11px] text-amber-200/90" role="status">
+          {reason}
         </p>
       ) : null}
     </div>

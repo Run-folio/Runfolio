@@ -425,7 +425,7 @@ export function ActivityPortfolioClient({
                     name="description"
                     rows={6}
                     defaultValue={race?.description ?? ""}
-                    className="mt-2 w-full border border-white/15 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-muted"
+                    className="mt-2 w-full rounded-md border border-white/15 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-muted"
                     placeholder="The narrative you want on your portfolio…"
                   />
                 </div>
@@ -444,7 +444,7 @@ export function ActivityPortfolioClient({
                         name={name}
                         rows={4}
                         defaultValue={def ?? ""}
-                        className="mt-2 w-full border border-white/15 bg-black/50 px-3 py-2 text-sm text-white"
+                        className="mt-2 w-full rounded-md border border-white/15 bg-black/50 px-3 py-2 text-sm text-white"
                       />
                     </div>
                   ))}
@@ -458,7 +458,7 @@ export function ActivityPortfolioClient({
                     name="finish_notes"
                     rows={3}
                     defaultValue={race?.finish_notes ?? ""}
-                    className="mt-2 w-full border border-white/15 bg-black/50 px-3 py-2 text-sm text-white"
+                    className="mt-2 w-full rounded-md border border-white/15 bg-black/50 px-3 py-2 text-sm text-white"
                     placeholder="Age group, splits, what the watch missed…"
                   />
                 </div>
@@ -471,12 +471,12 @@ export function ActivityPortfolioClient({
                     name="manual_photo_urls"
                     rows={4}
                     defaultValue={(race?.manual_photo_urls ?? []).join("\n")}
-                    className="mt-2 w-full border border-white/15 bg-black/50 px-3 py-2 font-mono text-xs text-white"
+                    className="mt-2 w-full rounded-md border border-white/15 bg-black/50 px-3 py-2 font-mono text-xs text-white"
                     placeholder="https://…"
                   />
                 </div>
 
-                <fieldset className="space-y-2 border border-white/10 p-4">
+                <fieldset className="space-y-2 rounded-lg border border-white/10 p-4">
                   <legend className="px-1 text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Tags</legend>
                   <label className="flex items-center gap-2 text-sm text-white/85">
                     <input type="checkbox" name="tag_pb" defaultChecked={race?.tag_pb} className="accent-accent" />

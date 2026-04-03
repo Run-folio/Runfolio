@@ -418,11 +418,11 @@ export function CreateRaceForm({
               placeholder="Write about the race, the highs and lows, the emotions..."
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="mt-3 min-h-44 w-full border border-border bg-[#070b12] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+              className="mt-3 min-h-44 w-full rounded-md border border-border bg-[#070b12] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-accent"
             />
             <div className="mt-3 flex flex-wrap gap-2">
               {["The build up", "The hardest moment", "What surprised you", "How it felt at the finish"].map((prompt) => (
-                <span key={prompt} className="border border-border bg-black/30 px-2 py-1 text-[11px] text-slate-300">
+                <span key={prompt} className="rounded-md border border-border bg-black/30 px-2 py-1 text-[11px] text-slate-300">
                   {prompt}
                 </span>
               ))}

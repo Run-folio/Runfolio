@@ -7,6 +7,7 @@ import {
   buildStravaDiscoverConfirmFormData
 } from "@/lib/build-strava-discover-confirm-form";
 import { confirmKnownRaceMatchAction, completeBucketGoalWithStravaAction } from "@/lib/actions";
+import { usePersistence } from "@/components/persistence-context";
 import { Button } from "@/components/ui/button";
 import type { DiscoverStravaActivityCandidate } from "@/types";
 import { cn } from "@/lib/utils";
@@ -43,6 +44,7 @@ export function StravaActivityMatchModal({
   stravaOk,
   stravaOAuthConfigured
 }: Props) {
+  const { persistenceAvailable, reason: persistenceReason } = usePersistence();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<DiscoverStravaActivityCandidate | null>(null);
@@ -50,6 +52,10 @@ export function StravaActivityMatchModal({
   if (!open) return null;
 
   const runConfirm = (c: DiscoverStravaActivityCandidate) => {
+    if (!persistenceAvailable) {
+      setError(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
     setError(null);
     startTransition(async () => {
       let res: { error?: string } | void;
@@ -103,6 +109,12 @@ export function StravaActivityMatchModal({
         {error ? (
           <p className="mt-4 text-sm text-red-300" role="alert">
             {error}
+          </p>
+        ) : null}
+
+        {!persistenceAvailable ? (
+          <p className="mt-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90" role="status">
+            {persistenceReason ?? "Database not connected — you can’t save this link yet."}
           </p>
         ) : null}
 
@@ -201,7 +213,7 @@ export function StravaActivityMatchModal({
                     <div className="flex flex-wrap gap-2">
                       <Button
                         type="button"
-                        disabled={pending}
+                        disabled={pending || !persistenceAvailable}
                         onClick={() => runConfirm(c)}
                         className="border-green-500/45 bg-green-500/15 text-green-200 hover:bg-green-500/25"
                       >
@@ -215,8 +227,16 @@ export function StravaActivityMatchModal({
                 ) : (
                   <button
                     type="button"
-                    onClick={() => setConfirming(c)}
-                    className="mt-4 w-full rounded-[10px] border border-white/18 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white transition hover:border-accent/40 hover:text-accent"
+                    disabled={!persistenceAvailable}
+                    title={!persistenceAvailable ? persistenceReason ?? undefined : undefined}
+                    onClick={() => {
+                      if (!persistenceAvailable) {
+                        setError(persistenceReason ?? "Saving isn’t available.");
+                        return;
+                      }
+                      setConfirming(c);
+                    }}
+                    className="mt-4 w-full rounded-[10px] border border-white/18 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white transition hover:border-accent/40 hover:text-accent disabled:opacity-50"
                   >
                     Choose this activity
                   </button>

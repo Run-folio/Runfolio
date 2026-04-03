@@ -28,7 +28,7 @@ export function FindRaceExternalCard({ race }: Props) {
   return (
     <li
       className={cn(
-        "flex flex-col border border-white/10 bg-[#0d0d0f] p-4 transition hover:border-accent/25",
+        "flex flex-col rounded-lg border border-white/10 bg-[#0d0d0f] p-4 transition hover:border-accent/25",
         "ring-1 ring-transparent focus-within:ring-accent/30"
       )}
     >

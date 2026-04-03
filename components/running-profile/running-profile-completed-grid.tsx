@@ -97,7 +97,7 @@ export function RunningProfileCompletedGrid({ races, isOwner }: Props) {
 
           return (
             <li key={race.id}>
-              <article className="group flex flex-col overflow-hidden border border-white/10 bg-[#0a0b0f] transition hover:border-white/20">
+              <article className="group flex flex-col overflow-hidden rounded-lg border border-white/10 bg-[#0a0b0f] transition hover:border-white/20">
                 {ext ? (
                   <a href={href} target="_blank" rel="noreferrer" className="block">
                     {media}

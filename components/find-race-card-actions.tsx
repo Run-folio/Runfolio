@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { addCatalogRaceToBucketListAction } from "@/lib/actions";
+import { usePersistence } from "@/components/persistence-context";
 import type { CatalogDiscoverViewerState } from "@/lib/catalog-discover-user-state";
 import { cn } from "@/lib/utils";
 
@@ -14,6 +15,7 @@ type Props = {
 
 export function FindRaceCardActions({ discoverId, state }: Props) {
   const router = useRouter();
+  const { persistenceAvailable, reason } = usePersistence();
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -38,6 +40,10 @@ export function FindRaceCardActions({ discoverId, state }: Props) {
   }
 
   const addToBucket = () => {
+    if (!persistenceAvailable) {
+      setMsg(reason ?? "Saving isn’t available.");
+      return;
+    }
     setMsg(null);
     const fd = new FormData();
     fd.set("discover_race_id", discoverId);
@@ -60,7 +66,8 @@ export function FindRaceCardActions({ discoverId, state }: Props) {
         {state.status === "none" ? (
           <button
             type="button"
-            disabled={pending}
+            disabled={pending || !persistenceAvailable}
+            title={!persistenceAvailable ? reason ?? undefined : undefined}
             onClick={addToBucket}
             className={cn(
               "rounded-[10px] border border-accent/50 bg-accent/15 px-3 py-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-accent transition hover:bg-accent/25 disabled:opacity-50"

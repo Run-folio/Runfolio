@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addCanonicalRaceToBucketListAction } from "@/lib/actions";
+import { usePersistence } from "@/components/persistence-context";
 import type { SearchableRaceRow } from "@/lib/races/canonical/types";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -59,6 +60,7 @@ export function CanonicalRaceSearchPanel({
   className
 }: Props) {
   const router = useRouter();
+  const { persistenceAvailable, reason: persistenceReason } = usePersistence();
   const [localAddedIds, setLocalAddedIds] = useState<string[]>([]);
   const addedSet = useMemo(
     () => new Set([...addedCanonicalRaceIds, ...localAddedIds]),
@@ -156,6 +158,10 @@ export function CanonicalRaceSearchPanel({
 
   const runAdd = async (canonicalRaceId: string) => {
     if (viewer !== "authed") return;
+    if (!persistenceAvailable) {
+      setFeedback(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
     if (addedSet.has(canonicalRaceId) || addingRaceId === canonicalRaceId) return;
     setFeedback(null);
     if (goalJumpTimer.current) window.clearTimeout(goalJumpTimer.current);
@@ -272,6 +278,12 @@ export function CanonicalRaceSearchPanel({
         </p>
       ) : null}
 
+      {viewer === "authed" && !persistenceAvailable ? (
+        <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90" role="status">
+          {persistenceReason ?? "Database not connected — bucket saves are turned off until Supabase is configured."}
+        </p>
+      ) : null}
+
       {feedback ? (
         <p className="text-sm text-amber-200/90" role="status">
           {feedback}
@@ -332,7 +344,7 @@ export function CanonicalRaceSearchPanel({
                         {tags.slice(0, 4).map((t) => (
                           <span
                             key={t}
-                            className="rounded-full border border-white/12 bg-black/30 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted"
+                            className="rounded-md border border-white/12 bg-black/30 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted"
                           >
                             {t}
                           </span>
@@ -349,7 +361,8 @@ export function CanonicalRaceSearchPanel({
                       {viewer === "authed" ? (
                         <Button
                           type="button"
-                          disabled={onList || addingRaceId === race.id}
+                          disabled={onList || addingRaceId === race.id || !persistenceAvailable}
+                          title={!persistenceAvailable ? persistenceReason ?? undefined : undefined}
                           onClick={() => void runAdd(race.id)}
                           className={cn(
                             "px-3 py-2 text-[10px] font-semibold uppercase tracking-wider",

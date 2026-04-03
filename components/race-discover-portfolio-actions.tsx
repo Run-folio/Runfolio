@@ -6,6 +6,7 @@ import { useCallback, useState, useTransition } from "react";
 import { addCatalogRaceToBucketListAction, deleteFutureBucketGoalAction } from "@/lib/actions";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { StravaActivityMatchModal } from "@/components/strava-activity-match-modal";
+import { usePersistence } from "@/components/persistence-context";
 import type { DiscoverStravaActivityCandidate, Race } from "@/types";
 
 type Props = {
@@ -32,6 +33,7 @@ export function RaceDiscoverPortfolioActions({
   stravaOAuthConfigured
 }: Props) {
   const router = useRouter();
+  const { persistenceAvailable, reason: persistenceReason } = usePersistence();
   const [pending, startTransition] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -39,6 +41,10 @@ export function RaceDiscoverPortfolioActions({
   const returnTo = `/races/${discoverRaceId}`;
 
   const runBucketAdd = useCallback(() => {
+    if (!persistenceAvailable) {
+      setMsg(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
     setMsg(null);
     const fd = new FormData();
     fd.set("discover_race_id", discoverRaceId);
@@ -53,10 +59,14 @@ export function RaceDiscoverPortfolioActions({
       }
       router.refresh();
     });
-  }, [discoverRaceId, router]);
+  }, [discoverRaceId, persistenceAvailable, persistenceReason, router]);
 
   const runRemoveBucket = useCallback(() => {
     if (!bucketFutureRow) return;
+    if (!persistenceAvailable) {
+      setMsg(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
     setMsg(null);
     const fd = new FormData();
     fd.set("race_id", bucketFutureRow.id);
@@ -69,7 +79,7 @@ export function RaceDiscoverPortfolioActions({
       setLinkOpen(false);
       router.refresh();
     });
-  }, [bucketFutureRow, router]);
+  }, [bucketFutureRow, persistenceAvailable, persistenceReason, router]);
 
   if (!isAuthed) {
     return (
@@ -138,10 +148,17 @@ export function RaceDiscoverPortfolioActions({
     <div className="space-y-4">
       {msg ? <p className="text-xs text-amber-200/90">{msg}</p> : null}
 
+      {!persistenceAvailable ? (
+        <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
+          {persistenceReason ?? "Database not connected — portfolio actions are disabled."}
+        </p>
+      ) : null}
+
       {!bucketFutureRow ? (
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || !persistenceAvailable}
+          title={!persistenceAvailable ? persistenceReason ?? undefined : undefined}
           onClick={runBucketAdd}
           className="flex w-full items-center justify-center rounded-[12px] bg-accent px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d] disabled:opacity-50"
         >
@@ -157,11 +174,17 @@ export function RaceDiscoverPortfolioActions({
       <div className="flex flex-col gap-2">
         <button
           type="button"
+          disabled={!persistenceAvailable}
+          title={!persistenceAvailable ? persistenceReason ?? undefined : undefined}
           onClick={() => {
+            if (!persistenceAvailable) {
+              setMsg(persistenceReason ?? "Saving isn’t available.");
+              return;
+            }
             setLinkOpen(true);
             setMsg(null);
           }}
-          className="flex w-full items-center justify-center rounded-[12px] border border-white/18 px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:border-accent/40 hover:text-accent"
+          className="flex w-full items-center justify-center rounded-[12px] border border-white/18 px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:border-accent/40 hover:text-accent disabled:opacity-50"
         >
           Link to Strava activity
         </button>
@@ -176,7 +199,7 @@ export function RaceDiscoverPortfolioActions({
       {bucketFutureRow ? (
         <button
           type="button"
-          disabled={pending}
+          disabled={pending || !persistenceAvailable}
           onClick={runRemoveBucket}
           className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted underline-offset-4 hover:text-white hover:underline disabled:opacity-50"
         >

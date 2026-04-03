@@ -8,7 +8,9 @@ import { raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { getDiscoverRaceDetail, isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 import { getDiscoverRaceById } from "@/lib/known-race-match";
 import { getRaceByStravaActivityId } from "@/lib/get-race-by-strava-activity";
-import { getServerAuthUser } from "@/lib/auth-server";
+import { BACKEND_SAVE_FAILED_SHORT } from "@/lib/backend-config-messages";
+import { getServerAuthUser, getServerAuthUserForWrite } from "@/lib/auth-server";
+import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { runfolioLog } from "@/lib/runfolio-log";
@@ -59,7 +61,10 @@ function profilePublishPayload() {
 }
 
 export async function signUpAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/dashboard");
+  const nextPath = parseSafeRedirectPath(String(formData.get("next") ?? "")) ?? "/dashboard";
+  if (!isSupabaseConfigured()) {
+    redirect(`/auth/signup?next=${encodeURIComponent(nextPath)}&supabase=missing`);
+  }
   try {
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
@@ -80,7 +85,7 @@ export async function signUpAction(formData: FormData) {
         name
       });
     }
-    redirect("/dashboard");
+    redirect(nextPath);
   } catch (e) {
     if (isDynamicServerError(e)) throw e;
     if (isRedirectError(e)) throw e;
@@ -90,14 +95,18 @@ export async function signUpAction(formData: FormData) {
 }
 
 export async function signInAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/dashboard");
+  const nextPath = parseSafeRedirectPath(String(formData.get("next") ?? "")) ?? "/dashboard";
+  if (!isSupabaseConfigured()) {
+    redirect(`/auth/login?next=${encodeURIComponent(nextPath)}&supabase=missing`);
+  }
   try {
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
     const supabase = await createClient();
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
-    redirect("/dashboard");
+    runfolioLog.info("actions.signIn", "success", { nextPath });
+    redirect(nextPath);
   } catch (e) {
     if (isDynamicServerError(e)) throw e;
     if (isRedirectError(e)) throw e;
@@ -208,11 +217,15 @@ async function revalidateRaceMatchSurfaces(
  * Bucket completion only updates an existing bucket row; never silently adds bucket completion for races not on the list.
  */
 export async function confirmKnownRaceMatchAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/dashboard");
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) redirect("/auth/login");
+    const { user, authError } = await getServerAuthUserForWrite();
+    if (authError || !user) return { error: "Sign in required." };
     const supabase = await createClient();
+    runfolioLog.info("actions.confirmKnownRaceMatch", "start", {
+      userId: user.id,
+      discoverRaceId: String(formData.get("discover_race_id") ?? "").slice(0, 8)
+    });
 
     const discoverRaceId = String(formData.get("discover_race_id") ?? "").trim();
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
@@ -342,10 +355,10 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
  * User can rename; `discover_race_id` stays null until they link a catalog race later.
  */
 export async function confirmCustomMajorEffortAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/dashboard");
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) redirect("/auth/login");
+    const { user, authError } = await getServerAuthUserForWrite();
+    if (authError || !user) return { error: "Sign in required." };
     const supabase = await createClient();
 
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
@@ -435,7 +448,7 @@ function numFromForm(formData: FormData, key: string): number | null {
  */
 export async function upsertActivityPortfolioAction(formData: FormData) {
   if (!isSupabaseConfigured()) {
-    return { error: "Connect Supabase to save your portfolio." };
+    return { error: BACKEND_SAVE_FAILED_SHORT };
   }
   try {
     const { user, authError } = await getServerAuthUser();
@@ -522,7 +535,7 @@ async function requireOwnedRace(
 
 /** Deletes a portfolio row entirely (wrong match, duplicate, or mistaken goal). */
 export async function deleteUserRacePortfolioAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to manage races." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -553,7 +566,7 @@ export async function deleteUserRacePortfolioAction(formData: FormData) {
  * Does not delete the row.
  */
 export async function markRaceNotCompletedPortfolioAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to manage races." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -589,7 +602,7 @@ export async function markRaceNotCompletedPortfolioAction(formData: FormData) {
 
 /** Completed row: stop treating as bucket-list item (finish still counts in portfolio). */
 export async function clearBucketListAffiliationAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to manage races." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -622,7 +635,7 @@ export async function clearBucketListAffiliationAction(formData: FormData) {
 
 /** Removes an incomplete future bucket goal row (catalog-linked). */
 export async function deleteFutureBucketGoalAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to manage races." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -651,9 +664,9 @@ export async function deleteFutureBucketGoalAction(formData: FormData) {
 
 /** Creates an incomplete catalog-linked row as a future bucket goal (no silent completion). */
 export async function addCatalogRaceToBucketListAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
+    const { user, authError } = await getServerAuthUserForWrite();
     if (authError || !user) return { error: "Sign in required." };
     const discoverId = String(formData.get("discover_race_id") ?? "").trim();
     if (!discoverId || !isDiscoverCatalogRaceId(discoverId)) return { error: "Invalid race." };
@@ -706,11 +719,12 @@ export async function addCatalogRaceToBucketListAction(formData: FormData) {
  * Catalog/library goals must use `confirmKnownRaceMatchAction` so the race id stays canonical.
  */
 export async function completeBucketGoalWithStravaAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/dashboard");
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) redirect("/auth/login");
+    const { user, authError } = await getServerAuthUserForWrite();
+    if (authError || !user) return { error: "Sign in required." };
     const supabase = await createClient();
+    runfolioLog.info("actions.completeBucketGoalWithStrava", "start", { userId: user.id });
 
     const raceId = String(formData.get("user_race_id") ?? "").trim();
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
@@ -805,7 +819,7 @@ export async function completeBucketGoalWithStravaAction(formData: FormData) {
 
 /** Hide an imported Strava race candidate from the profile pending queue (durable). */
 export async function dismissStravaProfileCandidateAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -836,9 +850,9 @@ export async function dismissStravaProfileCandidateAction(formData: FormData) {
 
 /** Add an **active** canonical race to Future Goals (stable internal race id). */
 export async function addCanonicalRaceToBucketListAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
+    const { user, authError } = await getServerAuthUserForWrite();
     if (authError || !user) return { error: "Sign in required." };
     const canonicalRaceId = String(formData.get("canonical_race_id") ?? "").trim();
     if (!canonicalRaceId) return { error: "Missing race." };
@@ -891,7 +905,7 @@ export async function addCanonicalRaceToBucketListAction(formData: FormData) {
 }
 
 export async function removeCanonicalBucketGoalAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -916,7 +930,7 @@ export async function removeCanonicalBucketGoalAction(formData: FormData) {
 
 /** First completion step: goal done in the real world; Strava link optional later. */
 export async function markCanonicalBucketGoalCompletedAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -958,7 +972,7 @@ export async function markCanonicalBucketGoalCompletedAction(formData: FormData)
 }
 
 export async function undoCanonicalBucketCompletionAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -991,7 +1005,7 @@ export async function undoCanonicalBucketCompletionAction(formData: FormData) {
 
 /** Pull Strava activities into `strava_synced_activities` (incremental by payload hash). */
 export async function syncStravaActivitiesAction() {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -1020,7 +1034,7 @@ export async function syncStravaActivitiesAction() {
 
 /** User says a synced activity is training / not an event — persistent hub exclusion. */
 export async function markStravaActivityNotRaceAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -1047,7 +1061,7 @@ export async function markStravaActivityNotRaceAction(formData: FormData) {
 
 /** Defer an activity out of the active review queue (still synced, not linked). */
 export async function snoozeStravaActivityMatchHubAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -1074,7 +1088,7 @@ export async function snoozeStravaActivityMatchHubAction(formData: FormData) {
 
 /** Return deferred items to the active hub queue. */
 export async function unsnoozeStravaActivityMatchHubAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -1100,9 +1114,9 @@ export async function unsnoozeStravaActivityMatchHubAction(formData: FormData) {
 }
 
 export async function dismissCanonicalStravaMatchAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
-    const { user, authError } = await getServerAuthUser();
+    const { user, authError } = await getServerAuthUserForWrite();
     if (authError || !user) return { error: "Sign in required." };
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
     if (!stravaActivityId) return { error: "Missing activity." };
@@ -1123,11 +1137,30 @@ export async function dismissCanonicalStravaMatchAction(formData: FormData) {
  * Confirm Strava activity ↔ **canonical** race: portfolio row + optional bucket goal → completed_linked.
  */
 export async function confirmCanonicalStravaMatchAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/dashboard");
+  const responseMode = String(formData.get("response_mode") ?? "").trim();
+  const isHub = responseMode === "hub";
+
+  if (!isSupabaseConfigured()) {
+    runfolioLog.warn("actions.confirmCanonicalStravaMatch", "supabase not configured", { isHub });
+    return { error: BACKEND_SAVE_FAILED_SHORT };
+  }
+
   try {
-    const { user, authError } = await getServerAuthUser();
-    if (authError || !user) redirect("/auth/login");
+    const { user, authError } = await getServerAuthUserForWrite();
+    if (authError || !user) {
+      if (isHub) {
+        return { error: authError ? `Sign in required (${authError})` : "Sign in required." };
+      }
+      const loginNext = parseSafeRedirectPath(String(formData.get("return_to") ?? "")) ?? "/dashboard";
+      redirect(`/auth/login?next=${encodeURIComponent(loginNext)}`);
+    }
+
     const supabase = await createClient();
+    runfolioLog.info("actions.confirmCanonicalStravaMatch", "start", {
+      userId: user.id,
+      isHub,
+      stravaActivityId: String(formData.get("strava_activity_id") ?? "").slice(0, 12)
+    });
 
     const canonicalRaceId = String(formData.get("canonical_race_id") ?? "").trim();
     const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
@@ -1256,7 +1289,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
       resolvedGoalId = (g as { id: string } | null)?.id ?? null;
     }
     if (resolvedGoalId) {
-      await supabase
+      const { error: goalUpErr } = await supabase
         .from("user_bucket_list_goals")
         .update({
           status: "completed_linked",
@@ -1266,9 +1299,17 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
         })
         .eq("id", resolvedGoalId)
         .eq("user_id", user.id);
+      if (goalUpErr) {
+        runfolioLog.warn("actions.confirmCanonicalStravaMatch", "bucket goal update failed", {
+          message: goalUpErr.message,
+          code: goalUpErr.code,
+          resolvedGoalId
+        });
+        return { error: goalUpErr.message };
+      }
     }
 
-    await supabase
+    const { error: syncUpErr } = await supabase
       .from("strava_synced_activities")
       .update({
         linked_portfolio_race_id: finalRaceId,
@@ -1277,13 +1318,27 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
       })
       .eq("user_id", user.id)
       .eq("strava_activity_id", stravaActivityId);
+    if (syncUpErr) {
+      runfolioLog.warn("actions.confirmCanonicalStravaMatch", "strava_synced update failed", {
+        message: syncUpErr.message,
+        code: syncUpErr.code,
+        stravaActivityId
+      });
+      return { error: syncUpErr.message };
+    }
 
-    await supabase.from("strava_canonical_match_dismissals").delete().eq("user_id", user.id).eq("strava_activity_id", stravaActivityId);
+    const { error: dismissErr } = await supabase
+      .from("strava_canonical_match_dismissals")
+      .delete()
+      .eq("user_id", user.id)
+      .eq("strava_activity_id", stravaActivityId);
+    if (dismissErr) {
+      runfolioLog.warn("actions.confirmCanonicalStravaMatch", "dismissals delete failed", { message: dismissErr.message });
+    }
 
     const canonRacePath = (cRow as { slug?: string | null }).slug?.trim()
       ? `/races/${(cRow as { slug: string }).slug.trim()}`
       : `/races/${canonicalRaceId}`;
-    const responseMode = String(formData.get("response_mode") ?? "").trim();
     await revalidatePortfolioSurfaces(supabase, user.id, {
       stravaActivityId,
       alsoPaths: [returnTo, "/bucket-list", canonRacePath, "/matches"]
@@ -1320,7 +1375,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
 }
 
 export async function updateProfileIdentityAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -1349,7 +1404,7 @@ export async function updateProfileIdentityAction(formData: FormData) {
 }
 
 export async function publishRaceToProfileAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -1384,7 +1439,7 @@ export async function publishRaceToProfileAction(formData: FormData) {
 }
 
 export async function hideRaceFromProfileAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -1416,7 +1471,7 @@ export async function hideRaceFromProfileAction(formData: FormData) {
 }
 
 export async function setRaceProfileFeaturedAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };
@@ -1449,7 +1504,7 @@ export async function setRaceProfileFeaturedAction(formData: FormData) {
 }
 
 export async function setSyncedActivityProfileIncludeAction(formData: FormData) {
-  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  if (!isSupabaseConfigured()) return { error: BACKEND_SAVE_FAILED_SHORT };
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError || !user) return { error: "Sign in required." };

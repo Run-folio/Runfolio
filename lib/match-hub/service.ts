@@ -47,6 +47,8 @@ export type MatchHubBundle = {
   unmatched: MatchHubUnmatchedItem[];
   snoozed: MatchHubSnoozedItem[];
   recentlyConfirmed: RecentlyConfirmedFinish[];
+  /** Total Strava rows stored for this user (including already linked). */
+  totalSyncedCount: number;
 };
 
 export async function loadMatchHubBundle(
@@ -135,7 +137,14 @@ export async function loadMatchHubBundle(
     }));
   }
 
-  return { suggestedHigh, needsReview, unmatched, snoozed, recentlyConfirmed };
+  return {
+    suggestedHigh,
+    needsReview,
+    unmatched,
+    snoozed,
+    recentlyConfirmed,
+    totalSyncedCount: rows.length
+  };
 }
 
 export { CANONICAL_MATCH_MIN_SCORE };

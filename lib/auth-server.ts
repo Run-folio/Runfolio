@@ -47,3 +47,33 @@ export const getServerAuthUser = cache(async (): Promise<ServerAuthUser> => {
     };
   }
 });
+
+/**
+ * For server actions that write to Supabase: validates the JWT with Auth (getUser).
+ * Prefer this over getSession when RLS depends on a fresh auth.uid().
+ */
+export async function getServerAuthUserForWrite(): Promise<ServerAuthUser> {
+  if (!isSupabaseConfigured()) {
+    return { user: null, authError: null };
+  }
+  try {
+    const supabase = await createClient();
+    const raced = await withTimeout(supabase.auth.getUser(), authCallTimeoutMs());
+    if (raced.timedOut) {
+      runfolioLog.warn("getServerAuthUserForWrite", "getUser() timed out", { timeoutMs: authCallTimeoutMs() });
+      return { user: null, authError: "Auth check timed out. Try again." };
+    }
+    const {
+      data: { user },
+      error
+    } = raced.value;
+    if (error) {
+      return { user: null, authError: error.message };
+    }
+    return { user: user ?? null, authError: null };
+  } catch (err) {
+    if (isDynamicServerError(err)) throw err;
+    runfolioLog.error("getServerAuthUserForWrite", err);
+    return { user: null, authError: err instanceof Error ? err.message : "unknown" };
+  }
+}

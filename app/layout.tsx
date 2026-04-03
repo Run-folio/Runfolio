@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Inter, Playfair_Display } from "next/font/google";
+import { PersistenceProvider } from "@/components/persistence-context";
+import { getPersistenceSnapshot } from "@/lib/persistence-snapshot";
 import "./globals.css";
 
 const inter = Inter({
@@ -22,9 +24,12 @@ export const metadata: Metadata = {
 export default function RootLayout({
   children
 }: Readonly<{ children: React.ReactNode }>) {
+  const persistence = getPersistenceSnapshot();
   return (
     <html lang="en" className={`${inter.variable} ${playfair.variable}`}>
-      <body className={`${inter.className} font-sans`}>{children}</body>
+      <body className={`${inter.className} font-sans`}>
+        <PersistenceProvider value={persistence}>{children}</PersistenceProvider>
+      </body>
     </html>
   );
 }

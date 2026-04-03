@@ -16,7 +16,7 @@ export function RunningProfileRecentSyncStrip({ rows }: Props) {
         {rows.map((row) => (
           <li
             key={row.strava_activity_id}
-            className="min-w-[200px] shrink-0 border border-white/10 bg-[#0c0c10] px-3 py-2"
+            className="min-w-[200px] shrink-0 rounded-md border border-white/10 bg-[#0c0c10] px-3 py-2"
           >
             <p className="line-clamp-2 text-[11px] font-medium text-white">{row.name}</p>
             <p className="type-meta text-[10px] text-white/45">{String(row.start_date).slice(0, 10)}</p>

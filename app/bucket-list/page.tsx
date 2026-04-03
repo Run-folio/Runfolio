@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
 import { BucketListWorkflow } from "@/components/bucket-list-workflow";
+import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { usedStravaActivityIdsFromRaces } from "@/lib/catalog-discover-user-state";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
@@ -18,31 +19,33 @@ import type { Race } from "@/types";
 export const dynamic = "force-dynamic";
 
 export default async function BucketListPage() {
+  if (!isSupabaseConfigured()) {
+    return <DataBackendSetupGate title="Bucket List" featureLabel="Bucket list goals and Strava links" />;
+  }
+
   let races: Race[] = [];
   let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];
   let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
-  if (isSupabaseConfigured()) {
-    try {
-      const { user, authError } = await getServerAuthUser();
-      if (authError) throw new Error(authError);
-      if (!user) redirect("/auth/login");
-      const supabase = await createClient();
-      const result = await supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false });
-      if (result.error) {
-        runfolioLog.warn("BucketList.races", result.error.message ?? "query error");
-        races = [];
-      } else {
-        races = result.data ?? [];
-      }
-      const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
-      canonicalFuture = canon.future;
-      canonicalCompleted = canon.completed;
-    } catch (e) {
-      if (isDynamicServerError(e)) throw e;
-      if (isRedirectError(e)) throw e;
-      runfolioLog.error("BucketList.supabase", e);
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError) throw new Error(authError);
+    if (!user) redirect("/auth/login");
+    const supabase = await createClient();
+    const result = await supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false });
+    if (result.error) {
+      runfolioLog.warn("BucketList.races", result.error.message ?? "query error");
       races = [];
+    } else {
+      races = result.data ?? [];
     }
+    const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
+    canonicalFuture = canon.future;
+    canonicalCompleted = canon.completed;
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("BucketList.supabase", e);
+    throw e;
   }
 
   const completed = (races ?? []).filter(raceCountsAsBucketListCompleted);

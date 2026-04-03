@@ -79,7 +79,7 @@ export async function fetchCanonicalBucketGoalsForUser(
     .order("added_at", { ascending: false });
 
   if (error) {
-    runfolioLog.warn("bucketListCanonical.fetchGoals", error.message, { userId });
+    runfolioLog.error("bucketListCanonical.fetchGoals", error, { userId, code: error.code });
     return { future: [], completed: [] };
   }
 

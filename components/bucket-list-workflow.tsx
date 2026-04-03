@@ -400,11 +400,11 @@ export function BucketListWorkflow({
                 )}
               >
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green">
+                  <span className="rounded-md border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-green">
                     Completed
                   </span>
                   {unlinked ? (
-                    <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold">
+                    <span className="rounded-md border border-gold/35 bg-gold/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider text-gold">
                       Activity not linked
                     </span>
                   ) : null}

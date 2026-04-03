@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { addCanonicalRaceToBucketListAction, markCanonicalBucketGoalCompletedAction } from "@/lib/actions";
+import { usePersistence } from "@/components/persistence-context";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -26,6 +27,7 @@ const linkBtnClass = cn(
 
 export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, bucketGoal, primaryFinish }: Props) {
   const router = useRouter();
+  const { persistenceAvailable, reason: persistenceReason } = usePersistence();
   const [msg, setMsg] = useState<string | null>(null);
   const [pending, start] = useTransition();
 
@@ -39,6 +41,10 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
     bucketGoal?.linked_strava_activity_id?.trim() || primaryFinish?.strava_activity_id?.trim();
 
   const runAdd = () => {
+    if (!persistenceAvailable) {
+      setMsg(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
     setMsg(null);
     start(async () => {
       const fd = new FormData();
@@ -54,6 +60,10 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
 
   const runMarkComplete = () => {
     if (!bucketGoal?.id) return;
+    if (!persistenceAvailable) {
+      setMsg(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
     setMsg(null);
     start(async () => {
       const fd = new FormData();
@@ -126,11 +136,16 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
   if (future) {
     return (
       <div className="flex flex-col gap-4">
-        <span className="w-fit rounded-full border border-amber-400/45 bg-amber-500/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/90">
+        {!persistenceAvailable ? (
+          <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-100/90">
+            {persistenceReason ?? "Saving isn’t available."}
+          </p>
+        ) : null}
+        <span className="w-fit rounded-lg border border-amber-400/45 bg-amber-500/10 px-4 py-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-100/90">
           On your bucket list
         </span>
         <div className="flex flex-wrap gap-3">
-          <Button type="button" onClick={runMarkComplete} disabled={pending} variant="secondary">
+          <Button type="button" onClick={runMarkComplete} disabled={pending || !persistenceAvailable} variant="secondary">
             Mark as complete
           </Button>
           <Link
@@ -157,7 +172,12 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
 
   return (
     <div className="space-y-3">
-      <Button type="button" onClick={runAdd} disabled={pending}>
+      {!persistenceAvailable ? (
+        <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[13px] text-amber-100/90">
+          {persistenceReason ?? "Connect the database to save bucket goals."}
+        </p>
+      ) : null}
+      <Button type="button" onClick={runAdd} disabled={pending || !persistenceAvailable}>
         Add to bucket list
       </Button>
       {msg ? (
