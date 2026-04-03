@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { demoRaces, isSupabaseConfigured } from "@/lib/demo-mode";
+import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
 import { runfolioLog } from "@/lib/runfolio-log";
 import type { Race } from "@/types";
@@ -9,10 +9,7 @@ export async function getRaceByStravaActivityId(
   userId: string
 ): Promise<Race | null> {
   if (!isSupabaseConfigured()) {
-    const found = demoRaces.find(
-      (r) => r.strava_activity_id === stravaActivityId && r.user_id === userId
-    );
-    return found ? ({ ...found } as Race) : null;
+    return null;
   }
   try {
     const supabase = await createClient();

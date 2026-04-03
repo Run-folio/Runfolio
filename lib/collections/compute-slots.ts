@@ -1,4 +1,5 @@
 import { raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
+import { isConfirmedPortfolioCompletion } from "@/lib/portfolio-race";
 import { formatDiscoverDistance } from "@/lib/discover-races";
 import { getDiscoverRaceDetail } from "@/lib/discover-race-details";
 import { getRaceLogoPath } from "@/lib/race-logos";
@@ -20,7 +21,7 @@ export type TrophySlotComputed = {
 
 function pickCompletedForDiscover(races: Race[], discoverId: string): Race | null {
   const candidates = races.filter(
-    (r) => r.discover_race_id === discoverId && r.is_completed === true
+    (r) => r.discover_race_id === discoverId && isConfirmedPortfolioCompletion(r)
   );
   if (candidates.length === 0) return null;
   return [...candidates].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")))[0] ?? null;

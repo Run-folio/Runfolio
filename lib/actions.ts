@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
+import { raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
+import { getDiscoverRaceDetail, isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 import { getDiscoverRaceById } from "@/lib/known-race-match";
 import { getRaceByStravaActivityId } from "@/lib/get-race-by-strava-activity";
 import { getServerAuthUser } from "@/lib/auth-server";
@@ -14,6 +16,7 @@ import { fetchStravaActivity } from "@/lib/strava-api";
 import { getValidStravaAccessToken } from "@/lib/strava-access-server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Race } from "@/types";
+import { revalidatePortfolioSurfaces } from "@/lib/revalidate-portfolio-paths";
 
 export async function signUpAction(formData: FormData) {
   if (!isSupabaseConfigured()) redirect("/dashboard");
@@ -102,6 +105,7 @@ export async function createRaceAction(formData: FormData) {
     const { error } = await supabase.from("races").insert(payload);
     if (error) return { error: error.message };
 
+    await revalidatePortfolioSurfaces(supabase, user.id, {});
     revalidatePath("/dashboard");
     revalidatePath("/bucket-list");
     redirect("/dashboard");
@@ -149,15 +153,11 @@ async function revalidateRaceMatchSurfaces(
   stravaActivityId: string,
   returnTo: string
 ) {
-  revalidatePath("/dashboard");
-  revalidatePath("/bucket-list");
-  revalidatePath(returnTo);
-  revalidatePath(`/races/${discoverRaceId}`);
-  revalidatePath(`/activities/${stravaActivityId}`);
-  const { data: profileRow } = await supabase.from("users").select("name").eq("id", userId).maybeSingle();
-  if (profileRow?.name) {
-    revalidatePath(`/${profileRow.name}`);
-  }
+  await revalidatePortfolioSurfaces(supabase, userId, {
+    discoverRaceId,
+    stravaActivityId,
+    alsoPaths: [returnTo]
+  });
 }
 
 /**
@@ -354,17 +354,207 @@ export async function upsertActivityPortfolioAction(formData: FormData) {
       if (insErr) return { error: insErr.message };
     }
 
-    revalidatePath(`/activities/${stravaActivityId}`);
-    revalidatePath("/dashboard");
-    revalidatePath("/bucket-list");
-    if (discoverRaceId) revalidatePath(`/races/${discoverRaceId}`);
-    const { data: profileRow } = await supabase.from("users").select("name").eq("id", user.id).maybeSingle();
-    if (profileRow?.name) revalidatePath(`/${profileRow.name}`);
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      discoverRaceId,
+      stravaActivityId
+    });
     return { ok: true as const };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;
     if (isRedirectError(e)) throw e;
     runfolioLog.error("actions.upsertActivityPortfolio", e);
     return { error: e instanceof Error ? e.message : "Could not save portfolio." };
+  }
+}
+
+async function requireOwnedRace(
+  supabase: SupabaseClient,
+  userId: string,
+  raceId: string
+): Promise<Race | null> {
+  const { data, error } = await supabase
+    .from("races")
+    .select("*")
+    .eq("id", raceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data as Race;
+}
+
+/** Deletes a portfolio row entirely (wrong match, duplicate, or mistaken goal). */
+export async function deleteUserRacePortfolioAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to manage races." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const raceId = String(formData.get("race_id") ?? "").trim();
+    if (!raceId) return { error: "Missing race." };
+    const supabase = await createClient();
+    const row = await requireOwnedRace(supabase, user.id, raceId);
+    if (!row) return { error: "Race not found." };
+
+    const { error: delErr } = await supabase.from("races").delete().eq("id", raceId).eq("user_id", user.id);
+    if (delErr) return { error: delErr.message };
+
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      discoverRaceId: row.discover_race_id,
+      stravaActivityId: row.strava_activity_id
+    });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.deleteUserRacePortfolio", e);
+    return { error: e instanceof Error ? e.message : "Could not delete race." };
+  }
+}
+
+/**
+ * Clears completed state while keeping the catalog link (future bucket goal / re-match).
+ * Does not delete the row.
+ */
+export async function markRaceNotCompletedPortfolioAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to manage races." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const raceId = String(formData.get("race_id") ?? "").trim();
+    if (!raceId) return { error: "Missing race." };
+    const supabase = await createClient();
+    const row = await requireOwnedRace(supabase, user.id, raceId);
+    if (!row) return { error: "Race not found." };
+
+    const { error: upErr } = await supabase
+      .from("races")
+      .update({
+        is_completed: false,
+        strava_activity_id: null,
+        is_bucket_list_item: true
+      })
+      .eq("id", raceId)
+      .eq("user_id", user.id);
+    if (upErr) return { error: upErr.message };
+
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      discoverRaceId: row.discover_race_id,
+      stravaActivityId: row.strava_activity_id
+    });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.markRaceNotCompletedPortfolio", e);
+    return { error: e instanceof Error ? e.message : "Could not update race." };
+  }
+}
+
+/** Completed row: stop treating as bucket-list item (finish still counts in portfolio). */
+export async function clearBucketListAffiliationAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to manage races." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const raceId = String(formData.get("race_id") ?? "").trim();
+    if (!raceId) return { error: "Missing race." };
+    const supabase = await createClient();
+    const row = await requireOwnedRace(supabase, user.id, raceId);
+    if (!row) return { error: "Race not found." };
+    if (!row.is_completed) return { error: "Only completed races use this action." };
+
+    const { error: upErr } = await supabase
+      .from("races")
+      .update({ is_bucket_list_item: false })
+      .eq("id", raceId)
+      .eq("user_id", user.id);
+    if (upErr) return { error: upErr.message };
+
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      discoverRaceId: row.discover_race_id,
+      stravaActivityId: row.strava_activity_id
+    });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.clearBucketListAffiliation", e);
+    return { error: e instanceof Error ? e.message : "Could not update race." };
+  }
+}
+
+/** Removes an incomplete future bucket goal row (catalog-linked). */
+export async function deleteFutureBucketGoalAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to manage races." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const raceId = String(formData.get("race_id") ?? "").trim();
+    if (!raceId) return { error: "Missing race." };
+    const supabase = await createClient();
+    const row = await requireOwnedRace(supabase, user.id, raceId);
+    if (!row) return { error: "Race not found." };
+    if (row.is_completed) return { error: "Use other actions for completed races." };
+
+    const { error: delErr } = await supabase.from("races").delete().eq("id", raceId).eq("user_id", user.id);
+    if (delErr) return { error: delErr.message };
+
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      discoverRaceId: row.discover_race_id,
+      stravaActivityId: row.strava_activity_id
+    });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.deleteFutureBucketGoal", e);
+    return { error: e instanceof Error ? e.message : "Could not remove goal." };
+  }
+}
+
+/** Creates an incomplete catalog-linked row as a future bucket goal (no silent completion). */
+export async function addCatalogRaceToBucketListAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const discoverId = String(formData.get("discover_race_id") ?? "").trim();
+    if (!discoverId || !isDiscoverCatalogRaceId(discoverId)) return { error: "Invalid race." };
+    const detail = getDiscoverRaceDetail(discoverId);
+    if (!detail) return { error: "Unknown race." };
+    const supabase = await createClient();
+
+    const { data: openRows } = await supabase
+      .from("races")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("discover_race_id", discoverId)
+      .eq("is_completed", false);
+    const incomplete = (openRows as Race[] | null) ?? [];
+    if (incomplete.some((r) => raceIsBucketListFutureGoal(r))) {
+      return { ok: true as const, already: true as const };
+    }
+
+    const { error: insErr } = await supabase.from("races").insert({
+      user_id: user.id,
+      name: detail.displayTitle,
+      location: detail.location,
+      date: null,
+      distance_km: detail.distanceKm,
+      elevation_m: null,
+      time: null,
+      description: null,
+      is_completed: false,
+      is_bucket_list_item: true,
+      discover_race_id: discoverId
+    });
+    if (insErr) return { error: insErr.message };
+
+    await revalidatePortfolioSurfaces(supabase, user.id, { discoverRaceId: discoverId });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.addCatalogRaceToBucketList", e);
+    return { error: e instanceof Error ? e.message : "Could not add goal." };
   }
 }

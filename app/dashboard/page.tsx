@@ -9,13 +9,15 @@ import { StravaRacePortfolioSection } from "@/components/strava-race-portfolio-s
 import { Card } from "@/components/ui/card";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
-import { demoRaces, demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
+import { demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
+import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { getStravaFeed } from "@/lib/strava-feed";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
+import type { Race } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +28,7 @@ export default async function DashboardPage() {
   const stravaFeed = await getStravaFeed();
 
   let userName = demoUser.name;
-  let races = demoRaces;
+  let races: Race[] = [];
   if (isSupabaseConfigured()) {
     try {
       const { user, authError } = await getServerAuthUser();
@@ -46,23 +48,23 @@ export default async function DashboardPage() {
       if (isRedirectError(e)) throw e;
       runfolioLog.error("Dashboard.supabase", e);
       userName = demoUser.name;
-      races = demoRaces;
+      races = [];
     }
   }
 
-  const completed = (races ?? []).filter((race) => race.is_completed);
-  const completedSorted = [...completed].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
+  const completedSorted = [...confirmedCompletedPortfolioRaces(races ?? [])].sort((a, b) =>
+    String(b.date ?? "").localeCompare(String(a.date ?? ""))
+  );
   const future = (races ?? []).filter((race) => !race.is_completed);
   const featured = completedSorted[0];
-  const totalKm = completed.reduce((acc, race) => acc + (race.distance_km ?? 0), 0);
+  const totalKm = completedSorted.reduce((acc, race) => acc + (race.distance_km ?? 0), 0);
 
   const stravaRaceEnriched = stravaFeed.ok
     ? enrichRaceCandidatesWithCatalogMatches(stravaFeed.raceCandidates, races ?? [])
     : [];
   const matchedMajorDiscoverIds = dedupeHighConfidenceDiscoverIds(stravaRaceEnriched);
-  const recentlyCompletedCatalog = (completed ?? [])
+  const recentlyCompletedCatalog = completedSorted
     .filter((r) => Boolean(r.discover_race_id))
-    .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
     .slice(0, 6);
 
   return (
@@ -94,7 +96,7 @@ export default async function DashboardPage() {
               </p>
               <div className="mt-10 grid max-w-2xl grid-cols-3 gap-6 border-t border-white/10 pt-8">
                 {[
-                  { label: "Races", value: String(completed.length) },
+                  { label: "Races", value: String(completedSorted.length) },
                   { label: "Continents", value: "2" },
                   { label: "Up next", value: String(future.length) }
                 ].map((s) => (
@@ -135,26 +137,42 @@ export default async function DashboardPage() {
             </Link>
           </div>
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {completedSorted.slice(0, 4).map((race, i) => (
-              <Card
-                key={race.id}
-                className={`overflow-hidden p-0 ${i === 0 ? "border-accent ring-1 ring-accent/40" : ""}`}
-              >
-                <div
-                  className="aspect-[4/3] bg-cover bg-center"
-                  style={{ backgroundImage: `url('${getRaceSceneImagePath(race.name)}')` }}
-                />
-                <div className="border-t border-border p-4">
-                  <p className="font-semibold uppercase tracking-[0.04em] text-white">{race.name}</p>
-                  <p className="type-meta mt-1 text-xs">
-                    {race.distance_km} km · {race.elevation_m ?? "—"} m · {race.time ?? "—"}
-                  </p>
-                  <p className="mt-3 text-sm leading-relaxed text-slate-300 line-clamp-2">
-                    {race.description ?? "A day that stayed with you long after the finish."}
-                  </p>
-                </div>
+            {completedSorted.length === 0 ? (
+              <Card className="col-span-full border-dashed border-white/15 bg-panel/40 p-8 text-center sm:col-span-2 lg:col-span-4">
+                <p className="text-sm font-semibold text-white">No confirmed finishes yet</p>
+                <p className="type-meta mx-auto mt-2 max-w-md text-xs">
+                  Link a Strava activity or add a race with a catalog match so highlights reflect real finishes — not
+                  placeholders.
+                </p>
+                <Link
+                  href="/races/new"
+                  className="mt-5 inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-accent hover:underline"
+                >
+                  Add or confirm a race →
+                </Link>
               </Card>
-            ))}
+            ) : (
+              completedSorted.slice(0, 4).map((race, i) => (
+                <Card
+                  key={race.id}
+                  className={`overflow-hidden p-0 ${i === 0 ? "border-accent ring-1 ring-accent/40" : ""}`}
+                >
+                  <div
+                    className="aspect-[4/3] bg-cover bg-center"
+                    style={{ backgroundImage: `url('${getRaceSceneImagePath(race.name)}')` }}
+                  />
+                  <div className="border-t border-border p-4">
+                    <p className="font-semibold uppercase tracking-[0.04em] text-white">{race.name}</p>
+                    <p className="type-meta mt-1 text-xs">
+                      {race.distance_km} km · {race.elevation_m ?? "—"} m · {race.time ?? "—"}
+                    </p>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-300 line-clamp-2">
+                      {race.description ?? "A day that stayed with you long after the finish."}
+                    </p>
+                  </div>
+                </Card>
+              ))
+            )}
           </div>
         </section>
 
@@ -172,7 +190,7 @@ export default async function DashboardPage() {
             <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
               <RaceJourney races={completedSorted} />
               <ProfileBucketList
-                completed={completed.filter(raceCountsAsBucketListCompleted)}
+                completed={completedSorted.filter(raceCountsAsBucketListCompleted)}
                 future={future.filter(raceIsBucketListFutureGoal)}
               />
             </div>
@@ -281,7 +299,7 @@ export default async function DashboardPage() {
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Races logged</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums">{completed.length}</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums">{completedSorted.length}</p>
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Goals ahead</p>

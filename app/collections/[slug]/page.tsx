@@ -8,7 +8,7 @@ import { collectionProgress, computeTrophySlots } from "@/lib/collections/comput
 import { getTrophyCollection } from "@/lib/collections/registry";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
-import { demoRaces, isSupabaseConfigured } from "@/lib/demo-mode";
+import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import type { Race } from "@/types";
 
@@ -40,8 +40,6 @@ export default async function TrophyCollectionPage({ params }: Props) {
         .order("date", { ascending: false });
       userRaces = (data as Race[]) ?? [];
     }
-  } else {
-    userRaces = demoRaces;
   }
 
   const slots = computeTrophySlots(userRaces, collection.discoverRaceIds);

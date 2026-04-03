@@ -8,15 +8,15 @@ import { RaceJourney } from "@/components/race-journey";
 import { StravaProfileBlock } from "@/components/strava-profile-block";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
-import { demoRaces, demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
+import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { extractMediumStravaMatchesForProfile } from "@/lib/profile-portfolio";
-import { persistedCompletedRaces } from "@/lib/portfolio-race";
+import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { resolveProfileHeroPhoto } from "@/lib/profile-hero-asset";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { getStravaFeed } from "@/lib/strava-feed";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
-import type { StravaFeedStats, StravaRaceCandidate } from "@/types";
+import type { Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -29,8 +29,8 @@ export default async function PublicProfilePage({ params }: Props) {
   const { username } = await params;
   const profilePath = `/${username}`;
 
-  let runner: { id: string; name: string } | null = { id: demoUser.id, name: username || demoUser.name };
-  let allRaces = [...demoRaces];
+  let runner: { id: string; name: string } | null = null;
+  let allRaces: Race[] = [];
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
   );
@@ -43,7 +43,10 @@ export default async function PublicProfilePage({ params }: Props) {
   let isOwnProfile = false;
   let stravaEnriched: StravaRaceCandidate[] = [];
 
-  if (isSupabaseConfigured()) {
+  if (!isSupabaseConfigured()) {
+    runner = { id: "offline", name: decodeURIComponent(username) };
+    allRaces = [];
+  } else {
     try {
       const supabase = await createClient();
       const userResult = await supabase.from("users").select("*").eq("name", username).single();
@@ -81,15 +84,14 @@ export default async function PublicProfilePage({ params }: Props) {
     } catch (e) {
       if (isDynamicServerError(e)) throw e;
       runfolioLog.error("PublicProfile.supabase", e, { username });
-      runner = { id: demoUser.id, name: username || demoUser.name };
-      allRaces = [...demoRaces];
+      runner = null;
+      allRaces = [];
     }
   }
 
-  const dbCompleted = (allRaces ?? []).filter((r) => r.is_completed);
   const future = (allRaces ?? []).filter((r) => !r.is_completed);
-  /** Top Races + Race Journey: only durable Runfolio rows — unconfirmed Strava majors stay in the import section below. */
-  const profileCompleted = persistedCompletedRaces(dbCompleted);
+  /** Top Races + Race Journey: confirmed catalog/Strava finishes only. */
+  const profileCompleted = confirmedCompletedPortfolioRaces(allRaces ?? []);
 
   const mediumMatches =
     isOwnProfile && stravaEnriched.length > 0 ? extractMediumStravaMatchesForProfile(stravaEnriched) : [];
@@ -120,7 +122,7 @@ export default async function PublicProfilePage({ params }: Props) {
           <div className="grid gap-0 border-x border-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
             <RaceJourney races={profileCompleted} />
             <ProfileBucketList
-              completed={dbCompleted.filter(raceCountsAsBucketListCompleted)}
+              completed={(allRaces ?? []).filter(raceCountsAsBucketListCompleted)}
               future={future.filter(raceIsBucketListFutureGoal)}
             />
           </div>

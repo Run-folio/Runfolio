@@ -7,14 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
-import { demoRaces, isSupabaseConfigured } from "@/lib/demo-mode";
+import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { runfolioLog } from "@/lib/runfolio-log";
+import type { Race } from "@/types";
 
 export const dynamic = "force-dynamic";
 
 export default async function BucketListPage() {
-  let races = demoRaces;
+  let races: Race[] = [];
   if (isSupabaseConfigured()) {
     try {
       const { user, authError } = await getServerAuthUser();
@@ -32,7 +33,7 @@ export default async function BucketListPage() {
       if (isDynamicServerError(e)) throw e;
       if (isRedirectError(e)) throw e;
       runfolioLog.error("BucketList.supabase", e);
-      races = demoRaces;
+      races = [];
     }
   }
   const completed = (races ?? []).filter(raceCountsAsBucketListCompleted);
@@ -60,28 +61,47 @@ export default async function BucketListPage() {
         <section className="space-y-4">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-green">Completed Races</h2>
           <div className="grid gap-4 md:grid-cols-2">
-            {completed.map((race) => (
-              <Card key={race.id} className="bg-panelAlt/90">
-                <p className="font-semibold uppercase tracking-[0.04em]">{race.name}</p>
-                <p className="type-meta mt-2 text-sm">
-                  {race.distance_km ?? "-"} km · {race.location ?? "Unknown"} · {race.date ?? "TBD"}
+            {completed.length === 0 ? (
+              <Card className="col-span-full border-dashed border-white/12 bg-panel/35 p-8 text-center md:col-span-2">
+                <p className="text-sm font-medium text-white">No bucket-list finishes yet</p>
+                <p className="type-meta mx-auto mt-2 max-w-lg text-xs">
+                  Completed goals appear here only when a race was on your bucket list and you have a confirmed finish
+                  (catalog or Strava). Other finishes stay in your main portfolio.
                 </p>
               </Card>
-            ))}
+            ) : (
+              completed.map((race) => (
+                <Card key={race.id} className="bg-panelAlt/90">
+                  <p className="font-semibold uppercase tracking-[0.04em]">{race.name}</p>
+                  <p className="type-meta mt-2 text-sm">
+                    {race.distance_km ?? "-"} km · {race.location ?? "Unknown"} · {race.date ?? "TBD"}
+                  </p>
+                </Card>
+              ))
+            )}
           </div>
         </section>
 
         <section className="space-y-4">
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">Future Goals</h2>
           <div className="grid gap-4 md:grid-cols-2">
-            {future.map((race) => (
-              <Card key={race.id} className="bg-panelAlt/90">
-                <p className="font-semibold uppercase tracking-[0.04em]">{race.name}</p>
-                <p className="type-meta mt-2 text-sm">
-                  {race.distance_km ?? "-"} km · {race.location ?? "Unknown"} · {race.date ?? "TBD"}
+            {future.length === 0 ? (
+              <Card className="col-span-full border-dashed border-white/12 bg-panel/35 p-8 text-center md:col-span-2">
+                <p className="text-sm font-medium text-white">Your start lines are open</p>
+                <p className="type-meta mx-auto mt-2 max-w-lg text-xs">
+                  Add races from the catalog or Add race — future bucket goals you choose show up here.
                 </p>
               </Card>
-            ))}
+            ) : (
+              future.map((race) => (
+                <Card key={race.id} className="bg-panelAlt/90">
+                  <p className="font-semibold uppercase tracking-[0.04em]">{race.name}</p>
+                  <p className="type-meta mt-2 text-sm">
+                    {race.distance_km ?? "-"} km · {race.location ?? "Unknown"} · {race.date ?? "TBD"}
+                  </p>
+                </Card>
+              ))
+            )}
           </div>
         </section>
       </main>

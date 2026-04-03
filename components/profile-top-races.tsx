@@ -101,7 +101,25 @@ export function ProfileTopRaces({ completedRaces }: Props) {
   const c = ranked[2];
   const triple = [a, b, c].filter(Boolean) as typeof ranked;
 
-  if (triple.length === 0) return null;
+  if (triple.length === 0) {
+    return (
+      <section className="border border-border bg-[#080a0e] px-5 py-10 md:px-8 md:py-12">
+        <div className="mx-auto max-w-xl text-center">
+          <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white">Top Races</h2>
+          <p className="type-meta mt-3 text-xs leading-relaxed">
+            Your standout finishes will land here once you confirm a Strava match or save a finish linked to the race
+            catalog. No placeholders — only races you actually logged.
+          </p>
+          <Link
+            href="/races/new"
+            className="mt-6 inline-block text-[11px] font-semibold uppercase tracking-[0.18em] text-gold hover:text-white"
+          >
+            Add or confirm a race →
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="border border-border bg-[#080a0e] px-5 py-8 md:px-8 md:py-10">

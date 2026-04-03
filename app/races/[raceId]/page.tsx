@@ -10,7 +10,9 @@ import { getRaceById } from "@/lib/get-race-by-id";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
-import { demoRaces, isSupabaseConfigured } from "@/lib/demo-mode";
+import { RaceCatalogPortfolioControls } from "@/components/race-catalog-portfolio-controls";
+import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
+import { isSupabaseConfigured } from "@/lib/demo-mode";
 import type { Race } from "@/types";
 
 type Props = {
@@ -39,41 +41,30 @@ export default async function RaceIdRouterPage({ params }: Props) {
 
     let userMatch: Race | null = null;
     let bucketFuture: Race | null = null;
+    let catalogOwner = false;
     if (isSupabaseConfigured()) {
       try {
         const { user } = await getServerAuthUser();
+        catalogOwner = Boolean(user?.id);
         if (user?.id) {
           const supabase = await createClient();
-          const { data } = await supabase
+          const { data: rows } = await supabase
             .from("races")
             .select("*")
             .eq("user_id", user.id)
             .eq("discover_race_id", raceId)
-            .eq("is_completed", true)
-            .order("date", { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          userMatch = (data as Race | null) ?? null;
-
-          const { data: openRows } = await supabase
-            .from("races")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("discover_race_id", raceId)
-            .eq("is_completed", false);
-          const incomplete = (openRows as Race[] | null) ?? [];
-          bucketFuture = incomplete.find((r) => raceIsBucketListFutureGoal(r)) ?? null;
+            .order("date", { ascending: false });
+          const portfolioRows = (rows as Race[]) ?? [];
+          const confirmed = confirmedCompletedPortfolioRaces(portfolioRows);
+          userMatch =
+            [...confirmed].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")))[0] ?? null;
+          bucketFuture = portfolioRows.find((r) => !r.is_completed && raceIsBucketListFutureGoal(r)) ?? null;
         }
       } catch {
         userMatch = null;
         bucketFuture = null;
+        catalogOwner = false;
       }
-    } else {
-      userMatch = demoRaces.find((r) => r.discover_race_id === raceId && r.is_completed) ?? null;
-      bucketFuture =
-        demoRaces.find(
-          (r) => r.discover_race_id === raceId && !r.is_completed && raceIsBucketListFutureGoal(r)
-        ) ?? null;
     }
 
     return (
@@ -264,15 +255,29 @@ export default async function RaceIdRouterPage({ params }: Props) {
                   Add reflection / edit
                 </Link>
               </div>
+              <RaceCatalogPortfolioControls
+                discoverRaceId={raceId}
+                isOwner={catalogOwner}
+                completedRow={userMatch}
+                bucketFutureRow={bucketFuture}
+              />
             </div>
           ) : (
-            <p className="type-meta text-center text-sm">
-              Haven&apos;t logged this one yet?{" "}
-              <Link href={`/races/new?discover=${encodeURIComponent(raceId)}`} className="text-accent hover:underline">
-                Start from this race template
-              </Link>
-              .
-            </p>
+            <div className="mx-auto max-w-2xl space-y-4 text-center">
+              <p className="type-meta text-sm">
+                Haven&apos;t logged this one yet?{" "}
+                <Link href={`/races/new?discover=${encodeURIComponent(raceId)}`} className="text-accent hover:underline">
+                  Start from this race template
+                </Link>
+                .
+              </p>
+              <RaceCatalogPortfolioControls
+                discoverRaceId={raceId}
+                isOwner={catalogOwner}
+                completedRow={null}
+                bucketFutureRow={bucketFuture}
+              />
+            </div>
           )}
         </main>
       </>
