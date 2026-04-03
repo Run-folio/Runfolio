@@ -768,3 +768,137 @@ export async function dismissStravaProfileCandidateAction(formData: FormData) {
     return { error: e instanceof Error ? e.message : "Could not dismiss." };
   }
 }
+
+/** Add an **active** canonical race to Future Goals (stable internal race id). */
+export async function addCanonicalRaceToBucketListAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const canonicalRaceId = String(formData.get("canonical_race_id") ?? "").trim();
+    if (!canonicalRaceId) return { error: "Missing race." };
+
+    const supabase = await createClient();
+    const { data: race, error: raceErr } = await supabase
+      .from("canonical_races")
+      .select("id, status")
+      .eq("id", canonicalRaceId)
+      .maybeSingle();
+    if (raceErr) return { error: raceErr.message };
+    if (!race || race.status !== "active") {
+      return { error: "That race isn’t available to add right now." };
+    }
+
+    const { error: insErr } = await supabase.from("user_bucket_list_goals").insert({
+      user_id: user.id,
+      canonical_race_id: canonicalRaceId,
+      status: "planned"
+    });
+    if (insErr) {
+      if (insErr.code === "23505") {
+        return { ok: true as const, already: true as const };
+      }
+      return { error: insErr.message };
+    }
+
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      alsoPaths: ["/races/find", "/bucket-list"]
+    });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.addCanonicalRaceToBucketList", e);
+    return { error: e instanceof Error ? e.message : "Could not add to bucket list." };
+  }
+}
+
+export async function removeCanonicalBucketGoalAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const goalId = String(formData.get("goal_id") ?? "").trim();
+    if (!goalId) return { error: "Missing goal." };
+    const supabase = await createClient();
+    const { error: delErr } = await supabase
+      .from("user_bucket_list_goals")
+      .delete()
+      .eq("id", goalId)
+      .eq("user_id", user.id);
+    if (delErr) return { error: delErr.message };
+    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/races/find", "/bucket-list"] });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.removeCanonicalBucketGoal", e);
+    return { error: e instanceof Error ? e.message : "Could not remove goal." };
+  }
+}
+
+/** First completion step: goal done in the real world; Strava link optional later. */
+export async function markCanonicalBucketGoalCompletedAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const goalId = String(formData.get("goal_id") ?? "").trim();
+    if (!goalId) return { error: "Missing goal." };
+    const supabase = await createClient();
+    const now = new Date().toISOString();
+    const { data: updated, error: upErr } = await supabase
+      .from("user_bucket_list_goals")
+      .update({
+        status: "completed_unlinked",
+        completed_at: now
+      })
+      .eq("id", goalId)
+      .eq("user_id", user.id)
+      .in("status", ["saved", "planned"])
+      .select("id");
+    if (upErr) return { error: upErr.message };
+    if (!updated?.length) {
+      return { error: "That goal isn’t active or was already completed." };
+    }
+    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/races/find", "/bucket-list"] });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.markCanonicalBucketGoalCompleted", e);
+    return { error: e instanceof Error ? e.message : "Could not mark complete." };
+  }
+}
+
+export async function undoCanonicalBucketCompletionAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const goalId = String(formData.get("goal_id") ?? "").trim();
+    if (!goalId) return { error: "Missing goal." };
+    const supabase = await createClient();
+    const { data: undone, error: upErr } = await supabase
+      .from("user_bucket_list_goals")
+      .update({
+        status: "planned",
+        completed_at: null,
+        linked_strava_activity_id: null,
+        linked_user_race_id: null
+      })
+      .eq("id", goalId)
+      .eq("user_id", user.id)
+      .eq("status", "completed_unlinked")
+      .select("id");
+    if (upErr) return { error: upErr.message };
+    if (!undone?.length) return { error: "Only finishes without a linked activity can move back this way." };
+    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/races/find", "/bucket-list"] });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.undoCanonicalBucketCompletion", e);
+    return { error: e instanceof Error ? e.message : "Could not move goal back." };
+  }
+}

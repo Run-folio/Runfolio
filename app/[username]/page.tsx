@@ -12,6 +12,7 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { buildProfilePendingRaceCandidates } from "@/lib/profile-pending-candidates";
 import { profileApprovedCompletedRaces } from "@/lib/portfolio-race";
+import { fetchCanonicalBucketGoalsForUser } from "@/lib/bucket-list-canonical/queries";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { resolveProfileHeroPhoto } from "@/lib/profile-hero-asset";
 import { runfolioLog } from "@/lib/runfolio-log";
@@ -46,6 +47,8 @@ export default async function PublicProfilePage({ params }: Props) {
   let isOwnProfile = false;
   let stravaEnriched: StravaRaceCandidate[] = [];
   let pendingCandidates: ProfilePendingRaceCandidate[] = [];
+  let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];
+  let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
 
   if (!isSupabaseConfigured()) {
     runner = { id: "offline", name: decodeURIComponent(username) };
@@ -79,6 +82,9 @@ export default async function PublicProfilePage({ params }: Props) {
           stravaOk: feed.ok
         };
         pendingCandidates = buildProfilePendingRaceCandidates(stravaEnriched, allRaces, dismissedIds);
+        const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
+        canonicalFuture = canon.future;
+        canonicalCompleted = canon.completed;
       }
     } catch (e) {
       if (isDynamicServerError(e)) throw e;
@@ -132,6 +138,8 @@ export default async function PublicProfilePage({ params }: Props) {
             <ProfileBucketList
               completed={(allRaces ?? []).filter(raceCountsAsBucketListCompleted)}
               future={future.filter(raceIsBucketListFutureGoal)}
+              canonicalFuture={isOwnProfile ? canonicalFuture : []}
+              canonicalCompleted={isOwnProfile ? canonicalCompleted : []}
             />
           </div>
         </div>

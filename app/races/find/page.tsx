@@ -2,6 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { AppNavbar } from "@/components/app-navbar";
 import { FindRacesExplorer } from "@/components/find-races-explorer";
+import { fetchCanonicalRaceIdsOnBucketList } from "@/lib/bucket-list-canonical/queries";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
@@ -16,6 +17,7 @@ export const dynamic = "force-dynamic";
 export default async function FindRacePage() {
   let viewer: "guest" | "authed" = "guest";
   let userRaces: Race[] | null = null;
+  let addedCanonicalRaceIds: string[] = [];
   if (isSupabaseConfigured()) {
     try {
       const { user } = await getServerAuthUser();
@@ -24,6 +26,7 @@ export default async function FindRacePage() {
         const supabase = await createClient();
         const { data } = await supabase.from("races").select("*").eq("user_id", user.id);
         userRaces = (data as Race[]) ?? [];
+        addedCanonicalRaceIds = [...(await fetchCanonicalRaceIdsOnBucketList(supabase, user.id))];
       }
     } catch {
       viewer = "guest";
@@ -52,7 +55,7 @@ export default async function FindRacePage() {
       </section>
 
       <main className="app-shell pb-16">
-        <FindRacesExplorer viewer={viewer} userRaces={userRaces} />
+        <FindRacesExplorer viewer={viewer} userRaces={userRaces} addedCanonicalRaceIds={addedCanonicalRaceIds} />
       </main>
     </>
   );

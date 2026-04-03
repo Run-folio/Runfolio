@@ -15,6 +15,7 @@ import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { getStravaFeed } from "@/lib/strava-feed";
+import { fetchCanonicalBucketGoalsForUser } from "@/lib/bucket-list-canonical/queries";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
 import type { Race } from "@/types";
@@ -29,6 +30,8 @@ export default async function DashboardPage() {
 
   let userName = demoUser.name;
   let races: Race[] = [];
+  let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];
+  let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
   if (isSupabaseConfigured()) {
     try {
       const { user, authError } = await getServerAuthUser();
@@ -43,6 +46,9 @@ export default async function DashboardPage() {
       } else {
         races = result.data ?? [];
       }
+      const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
+      canonicalFuture = canon.future;
+      canonicalCompleted = canon.completed;
     } catch (e) {
       if (isDynamicServerError(e)) throw e;
       if (isRedirectError(e)) throw e;
@@ -56,6 +62,8 @@ export default async function DashboardPage() {
     String(b.date ?? "").localeCompare(String(a.date ?? ""))
   );
   const future = (races ?? []).filter((race) => !race.is_completed);
+  const futureGoalCount =
+    future.filter(raceIsBucketListFutureGoal).length + canonicalFuture.length;
   const featured = completedSorted[0];
   const totalKm = completedSorted.reduce((acc, race) => acc + (race.distance_km ?? 0), 0);
 
@@ -192,6 +200,8 @@ export default async function DashboardPage() {
               <ProfileBucketList
                 completed={completedSorted.filter(raceCountsAsBucketListCompleted)}
                 future={future.filter(raceIsBucketListFutureGoal)}
+                canonicalFuture={canonicalFuture}
+                canonicalCompleted={canonicalCompleted}
               />
             </div>
           </div>
@@ -303,7 +313,7 @@ export default async function DashboardPage() {
           </div>
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Goals ahead</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums">{future.length}</p>
+            <p className="mt-2 text-3xl font-bold tabular-nums">{futureGoalCount}</p>
           </div>
           {stravaFeed.ok ? (
             <>

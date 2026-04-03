@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { FindRaceCardActions } from "@/components/find-race-card-actions";
+import { FindRaceExternalCard } from "@/components/find-race-external-card";
 import {
   DISCOVER_GROUP_LABEL,
   DISCOVER_GROUP_ORDER,
@@ -19,6 +20,9 @@ const PUBLIC_DISCOVER_RACES = getPublicCatalogRaces();
 import { catalogDiscoverViewerState } from "@/lib/catalog-discover-user-state";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { CanonicalRaceSearchPanel } from "@/components/canonical-race-search-panel";
+import { buildFindPageIngestRequest } from "@/lib/races/find-ingest-search";
+import type { UnifiedSearchResponse } from "@/lib/races/types/normalized";
 import type { Race } from "@/types";
 
 const DISTANCE_OPTIONS: { id: DistanceFilterId; label: string }[] = [
@@ -45,12 +49,60 @@ function surfaceLabel(s: DiscoverRace["surface"]): string {
 type ExplorerProps = {
   viewer: "guest" | "authed";
   userRaces: Race[] | null;
+  /** Canonical race IDs already on Future Goals */
+  addedCanonicalRaceIds: string[];
 };
 
-export function FindRacesExplorer({ viewer, userRaces }: ExplorerProps) {
+const INGEST_MOCK = process.env.NEXT_PUBLIC_RACES_INGEST_MOCK === "1";
+
+export function FindRacesExplorer({ viewer, userRaces, addedCanonicalRaceIds }: ExplorerProps) {
   const [query, setQuery] = useState("");
   const [distance, setDistance] = useState<DistanceFilterId>("any");
   const [surface, setSurface] = useState<SurfaceFilterId>("any");
+  const [debounced, setDebounced] = useState({ query, distance, surface });
+  const [registry, setRegistry] = useState<UnifiedSearchResponse | null>(null);
+  const [registryLoading, setRegistryLoading] = useState(false);
+  const [registryError, setRegistryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebounced({ query, distance, surface }), 320);
+    return () => window.clearTimeout(t);
+  }, [query, distance, surface]);
+
+  useEffect(() => {
+    const q = debounced.query.trim();
+    if (q.length < 2) {
+      setRegistry(null);
+      setRegistryError(null);
+      setRegistryLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setRegistryLoading(true);
+    setRegistryError(null);
+    const body = buildFindPageIngestRequest(debounced.query, debounced.distance, debounced.surface, {
+      includeMockProvider: INGEST_MOCK
+    });
+    void fetch("/api/races/ingest/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body)
+    })
+      .then(async (res) => {
+        const data = (await res.json()) as UnifiedSearchResponse & { error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Search failed");
+        if (!cancelled) setRegistry(data);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) setRegistryError(e instanceof Error ? e.message : "Registry search failed");
+      })
+      .finally(() => {
+        if (!cancelled) setRegistryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [debounced]);
 
   const filtered = useMemo(
     () => PUBLIC_DISCOVER_RACES.filter((r) => matchesDiscoverFilters(r, query, distance, surface)),
@@ -70,6 +122,20 @@ export function FindRacesExplorer({ viewer, userRaces }: ExplorerProps) {
 
   return (
     <div className="space-y-10">
+      <section className="space-y-4 rounded-[14px] border border-amber-500/20 bg-panel/40 p-4 md:p-6">
+        <div>
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-200/90">Verified races</h2>
+          <p className="type-meta mt-1 max-w-2xl text-xs">
+            Same verified catalog as your bucket list — search here and save goals in one tap.
+          </p>
+        </div>
+        <CanonicalRaceSearchPanel
+          viewer={viewer}
+          addedCanonicalRaceIds={addedCanonicalRaceIds}
+          variant="compact"
+        />
+      </section>
+
       <div className="grid gap-4 border border-border bg-panel/60 p-5 md:grid-cols-[1fr_auto_auto] md:items-end md:gap-6">
         <div>
           <label htmlFor="find-race-search" className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
@@ -123,7 +189,7 @@ export function FindRacesExplorer({ viewer, userRaces }: ExplorerProps) {
       <p className="type-meta text-xs">
         {hasAny ? (
           <>
-            Showing <span className="text-white">{filtered.length}</span> races
+            Showing <span className="text-white">{filtered.length}</span> curated library races
             {query.trim() ? ` for “${query.trim()}”` : ""}. Use{" "}
             <span className="text-white/90">Add to bucket list</span> on a card or open{" "}
             <span className="text-white/90">Details</span> to link Strava.
@@ -144,6 +210,56 @@ export function FindRacesExplorer({ viewer, userRaces }: ExplorerProps) {
             </button>
           </>
         )}
+      </p>
+
+      {debounced.query.trim().length >= 2 ? (
+        <section className="space-y-3 rounded-[14px] border border-white/10 bg-black/25 p-4 md:p-5" aria-busy={registryLoading}>
+          <div className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">From registries</h2>
+              <p className="type-meta mt-1 max-w-xl text-xs">
+                Live results from RunSignup{INGEST_MOCK ? " and mock data" : ""}, matched to your filters. Add-to-bucket for
+                these rows is coming next.
+              </p>
+            </div>
+            {registryLoading ? (
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted">Searching…</span>
+            ) : null}
+          </div>
+          {registryError ? (
+            <p className="text-sm text-amber-200/90" role="alert">
+              {registryError}
+            </p>
+          ) : null}
+          {registry && registry.providerErrors.length > 0 ? (
+            <ul className="text-[11px] text-muted">
+              {registry.providerErrors.map((e) => (
+                <li key={e.provider}>
+                  {e.provider}: {e.message}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {registry && !registryLoading && registry.races.length === 0 && !registryError ? (
+            <p className="text-sm text-muted">No registry races matched — try a broader name or clear distance filters.</p>
+          ) : null}
+          {registry && registry.races.length > 0 ? (
+            <ul className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {registry.races.map((race) => (
+                <FindRaceExternalCard key={race.id} race={race} />
+              ))}
+            </ul>
+          ) : null}
+        </section>
+      ) : (
+        <p className="type-meta text-[11px] text-muted">
+          Tip: type at least two characters to search public registries (RunSignup) alongside the curated library.
+        </p>
+      )}
+
+      <h2 className="type-section mt-12 border-b border-white/10 pb-3 text-base md:text-lg">Curated library</h2>
+      <p className="type-meta mb-8 mt-2 text-xs text-muted">
+        Runfolio majors, UTMB World Series, and hand-curated ultras — filter below.
       </p>
 
       <div className="space-y-16">

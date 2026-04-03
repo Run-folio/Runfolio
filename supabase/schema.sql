@@ -108,3 +108,6 @@ alter table races add column if not exists tag_bucket_list_done boolean default 
 alter table races add column if not exists is_bucket_list_item boolean default true;
 
 -- Public profile RPC, include_on_profile, strava dismissals — see migration_profile_public_and_approval.sql
+
+-- App-owned canonical races + per-provider sources: apply migration_canonical_races.sql (not duplicated here).
+-- User bucket list ↔ canonical races: migration_user_bucket_list_goals.sql

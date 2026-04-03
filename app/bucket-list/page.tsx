@@ -7,6 +7,7 @@ import { BucketListWorkflow } from "@/components/bucket-list-workflow";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { usedStravaActivityIdsFromRaces } from "@/lib/catalog-discover-user-state";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
+import { fetchCanonicalBucketGoalsForUser } from "@/lib/bucket-list-canonical/queries";
 import { discoverRaces } from "@/lib/discover-races";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { createClient } from "@/lib/supabase/server";
@@ -18,6 +19,8 @@ export const dynamic = "force-dynamic";
 
 export default async function BucketListPage() {
   let races: Race[] = [];
+  let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];
+  let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
   if (isSupabaseConfigured()) {
     try {
       const { user, authError } = await getServerAuthUser();
@@ -31,6 +34,9 @@ export default async function BucketListPage() {
       } else {
         races = result.data ?? [];
       }
+      const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
+      canonicalFuture = canon.future;
+      canonicalCompleted = canon.completed;
     } catch (e) {
       if (isDynamicServerError(e)) throw e;
       if (isRedirectError(e)) throw e;
@@ -66,6 +72,8 @@ export default async function BucketListPage() {
 
       <main className="app-shell space-y-10 pb-16">
         <BucketListWorkflow
+          canonicalFuture={canonicalFuture}
+          canonicalCompleted={canonicalCompleted}
           futureGoals={future}
           completedBucketRaces={completed}
           catalogRaces={discoverRaces}
