@@ -1,3 +1,4 @@
+import { normalizeRaceName } from "@/lib/races/dedupe";
 import { sourceTrustRank } from "@/lib/races/canonical/source-trust";
 import type {
   CanonicalRace,
@@ -430,13 +431,141 @@ export async function findImportMatchCandidates(args: {
   return { ok: true, data: (data as CanonicalRaceRow[]).map(raceRowToDomain) };
 }
 
+function escapeIlikeFragment(s: string): string {
+  return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+}
+
+function applyPassiveSearchFilters(rows: CanonicalRace[], filters: CanonicalSearchFilters): CanonicalRace[] {
+  let out = rows;
+  if (filters.country?.trim()) {
+    const c = filters.country.trim().toLowerCase();
+    out = out.filter((r) => r.country?.toLowerCase().includes(c));
+  }
+  if (filters.city?.trim()) {
+    const c = filters.city.trim().toLowerCase();
+    out = out.filter((r) => r.city?.toLowerCase().includes(c));
+  }
+  if (filters.trailOnly) out = out.filter((r) => r.isTrail === true);
+  if (filters.ultraOnly) out = out.filter((r) => r.isUltra === true);
+  if (filters.distanceMinKm != null) {
+    out = out.filter((r) => r.distanceKm != null && r.distanceKm >= filters.distanceMinKm!);
+  }
+  if (filters.distanceMaxKm != null) {
+    out = out.filter((r) => r.distanceKm != null && r.distanceKm <= filters.distanceMaxKm!);
+  }
+  if (filters.dateFrom?.trim()) {
+    const df = filters.dateFrom.trim();
+    out = out.filter((r) => r.startDate && r.startDate >= df);
+  }
+  if (filters.dateTo?.trim()) {
+    const dt = filters.dateTo.trim();
+    out = out.filter((r) => r.startDate && r.startDate <= dt);
+  }
+  return out;
+}
+
+async function searchCanonicalRacesWithTextQuery(
+  supabase: NonNullable<ReturnType<typeof createServiceRoleClient>>,
+  filters: CanonicalSearchFilters,
+  resultLimit: number
+): Promise<RepositoryResult<CanonicalRace[]>> {
+  const rawQ = filters.query!.trim().replace(/,/g, " ");
+  const esc = escapeIlikeFragment(rawQ);
+  const pat = `%${esc}%`;
+  const mk = () =>
+    supabase
+      .from(RACES)
+      .select("*")
+      .eq("status", "active")
+      .gte("completeness_score", MIN_ACTIVE_SEARCH_COMPLETENESS);
+
+  const [nameRes, cityRes, countryRes, regionRes] = await Promise.all([
+    mk().ilike("name", pat).limit(40),
+    mk().ilike("city", pat).limit(30),
+    mk().ilike("country", pat).limit(30),
+    mk().ilike("region", pat).limit(30)
+  ]);
+
+  const merged = new Map<string, CanonicalRace>();
+  const absorb = (res: { data: unknown; error: { message: string } | null } | null) => {
+    if (!res || res.error) return;
+    for (const row of (res.data ?? []) as CanonicalRaceRow[]) {
+      const d = raceRowToDomain(row);
+      merged.set(d.id, d);
+    }
+  };
+  absorb(nameRes);
+  absorb(cityRes);
+  absorb(countryRes);
+  absorb(regionRes);
+
+  try {
+    const normalized = normalizeRaceName(rawQ).replace(/\s+/g, " ").trim();
+    const normPat = normalized.length > 0 ? `%${escapeIlikeFragment(normalized)}%` : pat;
+    const [al1, al2] = await Promise.all([
+      supabase.from("canonical_race_alias").select("race_id,series_id").ilike("alias_text", pat).limit(80),
+      supabase.from("canonical_race_alias").select("race_id,series_id").ilike("alias_normalized", normPat).limit(80)
+    ]);
+    const raceIds = new Set<string>();
+    const seriesIds = new Set<string>();
+    for (const chunk of [al1.data, al2.data]) {
+      for (const row of chunk ?? []) {
+        const r = row as { race_id?: string | null; series_id?: string | null };
+        if (r.race_id) raceIds.add(r.race_id);
+        if (r.series_id) seriesIds.add(r.series_id);
+      }
+    }
+    if (raceIds.size > 0) {
+      const { data, error } = await supabase
+        .from(RACES)
+        .select("*")
+        .in("id", [...raceIds])
+        .eq("status", "active")
+        .gte("completeness_score", MIN_ACTIVE_SEARCH_COMPLETENESS);
+      if (!error && data) {
+        for (const row of data as CanonicalRaceRow[]) merged.set(row.id, raceRowToDomain(row));
+      }
+    }
+    if (seriesIds.size > 0) {
+      const { data, error } = await supabase
+        .from(RACES)
+        .select("*")
+        .in("series_id", [...seriesIds])
+        .eq("status", "active")
+        .gte("completeness_score", MIN_ACTIVE_SEARCH_COMPLETENESS)
+        .order("start_date", { ascending: false, nullsFirst: false })
+        .limit(120);
+      if (!error && data) {
+        for (const row of data as CanonicalRaceRow[]) merged.set(row.id, raceRowToDomain(row));
+      }
+    }
+  } catch (e) {
+    runfolioLog.warn("canonical.repo.searchActive.alias", e instanceof Error ? e.message : String(e));
+  }
+
+  let rows = [...merged.values()];
+  rows = applyPassiveSearchFilters(rows, filters);
+  rows.sort((a, b) => {
+    const ad = a.startDate ?? "";
+    const bd = b.startDate ?? "";
+    if (ad !== bd) return bd.localeCompare(ad);
+    return a.name.localeCompare(b.name);
+  });
+  return { ok: true, data: rows.slice(0, resultLimit) };
+}
+
 export async function searchCanonicalRacesActive(
   filters: CanonicalSearchFilters
 ): Promise<RepositoryResult<CanonicalRace[]>> {
   const supabase = createServiceRoleClient();
   if (!supabase) return noClient();
   const limit = Math.min(filters.limit ?? 40, 100);
-  let q = supabase
+  const qText = filters.query?.trim() ?? "";
+  if (qText.length >= 2) {
+    return searchCanonicalRacesWithTextQuery(supabase, filters, limit);
+  }
+
+  let query = supabase
     .from(RACES)
     .select("*")
     .eq("status", "active")
@@ -445,45 +574,35 @@ export async function searchCanonicalRacesActive(
     .limit(limit);
 
   if (filters.country?.trim()) {
-    q = q.ilike("country", `%${filters.country.trim()}%`);
+    query = query.ilike("country", `%${filters.country.trim()}%`);
   }
   if (filters.city?.trim()) {
-    q = q.ilike("city", `%${filters.city.trim()}%`);
+    query = query.ilike("city", `%${filters.city.trim()}%`);
   }
   if (filters.trailOnly) {
-    q = q.eq("is_trail", true);
+    query = query.eq("is_trail", true);
   }
   if (filters.ultraOnly) {
-    q = q.eq("is_ultra", true);
+    query = query.eq("is_ultra", true);
   }
   if (filters.distanceMinKm != null) {
-    q = q.gte("distance_km", filters.distanceMinKm);
+    query = query.gte("distance_km", filters.distanceMinKm);
   }
   if (filters.distanceMaxKm != null) {
-    q = q.lte("distance_km", filters.distanceMaxKm);
+    query = query.lte("distance_km", filters.distanceMaxKm);
   }
   if (filters.dateFrom?.trim()) {
-    q = q.gte("start_date", filters.dateFrom.trim());
+    query = query.gte("start_date", filters.dateFrom.trim());
   }
   if (filters.dateTo?.trim()) {
-    q = q.lte("start_date", filters.dateTo.trim());
+    query = query.lte("start_date", filters.dateTo.trim());
   }
 
-  const { data, error } = await q;
+  const { data, error } = await query;
   if (error) {
     runfolioLog.warn("canonical.repo.searchActive", error.message);
     return { ok: false, error: error.message };
   }
-  let rows = (data as CanonicalRaceRow[]).map(raceRowToDomain);
-  if (filters.query?.trim()) {
-    const qq = filters.query.trim().toLowerCase();
-    rows = rows.filter(
-      (r) =>
-        r.name.toLowerCase().includes(qq) ||
-        (r.city?.toLowerCase().includes(qq) ?? false) ||
-        (r.country?.toLowerCase().includes(qq) ?? false) ||
-        (r.region?.toLowerCase().includes(qq) ?? false)
-    );
-  }
+  const rows = (data as CanonicalRaceRow[]).map(raceRowToDomain);
   return { ok: true, data: rows };
 }

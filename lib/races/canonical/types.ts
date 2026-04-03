@@ -83,6 +83,8 @@ export type SearchableRaceRow = {
   name: string;
   locationLabel: string;
   startDate: string | null;
+  /** Short label for cards (ISO date or “Undated / series”). */
+  dateSummary: string;
   distanceKm: number | null;
   elevationGainM: number | null;
   logoUrl: string | null;

@@ -3,9 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import type { ActivityPortfolioStravaView, Race } from "@/types";
-import { upsertActivityPortfolioAction } from "@/lib/actions";
+import {
+  markStravaActivityNotRaceAction,
+  snoozeStravaActivityMatchHubAction,
+  upsertActivityPortfolioAction
+} from "@/lib/actions";
+import type { ManualRaceSoftHint } from "@/lib/match-hub/manual-link-hints";
+import { ManualRaceLinkPanel } from "@/components/manual-race-link-panel";
 import { discoverRaces } from "@/lib/discover-races";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
@@ -23,6 +29,8 @@ type Props = {
   catalogDisplayTitle: string | null;
   stravaFetchFailed: boolean;
   bucketListGoalActive: boolean;
+  manualLinkSoftHints: ManualRaceSoftHint[];
+  canonicalRaceSlug?: string | null;
 };
 
 function mergePhotoUrls(strava: string[], manual: string[] | null | undefined): string[] {
@@ -42,14 +50,24 @@ export function ActivityPortfolioClient({
   suggestedDiscoverRaceId,
   catalogDisplayTitle,
   stravaFetchFailed,
-  bucketListGoalActive
+  bucketListGoalActive,
+  manualLinkSoftHints,
+  canonicalRaceSlug
 }: Props) {
   const router = useRouter();
   const [editing, setEditing] = useState(!race);
   const [err, setErr] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+  const [linkUiOpen, setLinkUiOpen] = useState(() => !race?.canonical_race_id);
+  const [linkAuxPending, startLinkAux] = useTransition();
+
+  useEffect(() => {
+    if (race?.canonical_race_id) setLinkUiOpen(false);
+  }, [race?.canonical_race_id]);
 
   const effectiveDiscoverId = race?.discover_race_id ?? suggestedDiscoverRaceId;
+  const canonicalHref =
+    race?.canonical_race_id && canonicalRaceSlug ? `/races/${canonicalRaceSlug}` : race?.canonical_race_id ? `/races/${race.canonical_race_id}` : null;
   const prestige = getDiscoverPrestigeMeta(effectiveDiscoverId);
   const displayTitle = race ? getPortfolioRaceLabel(race) : stravaView.name;
   const photos = useMemo(
@@ -152,7 +170,14 @@ export function ActivityPortfolioClient({
             >
               Open in Strava
             </a>
-            {effectiveDiscoverId ? (
+            {canonicalHref ? (
+              <Link
+                href={canonicalHref}
+                className="inline-flex items-center border border-accent/40 bg-accent/15 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-accent transition hover:bg-accent/25"
+              >
+                Verified race · catalog
+              </Link>
+            ) : effectiveDiscoverId ? (
               <Link
                 href={`/races/${effectiveDiscoverId}`}
                 className="inline-flex items-center border border-accent/40 bg-accent/15 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-accent transition hover:bg-accent/25"
@@ -175,6 +200,22 @@ export function ActivityPortfolioClient({
             >
               {editing ? "View page" : "Edit story"}
             </Button>
+            {race?.canonical_race_id ? (
+              <Button
+                type="button"
+                className="border border-gold/35 bg-gold/10 text-[11px] font-semibold uppercase tracking-[0.15em] text-gold hover:bg-gold/15"
+                onClick={() => setLinkUiOpen(true)}
+              >
+                Change race link
+              </Button>
+            ) : (
+              <a
+                href="#manual-race-link"
+                className="inline-flex items-center border border-accent/50 bg-accent/20 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-accent transition hover:bg-accent/30"
+              >
+                Link to race
+              </a>
+            )}
           </div>
         </div>
       </section>
@@ -182,6 +223,52 @@ export function ActivityPortfolioClient({
       <main className="app-shell space-y-12 pb-20 pt-10">
         {err ? (
           <p className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">{err}</p>
+        ) : null}
+
+        {linkUiOpen ? (
+          <section id="manual-race-link" className="scroll-mt-28 space-y-3">
+            <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/55">Catalog link</h2>
+            <ManualRaceLinkPanel
+              ctx={{
+                stravaActivityId: stravaView.strava_id,
+                activityTitle: stravaView.name,
+                startDateYmd: stravaView.start_date.slice(0, 10),
+                distanceKm: stravaView.distance_km,
+                elevationM: stravaView.elevation_m
+              }}
+              softSuggestions={manualLinkSoftHints}
+              responseMode="page"
+              returnTo={`/activities/${stravaView.strava_id}`}
+              showUnlink={Boolean(race?.canonical_race_id)}
+              onUnlinked={() => setLinkUiOpen(true)}
+              pending={linkAuxPending}
+              onNotRace={() => {
+                startLinkAux(async () => {
+                  const fd = new FormData();
+                  fd.set("strava_activity_id", stravaView.strava_id);
+                  await markStravaActivityNotRaceAction(fd);
+                  router.refresh();
+                });
+              }}
+              onSnooze={() => {
+                startLinkAux(async () => {
+                  const fd = new FormData();
+                  fd.set("strava_activity_id", stravaView.strava_id);
+                  await snoozeStravaActivityMatchHubAction(fd);
+                  router.refresh();
+                });
+              }}
+            />
+            {race?.canonical_race_id ? (
+              <button
+                type="button"
+                className="text-[11px] text-white/40 underline-offset-4 hover:text-white/60 hover:underline"
+                onClick={() => setLinkUiOpen(false)}
+              >
+                Close
+              </button>
+            ) : null}
+          </section>
         ) : null}
 
         <section className="space-y-4">

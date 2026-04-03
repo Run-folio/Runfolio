@@ -19,6 +19,9 @@ import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import { fetchStravaActivityWithRecovery } from "@/lib/strava-resolve-access";
 import { parseStravaActivityId } from "@/lib/strava-api";
+import { buildManualRaceSoftHints, type ManualRaceSoftHint } from "@/lib/match-hub/manual-link-hints";
+import { rankCanonicalMatchesForSyncedRowDetailed } from "@/lib/strava-canonical-match/suggestions";
+import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import type { ActivityMatchInput } from "@/types";
 import type { Race } from "@/types";
 
@@ -107,6 +110,25 @@ export default async function ActivityPortfolioPage({ params }: Props) {
       allRaces.some((r) => r.discover_race_id === suggestedDiscoverRaceId && !r.is_completed)
   );
 
+  const { data: syncRowRaw } = await supabase
+    .from("strava_synced_activities")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("strava_activity_id", stravaId)
+    .maybeSingle();
+
+  let manualLinkSoftHints: ManualRaceSoftHint[] = [];
+  if (syncRowRaw) {
+    const { ranked } = await rankCanonicalMatchesForSyncedRowDetailed(syncRowRaw as StravaSyncedActivityRow);
+    manualLinkSoftHints = buildManualRaceSoftHints(ranked);
+  }
+
+  let canonicalRaceSlug: string | null = null;
+  if (race?.canonical_race_id) {
+    const { data: cr } = await supabase.from("canonical_races").select("slug").eq("id", race.canonical_race_id).maybeSingle();
+    canonicalRaceSlug = (cr as { slug?: string } | null)?.slug?.trim() ?? null;
+  }
+
   return (
     <>
       <AppNavbar />
@@ -117,6 +139,8 @@ export default async function ActivityPortfolioPage({ params }: Props) {
         catalogDisplayTitle={catalogDisplayTitle}
         stravaFetchFailed={stravaFetchFailed}
         bucketListGoalActive={bucketListGoalActive}
+        manualLinkSoftHints={manualLinkSoftHints}
+        canonicalRaceSlug={canonicalRaceSlug}
       />
     </>
   );

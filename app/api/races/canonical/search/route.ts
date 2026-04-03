@@ -23,8 +23,21 @@ export async function GET(req: Request) {
   const distanceMinKm = optFiniteNumber(searchParams.get("distanceMinKm"));
   const distanceMaxKm = optFiniteNumber(searchParams.get("distanceMaxKm"));
   const limit = optFiniteNumber(searchParams.get("limit"));
-  const dateFrom = searchParams.get("dateFrom")?.trim() || undefined;
-  const dateTo = searchParams.get("dateTo")?.trim() || undefined;
+  let dateFrom = searchParams.get("dateFrom")?.trim() || undefined;
+  let dateTo = searchParams.get("dateTo")?.trim() || undefined;
+  const activityDate = searchParams.get("activityDate")?.trim();
+  if (activityDate && activityDate.length >= 10 && !dateFrom && !dateTo) {
+    const ymd = activityDate.slice(0, 10);
+    const mid = new Date(`${ymd}T12:00:00Z`);
+    if (!Number.isNaN(mid.getTime())) {
+      const bef = new Date(mid);
+      bef.setUTCDate(bef.getUTCDate() - 21);
+      const aft = new Date(mid);
+      aft.setUTCDate(aft.getUTCDate() + 21);
+      dateFrom = bef.toISOString().slice(0, 10);
+      dateTo = aft.toISOString().slice(0, 10);
+    }
+  }
 
   const res = await searchCanonicalRacesForFrontend({
     query,

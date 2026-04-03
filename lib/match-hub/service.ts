@@ -7,9 +7,11 @@ import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { listDismissedCanonicalStravaIds, listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
 import type { Race } from "@/types";
 import { isSyncedRowRunLikeForMatchVisibility } from "@/lib/strava-race-candidates";
+import { buildManualRaceSoftHints, type ManualRaceSoftHint } from "@/lib/match-hub/manual-link-hints";
 
 export type MatchHubUnmatchedItem = {
   row: StravaSyncedActivityRow;
+  softSuggestions: ManualRaceSoftHint[];
 };
 
 export type MatchHubSnoozedItem = { row: StravaSyncedActivityRow };
@@ -94,6 +96,7 @@ export async function loadMatchHubBundle(
     const detail = await rankCanonicalMatchesForSyncedRowDetailed(row);
     const ranked = detail.ranked;
     const s = ranked.length ? suggestionFromRanked(row, ranked) : null;
+    const softSuggestions = buildManualRaceSoftHints(ranked);
 
     if (devCanonicalMatchByActivityId) {
       const top = ranked[0];
@@ -113,14 +116,14 @@ export async function loadMatchHubBundle(
     }
 
     if (!s?.topMatch) {
-      unmatched.push({ row });
+      unmatched.push({ row, softSuggestions });
       continue;
     }
 
     if (s.topMatch.score >= CANONICAL_SUGGESTED_HIGH_MIN_SCORE) {
       suggestedHigh.push(s);
     } else {
-      unmatched.push({ row });
+      unmatched.push({ row, softSuggestions });
     }
   }
 

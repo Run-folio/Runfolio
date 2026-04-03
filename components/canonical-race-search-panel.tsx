@@ -331,7 +331,7 @@ export function CanonicalRaceSearchPanel({
                     <p className="text-[15px] font-semibold leading-snug text-white">{race.name}</p>
                     <p className="text-xs text-muted">
                       {race.locationLabel || "Location TBD"}
-                      {race.startDate ? ` · ${race.startDate.slice(0, 10)}` : ""}
+                      {race.dateSummary ? ` · ${race.dateSummary}` : race.startDate ? ` · ${race.startDate.slice(0, 10)}` : ""}
                     </p>
                     <p className="text-xs text-muted">
                       {formatDistance(race.distanceKm)}

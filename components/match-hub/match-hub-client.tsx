@@ -14,11 +14,10 @@ import {
 } from "@/lib/actions";
 import type { MatchHubBundle } from "@/lib/match-hub/service";
 import type { CanonicalStravaSuggestion } from "@/lib/strava-canonical-match/suggestions";
-import type { SearchableRaceRow } from "@/lib/races/canonical/types";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
+import { ManualRaceLinkPanel } from "@/components/manual-race-link-panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { cn } from "@/lib/utils";
 
@@ -429,12 +428,21 @@ export function MatchHubClient({
           </HubEmpty>
         ) : (
           <ul className="space-y-4">
-            {filteredUnmatched.map(({ row }) => (
+            {filteredUnmatched.map(({ row, softSuggestions }) => (
               <li key={row.strava_activity_id}>
-                <UnmatchedCard
-                  row={row}
+                <ManualRaceLinkPanel
+                  ctx={{
+                    stravaActivityId: row.strava_activity_id,
+                    activityTitle: row.name,
+                    startDateYmd: row.start_date.slice(0, 10),
+                    distanceKm: row.distance_km ?? 0,
+                    elevationM: row.elevation_gain_m ?? null
+                  }}
+                  softSuggestions={softSuggestions}
                   pending={pending}
                   onConfirm={confirmMatch}
+                  responseMode="hub"
+                  returnTo="/matches"
                   onNotRace={() => notRace(row.strava_activity_id)}
                   onSnooze={() => snooze(row.strava_activity_id)}
                 />
@@ -627,103 +635,5 @@ function HighConfidenceCard({
         </div>
       </Card>
     </li>
-  );
-}
-
-function UnmatchedCard({
-  row,
-  pending,
-  onConfirm,
-  onNotRace,
-  onSnooze
-}: {
-  row: StravaSyncedActivityRow;
-  pending: boolean;
-  onConfirm: (fd: FormData, id: string) => void;
-  onNotRace: () => void;
-  onSnooze: () => void;
-}) {
-  const m = activityMeta(row);
-  const [q, setQ] = useState("");
-  const [hits, setHits] = useState<SearchableRaceRow[] | null>(null);
-  const [searching, setSearching] = useState(false);
-
-  const runSearch = () => {
-    const qq = q.trim();
-    if (qq.length < 2) {
-      setHits(null);
-      return;
-    }
-    setSearching(true);
-    void fetch(`/api/races/canonical/search?query=${encodeURIComponent(qq)}&limit=12`)
-      .then((res) => res.json())
-      .then((body: { races?: SearchableRaceRow[] }) => {
-        setHits(body.races ?? []);
-      })
-      .catch(() => setHits([]))
-      .finally(() => setSearching(false));
-  };
-
-  return (
-    <Card className="border border-white/12 bg-panel/35 p-5">
-      <p className="font-semibold text-white">{m.title}</p>
-      <p className="type-meta mt-1 text-sm text-muted">
-        {m.date} · {m.km ? `${m.km} km` : "—"}
-        {m.el != null && m.el > 0 ? ` · ${Math.round(m.el)} m` : ""}
-      </p>
-
-      <div className="mt-4 space-y-2">
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Search verified races</p>
-        <div className="flex flex-wrap gap-2">
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), runSearch())}
-            placeholder="Race name or place…"
-            className="max-w-md border-white/15 bg-black/40"
-          />
-          <Button type="button" variant="secondary" disabled={pending || searching} onClick={() => runSearch()}>
-            {searching ? "…" : "Search"}
-          </Button>
-        </div>
-        {hits && hits.length === 0 ? <p className="text-xs text-white/45">No hits — try another phrase.</p> : null}
-        {hits && hits.length > 0 ? (
-          <ul className="mt-2 space-y-2">
-            {hits.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 px-3 py-2">
-                <span className="text-sm text-white/90">{r.name}</span>
-                <form
-                  onSubmit={(ev) => {
-                    ev.preventDefault();
-                    onConfirm(new FormData(ev.currentTarget), row.strava_activity_id);
-                  }}
-                >
-                  <input type="hidden" name="canonical_race_id" value={r.id} />
-                  <input type="hidden" name="strava_activity_id" value={row.strava_activity_id} />
-                  <input type="hidden" name="date" value={m.date} />
-                  <input type="hidden" name="distance_km" value={String(m.km)} />
-                  <input type="hidden" name="elevation_m" value={m.el != null ? String(m.el) : ""} />
-                  <Button type="submit" disabled={pending} className="text-[10px]">
-                    Link finish
-                  </Button>
-                </form>
-              </li>
-            ))}
-          </ul>
-        ) : null}
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Button type="button" variant="ghost" disabled={pending} className="text-[11px] text-white/55" onClick={onNotRace}>
-          Not a race
-        </Button>
-        <Button type="button" variant="ghost" disabled={pending} className="text-[11px]" onClick={onSnooze}>
-          Save for later
-        </Button>
-        <Link href="/races/find" className="self-center text-[11px] font-semibold uppercase tracking-wider text-accent">
-          Library →
-        </Link>
-      </div>
-    </Card>
   );
 }

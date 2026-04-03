@@ -328,6 +328,13 @@ export default async function DashboardPage() {
               suggestions={canonicalStravaSuggestions}
               returnAfterConfirm={confirmReturnTo}
             />
+            <p className="mx-auto max-w-2xl text-center text-[11px] leading-relaxed text-white/45">
+              Under 80% confidence we don&apos;t auto-suggest — use{" "}
+              <Link href="/matches#hub-unmatched" className="font-semibold text-accent underline-offset-4 hover:underline">
+                manual linking
+              </Link>{" "}
+              to search the verified catalog (names, aliases, places) and attach your finish without re-syncing Strava.
+            </p>
             <p className="text-center text-[11px] text-muted">
               <Link href="/matches" className="font-semibold uppercase tracking-[0.12em] text-accent hover:underline">
                 Open full Match &amp; import hub →

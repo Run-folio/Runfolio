@@ -1293,11 +1293,78 @@ export async function dismissCanonicalStravaMatchAction(formData: FormData) {
 }
 
 /**
+ * Remove a Strava-linked catalog finish: deletes the portfolio `races` row, clears sync link, and re-opens the activity for manual matching.
+ * Bucket goals that were completed via this link move back to planned.
+ */
+export async function unlinkStravaCatalogFinishAction(formData: FormData) {
+  try {
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
+    const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
+    if (!stravaActivityId) return { error: "Missing activity." };
+
+    const { data: raceRow, error: selErr } = await supabase
+      .from("races")
+      .select("id")
+      .eq("user_id", user.id)
+      .eq("strava_activity_id", stravaActivityId)
+      .maybeSingle();
+    if (selErr) return { error: dbErr(selErr) };
+    if (!raceRow) return { error: "No linked finish found for that activity." };
+
+    const raceId = (raceRow as { id: string }).id;
+
+    const { error: goalErr } = await supabase
+      .from("user_bucket_list_goals")
+      .update({
+        status: "planned",
+        completed_at: null,
+        linked_strava_activity_id: null,
+        linked_user_race_id: null
+      })
+      .eq("user_id", user.id)
+      .eq("linked_user_race_id", raceId)
+      .eq("status", "completed_linked");
+    if (goalErr) {
+      runfolioLog.warn("actions.unlinkStravaCatalogFinish", goalErr.message, { code: goalErr.code });
+    }
+
+    const { error: delErr } = await supabase.from("races").delete().eq("id", raceId).eq("user_id", user.id);
+    if (delErr) return { error: dbErr(delErr) };
+
+    const now = new Date().toISOString();
+    const { error: syncErr } = await supabase
+      .from("strava_synced_activities")
+      .update({
+        linked_portfolio_race_id: null,
+        match_hub_status: null,
+        updated_at: now
+      })
+      .eq("user_id", user.id)
+      .eq("strava_activity_id", stravaActivityId);
+    if (syncErr) return { error: dbErr(syncErr) };
+
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      stravaActivityId,
+      alsoPaths: ["/matches", "/dashboard", `/activities/${stravaActivityId}`, "/bucket-list"]
+    });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.unlinkStravaCatalogFinish", e);
+    return { error: e instanceof Error ? e.message : "Could not unlink finish." };
+  }
+}
+
+/**
  * Confirm Strava activity ↔ **canonical** race: portfolio row + optional bucket goal → completed_linked.
  */
 export async function confirmCanonicalStravaMatchAction(formData: FormData) {
   const responseMode = String(formData.get("response_mode") ?? "").trim();
   const isHub = responseMode === "hub";
+  const isJsonResponse = responseMode === "hub" || responseMode === "page";
 
   try {
     const gate = await requireActionPersistence();
@@ -1306,7 +1373,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
         isHub,
         code: gate.code
       });
-      if (isHub) return { error: gate.error };
+      if (isJsonResponse) return { error: gate.error };
       if (gate.code === "auth_required") {
         const loginNext = parseSafeRedirectPath(String(formData.get("return_to") ?? "")) ?? "/dashboard";
         redirect(`/auth/login?next=${encodeURIComponent(loginNext)}`);
@@ -1318,6 +1385,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
     runfolioLog.info("actions.confirmCanonicalStravaMatch", "start", {
       userId: user.id,
       isHub,
+      responseMode,
       stravaActivityId: String(formData.get("strava_activity_id") ?? "").slice(0, 12)
     });
 
@@ -1518,12 +1586,13 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
       stravaActivityId,
       alsoPaths: [returnTo, "/bucket-list", canonRacePath, "/matches"]
     });
-    if (responseMode === "hub") {
-      runfolioLog.info("actions.confirmCanonicalStravaMatch.ok", "hub response (no redirect)", {
+    if (isJsonResponse) {
+      runfolioLog.info("actions.confirmCanonicalStravaMatch.ok", "json response (no redirect)", {
         userId: user.id,
         finalRaceId,
         canonicalRaceId,
-        stravaActivityId
+        stravaActivityId,
+        responseMode
       });
       return {
         ok: true as const,
