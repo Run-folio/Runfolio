@@ -153,8 +153,11 @@ function buildFeedResult(activities: StravaFeedActivity[]): StravaFeedResult {
 
 /**
  * Fetch recent Strava activities for the current request (cookies / env token).
- * `activities` is the full loaded set; `raceCandidates` uses `filterStravaRaceCandidates`.
- * Prefer `getStravaConnectionStubFeed` for pages that only need DB-backed activities (production default).
+ * **Dangerous for API quota:** issues many `GET /athlete/activities` pages (see `STRAVA_FEED_MAX_PAGES`).
+ *
+ * Do **not** call from RSC layouts, `page.tsx` loads, `useEffect`, or setup checks — it will burn rate limits
+ * without an explicit user action. Runfolio pages use DB-backed sync + `getStravaConnectionStubFeed` instead.
+ * Keep any future use behind an explicit admin/script entry point only.
  */
 export async function getStravaFeed(): Promise<StravaFeedResult> {
   let access = await getValidStravaAccessToken();

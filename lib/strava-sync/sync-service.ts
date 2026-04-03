@@ -22,7 +22,10 @@ import {
   upsertStravaSummariesForUser,
   type SyncSummary
 } from "@/lib/strava-sync/repository";
-import { getValidStravaAccessToken } from "@/lib/strava-access-server";
+import {
+  getStravaAccessTokenWithoutProactiveRefresh,
+  getValidStravaAccessToken
+} from "@/lib/strava-access-server";
 import { createClient } from "@/lib/supabase/server";
 import { refreshStravaAccessToken } from "@/lib/strava-oauth";
 import { persistStravaTokensToCookies } from "@/lib/strava-cookies";
@@ -48,6 +51,14 @@ function rateLimitHintDetail(retryAfterSec: number | null): string {
   return "Strava rate limit — try again shortly.";
 }
 
+function stravaHeadersForLog(h: Record<string, string>): string {
+  try {
+    return JSON.stringify(h).slice(0, 450);
+  } catch {
+    return "";
+  }
+}
+
 export function formatStravaRateLimitUserMessage(
   retryAfterSec: number | null,
   savedSoFar: number
@@ -62,11 +73,24 @@ export function formatStravaRateLimitUserMessage(
   return `Imported ${savedSoFar} activit${savedSoFar === 1 ? "y" : "ies"}. Strava paused further requests for now.${when}`;
 }
 
+type AthleteListFetchMetrics = {
+  result: StravaAthleteActivitiesPageResult;
+  /** Successful HTTP calls to `GET /athlete/activities` (includes 401 retry). */
+  athleteActivitiesListHttpCalls: number;
+  /** Calls to `POST /oauth/token` refresh from this helper. */
+  oauthTokenRefreshCalls: number;
+};
+
 async function fetchAthleteActivitiesPageWithRefresh(
   accessToken: string,
   listOpts: { page: number; perPage: number; after?: number; before?: number }
-): Promise<StravaAthleteActivitiesPageResult> {
+): Promise<AthleteListFetchMetrics> {
+  let athleteActivitiesListHttpCalls = 0;
+  let oauthTokenRefreshCalls = 0;
+
   let r = await tryFetchStravaAthleteActivitiesPage(accessToken, listOpts);
+  athleteActivitiesListHttpCalls++;
+
   if (!r.ok && r.kind === "unauthorized") {
     const cred = getStravaClientCredentials();
     const jar = await getStravaTokensFromCookies();
@@ -74,30 +98,40 @@ async function fetchAthleteActivitiesPageWithRefresh(
     if (cred && refresh) {
       try {
         const t = await refreshStravaAccessToken(refresh, cred.clientId, cred.clientSecret);
+        oauthTokenRefreshCalls++;
         await persistStravaTokensToCookies(t);
         r = await tryFetchStravaAthleteActivitiesPage(t.access_token, listOpts);
+        athleteActivitiesListHttpCalls++;
       } catch (e2) {
         runfolioLog.warn("strava.sync", "refresh failed", {
           detail: e2 instanceof Error ? e2.message : "unknown"
         });
         return {
-          ok: false,
-          status: 401,
-          kind: "unauthorized",
-          message: "Strava session expired — reconnect.",
-          retryAfterSec: null
+          result: {
+            ok: false,
+            httpStatus: 401,
+            kind: "unauthorized",
+            message: "Strava session expired — reconnect.",
+            retryAfterSec: null,
+            rateLimitHeaders: {}
+          },
+          athleteActivitiesListHttpCalls,
+          oauthTokenRefreshCalls
         };
       }
     }
   }
-  return r;
+
+  return { result: r, athleteActivitiesListHttpCalls, oauthTokenRefreshCalls };
 }
 
 export type IncrementalSyncResult =
   | (SyncSummary & {
       ok: true;
       mode: "incremental";
+      /** Total `GET /athlete/activities` HTTP calls for this action. */
       requestsMade: number;
+      stravaOauthRefreshCalls: number;
       stoppedForRateLimit: boolean;
       retryAfterSec: number | null;
       rateLimitUserMessage?: string;
@@ -107,6 +141,7 @@ export type IncrementalSyncResult =
       error: string;
       needBackfill?: boolean;
       requestsMade?: number;
+      stravaOauthRefreshCalls?: number;
       retryAfterSec?: number | null;
     };
 
@@ -159,6 +194,7 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
   let retryAfterSec: number | null = null;
   let totalRaw = 0;
   let totalEligible = 0;
+  let stravaOauthRefreshCalls = 0;
 
   for (let page = 1; page <= INCREMENTAL_MAX_PAGES; page++) {
     const token = await getValidStravaAccessToken();
@@ -167,12 +203,14 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
       return { ok: false, error: "Connect Strava first." };
     }
 
-    const r = await fetchAthleteActivitiesPageWithRefresh(token, {
-      page,
-      perPage: PER_PAGE,
-      after: afterEpoch
-    });
-    requestsMade++;
+    const { result: r, athleteActivitiesListHttpCalls, oauthTokenRefreshCalls } =
+      await fetchAthleteActivitiesPageWithRefresh(token, {
+        page,
+        perPage: PER_PAGE,
+        after: afterEpoch
+      });
+    requestsMade += athleteActivitiesListHttpCalls;
+    stravaOauthRefreshCalls += oauthTokenRefreshCalls;
 
     if (!r.ok && r.kind === "rate_limit") {
       stoppedForRateLimit = true;
@@ -189,9 +227,9 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
     }
 
     if (!r.ok) {
-      const msg = r.message || `Strava list error ${r.status}`;
+      const msg = r.message || `Strava list error ${r.httpStatus}`;
       await recordIngestError(supabase, userId, msg);
-      return { ok: false, error: msg, requestsMade };
+      return { ok: false, error: msg, requestsMade, stravaOauthRefreshCalls };
     }
 
     const batch = r.data;
@@ -232,6 +270,7 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
       ok: false,
       error: formatStravaRateLimitUserMessage(retryAfterSec, 0),
       requestsMade,
+      stravaOauthRefreshCalls,
       retryAfterSec
     };
   }
@@ -247,6 +286,7 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
     skippedUnchanged: totalSkipped,
     errors: totalErrors,
     requestsMade,
+    stravaOauthRefreshCalls,
     stoppedForRateLimit,
     retryAfterSec,
     rateLimitUserMessage
@@ -260,7 +300,9 @@ export type BackfillSyncResult =
       backfillExhausted: boolean;
       rawFetched: number;
       eligibleInBatch: number;
+      /** Total `GET /athlete/activities` HTTP calls for this action. */
       requestsMade: number;
+      stravaOauthRefreshCalls: number;
       stoppedForRateLimit: boolean;
       retryAfterSec: number | null;
       hadPersistBeforeRateLimit: boolean;
@@ -271,6 +313,7 @@ export type BackfillSyncResult =
       ok: false;
       error: string;
       requestsMade?: number;
+      stravaOauthRefreshCalls?: number;
       retryAfterSec?: number | null;
       hadPersistBeforeRateLimit?: boolean;
     };
@@ -318,6 +361,7 @@ async function runBackfillStravaHistory(
       : Math.min(Math.max(opts?.maxPages ?? defaultMax, 1), 12);
   const beforeEpoch = state?.backfill_before_epoch ?? undefined;
   const before = beforeEpoch != null && beforeEpoch > 0 ? beforeEpoch : undefined;
+  const isFirstEverBackfillBatch = defaultMax === BACKFILL_FIRST_BATCH_MAX_PAGES;
 
   let totalUpserted = 0;
   let totalSkipped = 0;
@@ -326,22 +370,51 @@ async function runBackfillStravaHistory(
   let totalEligible = 0;
   const allSummaries: StravaSummaryActivityJson[] = [];
   let requestsMade = 0;
+  let stravaOauthRefreshCalls = 0;
   let stoppedForRateLimit = false;
   let retryAfterSec: number | null = null;
 
   for (let page = 1; page <= maxPages; page++) {
-    const token = await getValidStravaAccessToken();
+    let token: string | null = null;
+    let oauthBeforeList = 0;
+    if (page === 1) {
+      const t = await getStravaAccessTokenWithoutProactiveRefresh();
+      token = t.token;
+      oauthBeforeList = t.oauthRefreshCount;
+    } else {
+      token = await getValidStravaAccessToken();
+    }
+    stravaOauthRefreshCalls += oauthBeforeList;
+
     if (!token) {
       await recordIngestError(supabase, userId, "Connect Strava first.");
-      return { ok: false, error: "Connect Strava first." };
+      return { ok: false, error: "Connect Strava first.", stravaOauthRefreshCalls };
     }
 
-    const r = await fetchAthleteActivitiesPageWithRefresh(token, {
-      page,
-      perPage: PER_PAGE,
-      ...(before != null ? { before } : {})
-    });
-    requestsMade++;
+    const { result: r, athleteActivitiesListHttpCalls, oauthTokenRefreshCalls } =
+      await fetchAthleteActivitiesPageWithRefresh(token, {
+        page,
+        perPage: PER_PAGE,
+        ...(before != null ? { before } : {})
+      });
+    requestsMade += athleteActivitiesListHttpCalls;
+    stravaOauthRefreshCalls += oauthTokenRefreshCalls;
+
+    if (isFirstEverBackfillBatch && page === 1) {
+      runfolioLog.info("strava.backfill", "first_list_response", {
+        userId,
+        firstEndpoint: "GET /api/v3/athlete/activities",
+        proactiveListOauthSkipped: true,
+        oauthRefreshCallsBeforeFirstList: oauthBeforeList,
+        oauthRefreshCallsInListHelper: oauthTokenRefreshCalls,
+        httpStatus: r.httpStatus,
+        rateLimitHeaders: stravaHeadersForLog(r.rateLimitHeaders),
+        activitiesReturned: r.ok ? r.data.length : null,
+        listOk: r.ok,
+        listKind: r.ok ? "success" : r.kind,
+        failureBeforeFirstPersist: !(r.ok && r.data.length > 0)
+      });
+    }
 
     if (!r.ok && r.kind === "rate_limit") {
       stoppedForRateLimit = true;
@@ -351,16 +424,24 @@ async function runBackfillStravaHistory(
         userId,
         page,
         requestsMade,
+        stravaOauthRefreshCalls,
         hadPersistBeforeRateLimit: allSummaries.length > 0,
-        retryAfterSec
+        retryAfterSec,
+        failurePhase: allSummaries.length > 0 ? "after_first_persist" : "before_first_persist"
       });
       break;
     }
 
     if (!r.ok) {
-      const msg = r.message || `Strava list error ${r.status}`;
+      const msg = r.message || `Strava list error ${r.httpStatus}`;
       await recordIngestError(supabase, userId, msg);
-      return { ok: false, error: msg, requestsMade };
+      return {
+        ok: false,
+        error: msg,
+        requestsMade,
+        stravaOauthRefreshCalls,
+        hadPersistBeforeRateLimit: allSummaries.length > 0
+      };
     }
 
     const batch = r.data;
@@ -374,6 +455,17 @@ async function runBackfillStravaHistory(
     totalUpserted += result.upserted;
     totalSkipped += result.skippedUnchanged;
     totalErrors += result.errors;
+
+    if (isFirstEverBackfillBatch && page === 1) {
+      runfolioLog.info("strava.backfill", "first_page_persisted", {
+        userId,
+        qualifyingActivities: items.length,
+        upserted: result.upserted,
+        skippedUnchanged: result.skippedUnchanged,
+        errors: result.errors,
+        failurePhase: "after_first_list_ok"
+      });
+    }
 
     runfolioLog.info("strava.backfill", "page_persisted", {
       userId,
@@ -394,6 +486,7 @@ async function runBackfillStravaHistory(
       ok: false,
       error: formatStravaRateLimitUserMessage(retryAfterSec, 0),
       requestsMade,
+      stravaOauthRefreshCalls,
       retryAfterSec,
       hadPersistBeforeRateLimit: false
     };
@@ -415,6 +508,7 @@ async function runBackfillStravaHistory(
       rawFetched: 0,
       eligibleInBatch: 0,
       requestsMade,
+      stravaOauthRefreshCalls,
       stoppedForRateLimit: false,
       retryAfterSec: null,
       hadPersistBeforeRateLimit: false
@@ -439,6 +533,7 @@ async function runBackfillStravaHistory(
     runfolioLog.warn("strava.backfill", "batch_done_rate_limited_after_persist", {
       userId,
       requestsMade,
+      stravaOauthRefreshCalls,
       rawFetched: totalRaw,
       upserted: totalUpserted
     });
@@ -454,6 +549,7 @@ async function runBackfillStravaHistory(
     skippedUnchanged: totalSkipped,
     errors: totalErrors,
     requestsMade,
+    stravaOauthRefreshCalls,
     stoppedForRateLimit,
     retryAfterSec,
     hadPersistBeforeRateLimit,

@@ -19,7 +19,6 @@ import { dismissCanonicalMatchSuggestion } from "@/lib/strava-sync/repository";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { snapshotFromRaceLinkFields, snapshotFromSyncedRow } from "@/lib/linked-activity-snapshot";
 import { backfillStravaHistoryForUserId, syncStravaActivitiesForUserId } from "@/lib/strava-sync/sync-service";
-import { getValidStravaAccessToken } from "@/lib/strava-access-server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isConfirmedPortfolioCompletion } from "@/lib/portfolio-race";
 import type { Race } from "@/types";
@@ -1133,7 +1132,8 @@ export async function syncStravaActivitiesAction() {
       return {
         error: res.error,
         retryAfterSec: res.retryAfterSec ?? null,
-        requestsMade: res.requestsMade
+        requestsMade: res.requestsMade,
+        stravaOauthRefreshCalls: res.stravaOauthRefreshCalls
       };
     }
     await revalidatePortfolioSurfaces(supabase, user.id, {
@@ -1143,7 +1143,8 @@ export async function syncStravaActivitiesAction() {
       upserted: res.upserted,
       skipped: res.skippedUnchanged,
       stoppedForRateLimit: res.stoppedForRateLimit,
-      requestsMade: res.requestsMade
+      requestsMade: res.requestsMade,
+      stravaOauthRefreshCalls: res.stravaOauthRefreshCalls
     });
     return {
       ok: true as const,
@@ -1154,6 +1155,7 @@ export async function syncStravaActivitiesAction() {
       stoppedForRateLimit: res.stoppedForRateLimit,
       retryAfterSec: res.retryAfterSec,
       requestsMade: res.requestsMade,
+      stravaOauthRefreshCalls: res.stravaOauthRefreshCalls,
       rateLimitUserMessage: res.rateLimitUserMessage
     };
   } catch (e) {
@@ -1181,7 +1183,8 @@ export async function backfillStravaHistoryAction() {
       return {
         error: res.error,
         retryAfterSec: res.retryAfterSec ?? null,
-        requestsMade: res.requestsMade
+        requestsMade: res.requestsMade,
+        stravaOauthRefreshCalls: res.stravaOauthRefreshCalls
       };
     }
     await revalidatePortfolioSurfaces(supabase, user.id, {
@@ -1194,7 +1197,8 @@ export async function backfillStravaHistoryAction() {
       rawFetched: res.rawFetched,
       eligibleInBatch: res.eligibleInBatch,
       stoppedForRateLimit: res.stoppedForRateLimit,
-      requestsMade: res.requestsMade
+      requestsMade: res.requestsMade,
+      stravaOauthRefreshCalls: res.stravaOauthRefreshCalls
     });
     return {
       ok: true as const,
@@ -1208,6 +1212,7 @@ export async function backfillStravaHistoryAction() {
       stoppedForRateLimit: res.stoppedForRateLimit,
       retryAfterSec: res.retryAfterSec,
       requestsMade: res.requestsMade,
+      stravaOauthRefreshCalls: res.stravaOauthRefreshCalls,
       hadPersistBeforeRateLimit: res.hadPersistBeforeRateLimit,
       rateLimitUserMessage: res.rateLimitUserMessage
     };

@@ -150,14 +150,32 @@ export function parseStravaRetryAfterSeconds(res: Response): number | null {
   return null;
 }
 
+/** Headers useful for quota / limit debugging (logging). */
+export function stravaRateRelatedHeaders(res: Response): Record<string, string> {
+  const out: Record<string, string> = {};
+  res.headers.forEach((value, key) => {
+    const low = key.toLowerCase();
+    if (low.includes("ratelimit") || low === "retry-after" || low === "x-request-id") {
+      out[key] = value;
+    }
+  });
+  return out;
+}
+
 export type StravaAthleteActivitiesPageResult =
-  | { ok: true; data: StravaSummaryActivityJson[] }
+  | {
+      ok: true;
+      data: StravaSummaryActivityJson[];
+      httpStatus: number;
+      rateLimitHeaders: Record<string, string>;
+    }
   | {
       ok: false;
-      status: number;
+      httpStatus: number;
       kind: "rate_limit" | "unauthorized" | "error";
       message: string;
       retryAfterSec: number | null;
+      rateLimitHeaders: Record<string, string>;
     };
 
 export async function tryFetchStravaAthleteActivitiesPage(
@@ -174,26 +192,54 @@ export async function tryFetchStravaAthleteActivitiesPage(
     next: { revalidate: 0 }
   });
   const text = await res.text();
+  const rateLimitHeaders = stravaRateRelatedHeaders(res);
   if (!res.ok) {
     const detail = parseStravaListErrorBody(text) || `Strava list error ${res.status}`;
     const retryAfterSec = parseStravaRetryAfterSeconds(res);
     if (res.status === 429) {
-      return { ok: false, status: 429, kind: "rate_limit", message: detail, retryAfterSec };
+      return {
+        ok: false,
+        httpStatus: 429,
+        kind: "rate_limit",
+        message: detail,
+        retryAfterSec,
+        rateLimitHeaders
+      };
     }
     if (res.status === 401) {
-      return { ok: false, status: 401, kind: "unauthorized", message: detail, retryAfterSec: null };
+      return {
+        ok: false,
+        httpStatus: 401,
+        kind: "unauthorized",
+        message: detail,
+        retryAfterSec: null,
+        rateLimitHeaders
+      };
     }
-    return { ok: false, status: res.status, kind: "error", message: detail, retryAfterSec: null };
+    return {
+      ok: false,
+      httpStatus: res.status,
+      kind: "error",
+      message: detail,
+      retryAfterSec: null,
+      rateLimitHeaders
+    };
   }
   try {
-    return { ok: true, data: JSON.parse(text) as StravaSummaryActivityJson[] };
+    return {
+      ok: true,
+      data: JSON.parse(text) as StravaSummaryActivityJson[],
+      httpStatus: res.status,
+      rateLimitHeaders
+    };
   } catch {
     return {
       ok: false,
-      status: res.status,
+      httpStatus: res.status,
       kind: "error",
       message: "Invalid JSON from Strava activities list.",
-      retryAfterSec: null
+      retryAfterSec: null,
+      rateLimitHeaders
     };
   }
 }
@@ -214,5 +260,5 @@ export async function fetchStravaAthleteActivities(
   if (r.kind === "rate_limit") {
     throw new Error("Strava rate limit — wait a few minutes and try again.");
   }
-  throw new Error(r.message || `Strava list error ${r.status}`);
+  throw new Error(r.message || `Strava list error ${r.httpStatus}`);
 }
