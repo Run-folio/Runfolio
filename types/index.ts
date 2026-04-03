@@ -15,6 +15,8 @@ export type Race = {
   /** Set when a Strava activity is linked after user confirms a known-race match */
   strava_activity_id?: string | null;
   discover_race_id?: string | null;
+  /** When finish is tied to the canonical race catalog */
+  canonical_race_id?: string | null;
   /** Optional portfolio tags (persist when columns exist / future editor). */
   tag_pb?: boolean;
   tag_career_highlight?: boolean;
@@ -39,6 +41,22 @@ export type Race = {
    * Default true for legacy rows; set true when the user confirms a Strava major for their portfolio.
    */
   include_on_profile?: boolean | null;
+  /** ISO timestamp when the runner chose to show this finish on their public profile; null = not published. */
+  profile_approved_at?: string | null;
+  /** Spotlight / featured treatment on profile when published. */
+  profile_featured?: boolean | null;
+  /** Enriched by `get_public_profile_bundle` join to canonical_races (not stored on `races`). */
+  canonical_logo_url?: string | null;
+  canonical_hero_url?: string | null;
+};
+
+/** Public runner row from `get_public_profile_bundle`. */
+export type PublicRunnerProfile = {
+  id: string;
+  name: string;
+  profile_location: string | null;
+  profile_tagline: string | null;
+  profile_public: boolean;
 };
 
 /** Serializable Strava snapshot for `/activities/[id]` (from API or feed fallback). */

@@ -206,7 +206,12 @@ export function BucketListWorkflow({
           </p>
         </div>
         <Card className="border-white/10 bg-panelAlt/80 p-4 md:p-5">
-          <CanonicalRaceSearchPanel viewer={viewer} addedCanonicalRaceIds={addedCanonicalIds} variant="full" />
+          <CanonicalRaceSearchPanel
+            viewer={viewer}
+            addedCanonicalRaceIds={addedCanonicalIds}
+            futureGoalsHref="/bucket-list#bucket-canonical-future"
+            variant="full"
+          />
         </Card>
       </section>
 
@@ -274,7 +279,7 @@ export function BucketListWorkflow({
         </Card>
       </section>
 
-      <section className="space-y-4">
+      <section id="bucket-canonical-future" className="scroll-mt-24 space-y-4">
         <div>
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-200/90">Future Goals</h2>
           <p className="type-meta mt-2 max-w-2xl text-sm">

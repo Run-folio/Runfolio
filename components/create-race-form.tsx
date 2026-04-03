@@ -110,14 +110,18 @@ export function CreateRaceForm({
     return isUnmatchedMajorEffortCandidate(pendingMatchInput, matchCandidates);
   }, [pendingMatchInput, matchCandidates]);
 
+  /** Primitives only: avoids effect re-running when `pendingMatchInput` is replaced with a new object for the same activity (would reset the custom-major field while typing). */
+  const pendingStravaId = pendingMatchInput?.strava_id ?? null;
+  const pendingActivityTitle = pendingMatchInput?.name ?? "";
+
   useEffect(() => {
-    if (!pendingMatchInput) {
+    if (!pendingStravaId?.trim()) {
       setCustomMajorName("");
       setCustomMajorError(null);
       return;
     }
-    setCustomMajorName(pendingMatchInput.name || "");
-  }, [pendingMatchInput?.strava_id]);
+    setCustomMajorName(pendingActivityTitle || "");
+  }, [pendingStravaId, pendingActivityTitle]);
 
   function toMatchInputFromActivity(activity: Activity): ActivityMatchInput {
     return {
@@ -266,7 +270,19 @@ export function CreateRaceForm({
 
   return (
     <>
-    <form action={asFormAction(createRaceAction)} className="space-y-4">
+      {stravaOAuthConfigured ? (
+        <Card className="mb-5 border border-amber-400/25 bg-amber-950/20 p-4">
+          <p className="text-sm leading-relaxed text-white/85">
+            <span className="font-semibold text-amber-100/95">Batch Strava race review?</span> The{" "}
+            <Link href="/matches" className="font-semibold text-accent underline-offset-4 hover:underline">
+              Match &amp; import hub
+            </Link>{" "}
+            is the main place to confirm smart matches, clear rejects, and manually link verified events. Use this
+            page for a one-off add.
+          </p>
+        </Card>
+      ) : null}
+      <form action={asFormAction(createRaceAction)} className="space-y-4">
       <Card className="bg-panelAlt/85 p-0">
         <div className="grid gap-4 p-5 lg:grid-cols-[1.4fr_1fr]">
           <div className="border border-border bg-black/30 p-4">

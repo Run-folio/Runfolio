@@ -13,7 +13,7 @@ import { runfolioLog } from "@/lib/runfolio-log";
 const RACES = "canonical_races";
 const SOURCES = "canonical_race_sources";
 
-type CanonicalRaceRow = {
+export type CanonicalRaceRow = {
   id: string;
   slug: string;
   name: string;
@@ -189,6 +189,38 @@ export async function getCanonicalRaceById(id: string): Promise<RepositoryResult
   const { data, error } = await supabase.from(RACES).select("*").eq("id", id).maybeSingle();
   if (error) {
     runfolioLog.warn("canonical.repo.getRace", error.message, { id });
+    return { ok: false, error: error.message };
+  }
+  if (!data) return { ok: true, data: null };
+  return { ok: true, data: raceRowToDomain(data as CanonicalRaceRow) };
+}
+
+const CANONICAL_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const CANONICAL_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,118}$/i;
+
+/**
+ * Public detail lookup: **active** canonical races only (slug or UUID). Invalid ref shape → null data (not an error).
+ * Uses service role so pages work without per-user RLS (same as search pipeline).
+ */
+export async function getActiveCanonicalRaceByRef(ref: string): Promise<RepositoryResult<CanonicalRace | null>> {
+  const supabase = createServiceRoleClient();
+  if (!supabase) return noClient();
+  const raw = decodeURIComponent(ref).trim();
+  if (!raw) return { ok: true, data: null };
+
+  let q = supabase.from(RACES).select("*").eq("status", "active");
+  if (CANONICAL_UUID_RE.test(raw)) {
+    q = q.eq("id", raw);
+  } else if (CANONICAL_SLUG_RE.test(raw)) {
+    q = q.eq("slug", raw.toLowerCase());
+  } else {
+    return { ok: true, data: null };
+  }
+
+  const { data, error } = await q.maybeSingle();
+  if (error) {
+    runfolioLog.warn("canonical.repo.getActiveByRef", error.message, { ref: raw });
     return { ok: false, error: error.message };
   }
   if (!data) return { ok: true, data: null };

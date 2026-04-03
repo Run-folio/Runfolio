@@ -22,11 +22,31 @@ export function confirmedCompletedPortfolioRaces(races: Race[]): Race[] {
   return races.filter(isConfirmedPortfolioCompletion);
 }
 
-/** Public profile + Top Races / Journey: user-approved portfolio finishes only. */
+/** Legacy flag: excluded when false (hidden). */
 export function raceIncludedOnProfile(race: Race): boolean {
   return race.include_on_profile !== false;
 }
 
+/** Shown on the curated public profile (confirmed finish + not hidden + published). */
+export function racePublishedOnProfile(race: Race): boolean {
+  if (!raceIncludedOnProfile(race)) return false;
+  return Boolean(race.profile_approved_at?.trim());
+}
+
+/** Completed + linked rows the user can publish (Strava or catalog id). */
+export function raceEligibleForProfilePublish(race: Race): boolean {
+  return isConfirmedPortfolioCompletion(race) && !race.profile_approved_at?.trim();
+}
+
+/** User hid a previously published finish — can restore visibility. */
+export function raceNeedsProfileRestore(race: Race): boolean {
+  return (
+    isConfirmedPortfolioCompletion(race) &&
+    race.include_on_profile === false &&
+    Boolean(race.profile_approved_at?.trim())
+  );
+}
+
 export function profileApprovedCompletedRaces(races: Race[]): Race[] {
-  return confirmedCompletedPortfolioRaces(races).filter(raceIncludedOnProfile);
+  return confirmedCompletedPortfolioRaces(races).filter(racePublishedOnProfile);
 }

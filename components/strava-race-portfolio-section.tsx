@@ -47,10 +47,14 @@ export function StravaRacePortfolioSection({
         <Card className="border-dashed border-white/20 bg-panel/40 p-6 text-center">
           <p className="text-sm text-muted">
             Strava isn&apos;t connected or the feed couldn&apos;t load. Hook it up from{" "}
-            <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
+            <Link href="/matches" className="font-semibold text-accent underline-offset-4 hover:underline">
+              Match &amp; import hub
+            </Link>{" "}
+            or{" "}
+            <Link href="/races/new" className="font-semibold text-white/70 underline-offset-4 hover:underline">
               Add race
             </Link>{" "}
-            to import marathon and ultra efforts.
+            for a quick single import.
           </p>
           {stravaOAuthConfigured ? (
             <Link
@@ -82,9 +86,14 @@ export function StravaRacePortfolioSection({
             No qualifying efforts in your latest Strava import. Keep training — your next marathon or ultra will show
             up here automatically.
           </p>
-          <Link href="/races/new" className="mt-4 inline-block text-sm font-semibold text-accent hover:underline">
-            Import a specific activity by URL →
-          </Link>
+          <div className="mt-4 flex flex-wrap gap-4">
+            <Link href="/matches" className="text-sm font-semibold uppercase tracking-wider text-accent hover:underline">
+              Match &amp; import hub →
+            </Link>
+            <Link href="/races/new" className="text-sm font-semibold text-muted hover:text-white">
+              One activity by URL →
+            </Link>
+          </div>
         </Card>
       </section>
     );

@@ -51,11 +51,18 @@ type ExplorerProps = {
   userRaces: Race[] | null;
   /** Canonical race IDs already on Future Goals */
   addedCanonicalRaceIds: string[];
+  /** Profile or bucket-list anchor for “Future Goals” jump after add */
+  futureGoalsHref?: string;
 };
 
 const INGEST_MOCK = process.env.NEXT_PUBLIC_RACES_INGEST_MOCK === "1";
 
-export function FindRacesExplorer({ viewer, userRaces, addedCanonicalRaceIds }: ExplorerProps) {
+export function FindRacesExplorer({
+  viewer,
+  userRaces,
+  addedCanonicalRaceIds,
+  futureGoalsHref
+}: ExplorerProps) {
   const [query, setQuery] = useState("");
   const [distance, setDistance] = useState<DistanceFilterId>("any");
   const [surface, setSurface] = useState<SurfaceFilterId>("any");
@@ -132,6 +139,7 @@ export function FindRacesExplorer({ viewer, userRaces, addedCanonicalRaceIds }: 
         <CanonicalRaceSearchPanel
           viewer={viewer}
           addedCanonicalRaceIds={addedCanonicalRaceIds}
+          futureGoalsHref={futureGoalsHref}
           variant="compact"
         />
       </section>

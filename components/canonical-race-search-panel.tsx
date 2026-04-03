@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { addCanonicalRaceToBucketListAction } from "@/lib/actions";
 import type { SearchableRaceRow } from "@/lib/races/canonical/types";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,8 @@ type Props = {
   viewer: "guest" | "authed";
   /** Canonical race IDs already on the user’s Future Goals */
   addedCanonicalRaceIds: string[];
+  /** e.g. `/${username}#profile-future-goals` or `/bucket-list#bucket-canonical-future` */
+  futureGoalsHref?: string | null;
   /** Compact layout for embedding (e.g. find page) */
   variant?: "full" | "compact";
   className?: string;
@@ -49,9 +51,19 @@ function RaceMedia({ race }: { race: SearchableRaceRow }) {
 }
 
 /** Search + filters against `/api/races/canonical/search` (active canonical races only). */
-export function CanonicalRaceSearchPanel({ viewer, addedCanonicalRaceIds, variant = "full", className }: Props) {
+export function CanonicalRaceSearchPanel({
+  viewer,
+  addedCanonicalRaceIds,
+  futureGoalsHref = null,
+  variant = "full",
+  className
+}: Props) {
   const router = useRouter();
-  const addedSet = useMemo(() => new Set(addedCanonicalRaceIds), [addedCanonicalRaceIds]);
+  const [localAddedIds, setLocalAddedIds] = useState<string[]>([]);
+  const addedSet = useMemo(
+    () => new Set([...addedCanonicalRaceIds, ...localAddedIds]),
+    [addedCanonicalRaceIds, localAddedIds]
+  );
   const [query, setQuery] = useState("");
   const [country, setCountry] = useState("");
   const [dateFrom, setDateFrom] = useState("");
@@ -74,7 +86,9 @@ export function CanonicalRaceSearchPanel({ viewer, addedCanonicalRaceIds, varian
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [addPending, startAdd] = useTransition();
+  const [addingRaceId, setAddingRaceId] = useState<string | null>(null);
+  const [showGoalJump, setShowGoalJump] = useState(false);
+  const goalJumpTimer = useRef<number | null>(null);
 
   useEffect(() => {
     const t = window.setTimeout(
@@ -133,10 +147,21 @@ export function CanonicalRaceSearchPanel({ viewer, addedCanonicalRaceIds, varian
     void runSearch();
   }, [runSearch]);
 
-  const runAdd = (canonicalRaceId: string) => {
+  useEffect(
+    () => () => {
+      if (goalJumpTimer.current != null) window.clearTimeout(goalJumpTimer.current);
+    },
+    []
+  );
+
+  const runAdd = async (canonicalRaceId: string) => {
     if (viewer !== "authed") return;
+    if (addedSet.has(canonicalRaceId) || addingRaceId === canonicalRaceId) return;
     setFeedback(null);
-    startAdd(async () => {
+    if (goalJumpTimer.current) window.clearTimeout(goalJumpTimer.current);
+    setShowGoalJump(false);
+    setAddingRaceId(canonicalRaceId);
+    try {
       const fd = new FormData();
       fd.set("canonical_race_id", canonicalRaceId);
       const res = await addCanonicalRaceToBucketListAction(fd);
@@ -144,13 +169,16 @@ export function CanonicalRaceSearchPanel({ viewer, addedCanonicalRaceIds, varian
         setFeedback(res.error);
         return;
       }
-      if ("already" in res && res.already) {
-        setFeedback("Already on your bucket list.");
-      } else {
-        setFeedback("Added to Future Goals.");
+      setLocalAddedIds((prev) => (prev.includes(canonicalRaceId) ? prev : [...prev, canonicalRaceId]));
+      setFeedback(null);
+      if (futureGoalsHref?.trim()) {
+        setShowGoalJump(true);
+        goalJumpTimer.current = window.setTimeout(() => setShowGoalJump(false), 10_000);
       }
       router.refresh();
-    });
+    } finally {
+      setAddingRaceId(null);
+    }
   };
 
   const showFilters = variant === "full";
@@ -169,6 +197,7 @@ export function CanonicalRaceSearchPanel({ viewer, addedCanonicalRaceIds, varian
             onChange={(e) => {
               setQuery(e.target.value);
               setFeedback(null);
+              setShowGoalJump(false);
             }}
             placeholder="Search by race name or location…"
             className="border-white/15 bg-black/40"
@@ -249,6 +278,17 @@ export function CanonicalRaceSearchPanel({ viewer, addedCanonicalRaceIds, varian
         </p>
       ) : null}
 
+      {showGoalJump && futureGoalsHref?.trim() ? (
+        <p className="text-[13px] text-white/65">
+          <Link
+            href={futureGoalsHref.trim()}
+            className="font-medium text-accent underline-offset-4 transition hover:text-white hover:underline"
+          >
+            View Future Goals →
+          </Link>
+        </p>
+      ) : null}
+
       {error ? (
         <p className="text-sm text-red-300/90" role="alert">
           {error}
@@ -300,14 +340,27 @@ export function CanonicalRaceSearchPanel({ viewer, addedCanonicalRaceIds, varian
                       </div>
                     ) : null}
                     <div className="mt-auto flex flex-wrap gap-2 pt-2">
+                      <Link
+                        href={`/races/${race.slug}`}
+                        className="inline-flex items-center justify-center rounded-[10px] border border-white/15 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted transition hover:border-white/30 hover:text-white"
+                      >
+                        Details
+                      </Link>
                       {viewer === "authed" ? (
                         <Button
                           type="button"
-                          disabled={addPending || onList}
-                          onClick={() => runAdd(race.id)}
-                          className="px-3 py-2 text-[10px] font-semibold uppercase tracking-wider"
+                          disabled={onList || addingRaceId === race.id}
+                          onClick={() => void runAdd(race.id)}
+                          className={cn(
+                            "px-3 py-2 text-[10px] font-semibold uppercase tracking-wider",
+                            onList && "border-emerald-500/40 bg-emerald-950/35 text-emerald-100/95 hover:bg-emerald-950/45"
+                          )}
                         >
-                          {onList ? "On bucket list" : addPending ? "Adding…" : "Add to Bucket List"}
+                          {onList
+                            ? "Added"
+                            : addingRaceId === race.id
+                              ? "Adding…"
+                              : "Add to Bucket List"}
                         </Button>
                       ) : null}
                     </div>

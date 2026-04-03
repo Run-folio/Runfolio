@@ -1,6 +1,8 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { listTrophyCollectionSlugs } from "@/lib/collections/registry";
+import { collectProfileRevalidatePaths } from "@/lib/profile-path-server";
+import { runfolioLog } from "@/lib/runfolio-log";
 
 export async function revalidatePortfolioSurfaces(
   supabase: SupabaseClient,
@@ -13,11 +15,17 @@ export async function revalidatePortfolioSurfaces(
   }
 ) {
   revalidatePath("/dashboard");
+  revalidatePath("/matches");
   revalidatePath("/bucket-list");
-  const { data } = await supabase.from("users").select("name").eq("id", userId).maybeSingle();
-  if (data?.name) {
-    revalidatePath(`/${data.name}`);
+  const profilePaths = await collectProfileRevalidatePaths(supabase, userId);
+  for (const p of profilePaths) {
+    revalidatePath(p);
   }
+  runfolioLog.info("revalidate.surfaces", "invalidated profile + surfaces", {
+    userId,
+    profilePathCount: profilePaths.length,
+    alsoCount: opts?.alsoPaths?.length ?? 0
+  });
   if (opts?.discoverRaceId?.trim()) {
     revalidatePath(`/races/${opts.discoverRaceId.trim()}`);
   }
@@ -29,7 +37,8 @@ export async function revalidatePortfolioSurfaces(
   }
   for (const p of opts?.alsoPaths ?? []) {
     if (p.startsWith("/") && !p.startsWith("//") && !p.includes("://")) {
-      revalidatePath(p);
+      const clean = p.split("#")[0]?.split("?")[0] ?? p;
+      revalidatePath(clean);
     }
   }
 }

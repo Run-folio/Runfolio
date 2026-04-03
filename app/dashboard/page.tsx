@@ -3,9 +3,11 @@ import { isDynamicServerError } from "next/dist/client/components/hooks-server-c
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
+import { CanonicalStravaMatchSuggestions } from "@/components/canonical-strava-match-suggestions";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { RaceJourney } from "@/components/race-journey";
 import { StravaRacePortfolioSection } from "@/components/strava-race-portfolio-section";
+import { SyncStravaActivitiesButton } from "@/components/sync-strava-activities-button";
 import { Card } from "@/components/ui/card";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
@@ -16,8 +18,14 @@ import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { getStravaFeed } from "@/lib/strava-feed";
 import { fetchCanonicalBucketGoalsForUser } from "@/lib/bucket-list-canonical/queries";
+import { buildCanonicalStravaSuggestionsForUser } from "@/lib/strava-canonical-match/suggestions";
+import {
+  listDismissedCanonicalStravaIds,
+  listSyncedActivitiesForUser
+} from "@/lib/strava-sync/repository";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
+import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
 import type { Race } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +40,8 @@ export default async function DashboardPage() {
   let races: Race[] = [];
   let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];
   let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
+  let canonicalStravaSuggestions: Awaited<ReturnType<typeof buildCanonicalStravaSuggestionsForUser>> = [];
+  let confirmReturnTo = "/dashboard";
   if (isSupabaseConfigured()) {
     try {
       const { user, authError } = await getServerAuthUser();
@@ -49,6 +59,27 @@ export default async function DashboardPage() {
       const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
       canonicalFuture = canon.future;
       canonicalCompleted = canon.completed;
+      const profilePath = await resolveDefaultProfilePathForUser(supabase, user.id);
+      confirmReturnTo =
+        profilePath === "/dashboard" ? "/dashboard" : `${profilePath}#profile-completed-races`;
+      try {
+        const synced = await listSyncedActivitiesForUser(supabase, user.id);
+        const dismissed = await listDismissedCanonicalStravaIds(supabase, user.id);
+        const portfolioStravaIds = new Set(
+          (races ?? []).map((r) => r.strava_activity_id).filter((x): x is string => Boolean(x?.trim()))
+        );
+        canonicalStravaSuggestions = await buildCanonicalStravaSuggestionsForUser({
+          rows: synced,
+          dismissedStravaIds: dismissed,
+          portfolioStravaIds
+        });
+      } catch (matchErr) {
+        runfolioLog.warn(
+          "Dashboard.canonicalStravaSuggestions",
+          matchErr instanceof Error ? matchErr.message : "failed"
+        );
+        canonicalStravaSuggestions = [];
+      }
     } catch (e) {
       if (isDynamicServerError(e)) throw e;
       if (isRedirectError(e)) throw e;
@@ -118,16 +149,22 @@ export default async function DashboardPage() {
           </div>
           <div className="flex shrink-0 flex-col gap-3 md:items-end">
             <Link
-              href="/races/new"
+              href="/matches"
               className="rounded-[12px] bg-accent px-4 py-2 text-center text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
             >
-              Add Race
+              Match &amp; import
             </Link>
             <Link
               href="/races/new"
               className="rounded-[12px] border border-border bg-panelAlt px-4 py-2 text-center text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-slate-800"
             >
-              Import from Strava
+              Add race
+            </Link>
+            <Link
+              href="/races/new"
+              className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-muted transition hover:text-white"
+            >
+              Quick Strava import →
             </Link>
           </div>
         </div>
@@ -152,12 +189,20 @@ export default async function DashboardPage() {
                   Link a Strava activity or add a race with a catalog match so highlights reflect real finishes — not
                   placeholders.
                 </p>
-                <Link
-                  href="/races/new"
-                  className="mt-5 inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-accent hover:underline"
-                >
-                  Add or confirm a race →
-                </Link>
+                <div className="mt-5 flex flex-wrap justify-center gap-4">
+                  <Link
+                    href="/matches"
+                    className="inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-accent hover:underline"
+                  >
+                    Review Strava matches →
+                  </Link>
+                  <Link
+                    href="/races/new"
+                    className="inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-white/55 hover:underline"
+                  >
+                    Quick add race →
+                  </Link>
+                </div>
               </Card>
             ) : (
               completedSorted.slice(0, 4).map((race, i) => (
@@ -183,6 +228,32 @@ export default async function DashboardPage() {
             )}
           </div>
         </section>
+
+        {stravaOAuthConfigured && stravaFeed.ok ? (
+          <section className="space-y-5 rounded-[14px] border border-white/10 bg-panel/30 p-5 md:p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="max-w-xl space-y-2">
+                <p className="type-meta text-sm text-muted">
+                  Sync keeps Strava here for verified race matching. The{" "}
+                  <Link href="/matches" className="font-medium text-accent hover:underline">
+                    Match &amp; import hub
+                  </Link>{" "}
+                  is the home for review, rejects, and manual links — this strip is a quick preview.
+                </p>
+              </div>
+              <SyncStravaActivitiesButton />
+            </div>
+            <CanonicalStravaMatchSuggestions
+              suggestions={canonicalStravaSuggestions}
+              returnAfterConfirm={confirmReturnTo}
+            />
+            <p className="text-center text-[11px] text-muted">
+              <Link href="/matches" className="font-semibold uppercase tracking-[0.12em] text-accent hover:underline">
+                Open full Match &amp; import hub →
+              </Link>
+            </p>
+          </section>
+        ) : null}
 
         <StravaRacePortfolioSection
           candidates={stravaRaceEnriched}

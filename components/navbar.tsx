@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "Overview" },
+  { href: "/matches", label: "Match & import" },
   { href: "/races/new", label: "Add race" },
   { href: "/races/find", label: "Find a race" },
   { href: "/collections", label: "Collections" },
@@ -20,6 +21,7 @@ function isNavActive(pathname: string | null, href: string) {
   if (pathname === href) return true;
   if (href === "/collections") return pathname.startsWith("/collections");
   if (href === "/dashboard") return pathname === "/dashboard";
+  if (href === "/matches") return pathname === "/matches" || pathname.startsWith("/matches/");
   return pathname.startsWith(`${href}/`);
 }
 

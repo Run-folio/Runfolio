@@ -17,6 +17,11 @@ import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { getStravaFeed } from "@/lib/strava-feed";
 import { rankStravaActivitiesForDiscoverRace } from "@/lib/strava-race-candidates";
+import { CanonicalRaceDetailView } from "@/components/canonical-race-detail/canonical-race-detail-view";
+import { CanonicalRaceCatalogOffline } from "@/components/canonical-race-detail/catalog-offline";
+import { getCachedCanonicalDetailResult } from "@/lib/races/canonical/detail-cache";
+import { fetchCanonicalRaceViewerState } from "@/lib/races/canonical/detail-user-state";
+import { formatCanonicalLocation } from "@/lib/races/canonical/detail-presentational";
 import type { DiscoverStravaActivityCandidate, Race } from "@/types";
 
 type Props = {
@@ -25,9 +30,21 @@ type Props = {
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { raceId } = await params;
-  const d = getDiscoverRaceDetail(raceId);
-  if (!d) return { title: "Race · Runfolio" };
-  return { title: `${d.displayTitle} · Runfolio` };
+  if (isDiscoverCatalogRaceId(raceId)) {
+    const d = getDiscoverRaceDetail(raceId);
+    if (!d) return { title: "Race · Runfolio" };
+    return { title: `${d.displayTitle} · Runfolio` };
+  }
+  const canonRes = await getCachedCanonicalDetailResult(raceId);
+  if (canonRes.ok && canonRes.data) {
+    const c = canonRes.data;
+    const loc = formatCanonicalLocation(c);
+    return {
+      title: `${c.name} · Runfolio`,
+      description: loc ? `${c.name} — ${loc}. Verified race on Runfolio.` : `${c.name} · Verified race on Runfolio.`
+    };
+  }
+  return { title: "Race · Runfolio" };
 }
 
 function surfaceLabel(s: "road" | "trail" | "mixed"): string {
@@ -263,6 +280,32 @@ export default async function RaceIdRouterPage({ params }: Props) {
             </div>
           )}
         </main>
+      </>
+    );
+  }
+
+  const canonRes = await getCachedCanonicalDetailResult(raceId);
+  if (!canonRes.ok) {
+    return <CanonicalRaceCatalogOffline message={canonRes.error} />;
+  }
+  if (canonRes.data) {
+    const race = canonRes.data;
+    let viewer: Awaited<ReturnType<typeof fetchCanonicalRaceViewerState>> | null = null;
+    if (isSupabaseConfigured()) {
+      try {
+        const { user } = await getServerAuthUser();
+        if (user?.id) {
+          const supabase = await createClient();
+          viewer = await fetchCanonicalRaceViewerState(supabase, user.id, race.id);
+        }
+      } catch {
+        viewer = null;
+      }
+    }
+    return (
+      <>
+        <AppNavbar />
+        <CanonicalRaceDetailView race={race} viewer={viewer} urlRef={raceId} />
       </>
     );
   }

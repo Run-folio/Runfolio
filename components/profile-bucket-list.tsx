@@ -132,18 +132,23 @@ function CanonicalBucketStripCard({ goal, variant }: { goal: CanonicalBucketGoal
     </>
   );
 
+  const raceHref = goal.slug?.trim() ? `/races/${goal.slug.trim()}` : `/races/${goal.canonical_race_id}`;
+
   return (
     <div
       className={cn(
         "flex flex-col border border-white/10 bg-[#0d0d0d] transition hover:border-white/25 focus-within:ring-2 focus-within:ring-[#d4af37]/45"
       )}
     >
-      <Link href="/bucket-list" className="group flex flex-1 flex-col focus-visible:outline-none">
+      <Link href={raceHref} className="group flex flex-1 flex-col focus-visible:outline-none">
         {main}
       </Link>
-      <span className="border-t border-white/10 px-3 py-2 text-center text-[9px] font-semibold uppercase tracking-wider text-accent">
-        Bucket list →
-      </span>
+      <Link
+        href="/bucket-list"
+        className="border-t border-white/10 px-3 py-2 text-center text-[9px] font-semibold uppercase tracking-wider text-accent transition hover:bg-white/5"
+      >
+        Manage on bucket list →
+      </Link>
     </div>
   );
 }
@@ -190,7 +195,7 @@ export function ProfileBucketList({ completed, future, canonicalFuture = [], can
           ) : null}
         </div>
 
-        <div>
+        <div id="profile-future-goals" className="scroll-mt-24">
           <div className="mb-4 flex items-center gap-2">
             <span className="text-[#c85a4a]" aria-hidden>
               ◎

@@ -1,26 +1,36 @@
 import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
+import Link from "next/link";
 import { AppNavbar } from "@/components/app-navbar";
+import { ProfileRaceLinkedCelebration } from "@/components/profile-race-linked-celebration";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
-import { ProfileConfirmedMajorRaces } from "@/components/profile-confirmed-major-races";
 import { ProfileHero } from "@/components/profile-hero";
 import { ProfilePendingRaceCandidates } from "@/components/profile-pending-race-candidates";
-import { ProfileTopRaces } from "@/components/profile-top-races";
-import { RaceJourney } from "@/components/race-journey";
-import { StravaProfileBlock } from "@/components/strava-profile-block";
+import { RunningProfileCompletedGrid } from "@/components/running-profile/running-profile-completed-grid";
+import { RunningProfileIdentityForm } from "@/components/running-profile/running-profile-identity-form";
+import { RunningProfilePublishQueue } from "@/components/running-profile/running-profile-publish-queue";
+import { RunningProfileRecentSyncStrip } from "@/components/running-profile/running-profile-recent-sync-strip";
+import { RunningProfileSelectedEfforts } from "@/components/running-profile/running-profile-selected-efforts";
+import { RunningProfileSpotlight } from "@/components/running-profile/running-profile-spotlight";
+import { RunningProfileStatsRow } from "@/components/running-profile/running-profile-stats-row";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
-import { buildProfilePendingRaceCandidates } from "@/lib/profile-pending-candidates";
-import { profileApprovedCompletedRaces } from "@/lib/portfolio-race";
 import { fetchCanonicalBucketGoalsForUser } from "@/lib/bucket-list-canonical/queries";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
+import { buildProfilePendingRaceCandidates } from "@/lib/profile-pending-candidates";
+import { profileApprovedCompletedRaces } from "@/lib/portfolio-race";
 import { resolveProfileHeroPhoto } from "@/lib/profile-hero-asset";
+import { computeRunningProfileStats } from "@/lib/running-profile/stats";
 import { runfolioLog } from "@/lib/runfolio-log";
+import {
+  listProfileIncludedSyncedActivities,
+  listSyncedActivitiesForUser
+} from "@/lib/strava-sync/repository";
 import { fetchPublicProfileBundle } from "@/lib/supabase/fetch-public-profile";
 import { getStravaFeed } from "@/lib/strava-feed";
-import { rankRacesForProfileTopRaces } from "@/lib/top-race-rank";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
 import type { ProfilePendingRaceCandidate, Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
+import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 
 export const dynamic = "force-dynamic";
 
@@ -33,7 +43,7 @@ export default async function PublicProfilePage({ params }: Props) {
   const { username } = await params;
   const profilePath = `/${username}`;
 
-  let runner: { id: string; name: string } | null = null;
+  let runner: Awaited<ReturnType<typeof fetchPublicProfileBundle>>["runner"] = null;
   let allRaces: Race[] = [];
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
@@ -49,9 +59,17 @@ export default async function PublicProfilePage({ params }: Props) {
   let pendingCandidates: ProfilePendingRaceCandidate[] = [];
   let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];
   let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
+  let pinnedSynced: StravaSyncedActivityRow[] = [];
+  let recentSynced: StravaSyncedActivityRow[] = [];
 
   if (!isSupabaseConfigured()) {
-    runner = { id: "offline", name: decodeURIComponent(username) };
+    runner = {
+      id: "offline",
+      name: decodeURIComponent(username),
+      profile_location: null,
+      profile_tagline: null,
+      profile_public: true
+    };
     allRaces = [];
   } else {
     try {
@@ -85,6 +103,16 @@ export default async function PublicProfilePage({ params }: Props) {
         const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
         canonicalFuture = canon.future;
         canonicalCompleted = canon.completed;
+
+        try {
+          pinnedSynced = await listProfileIncludedSyncedActivities(supabase, user.id);
+          recentSynced = (await listSyncedActivitiesForUser(supabase, user.id)).slice(0, 12);
+        } catch (syncErr) {
+          runfolioLog.warn(
+            "PublicProfile.syncedActivities",
+            syncErr instanceof Error ? syncErr.message : "failed"
+          );
+        }
       }
     } catch (e) {
       if (isDynamicServerError(e)) throw e;
@@ -95,46 +123,115 @@ export default async function PublicProfilePage({ params }: Props) {
     }
   }
 
+  if (!runner) {
+    return (
+      <>
+        <AppNavbar />
+        <main className="min-h-screen bg-[#05070c] px-6 py-20 text-center">
+          <h1 className="font-display text-2xl text-white">Runner not found</h1>
+          <p className="type-meta mt-3 text-sm text-white/55">Check the URL or discover races on Runfolio.</p>
+        </main>
+      </>
+    );
+  }
+
+  const displayName = runner.name ?? decodeURIComponent(username);
+  const profilePublic = runner.profile_public !== false;
+
+  if (!profilePublic && !isOwnProfile) {
+    return (
+      <>
+        <AppNavbar />
+        <main className="min-h-screen bg-[#05070c] px-6 py-24 text-center">
+          <h1 className="font-display text-2xl text-white">This profile is private</h1>
+          <p className="type-meta mt-3 max-w-md mx-auto text-sm text-white/55">
+            The runner has chosen to hide their public portfolio.
+          </p>
+        </main>
+      </>
+    );
+  }
+
   const future = (allRaces ?? []).filter((r) => !r.is_completed);
-  /** Top Races + Race Journey: user-approved portfolio finishes only. */
   const profileApproved = profileApprovedCompletedRaces(allRaces ?? []).sort((a, b) =>
     String(b.date ?? "").localeCompare(String(a.date ?? ""))
   );
+  const stats = computeRunningProfileStats(profileApproved);
 
-  const ranked = rankRacesForProfileTopRaces(profileApproved);
-  const topThreeIds = new Set(ranked.slice(0, 3).map((x) => x.race.id));
-  const confirmedMajorRest = profileApproved.filter((r) => !topThreeIds.has(r.id));
-
-  const displayName = runner?.name ?? decodeURIComponent(username);
+  const spotlightRaces = profileApproved.filter((r) => r.profile_featured || r.tag_career_highlight);
+  const spotlightIds = new Set(spotlightRaces.map((r) => r.id));
+  const gridRaces =
+    spotlightRaces.length > 0 ? profileApproved.filter((r) => !spotlightIds.has(r.id)) : profileApproved;
 
   return (
     <>
       <AppNavbar />
       <main className="min-h-screen bg-[#05070c]">
-        <ProfileHero key={profileHeroPhoto} displayName={displayName} imageSrc={profileHeroPhoto} />
+        <ProfileRaceLinkedCelebration enabled={isOwnProfile} />
+        <ProfileHero
+          displayName={displayName}
+          imageSrc={profileHeroPhoto}
+          tagline={runner.profile_tagline}
+          location={runner.profile_location}
+          footer={<RunningProfileStatsRow stats={stats} />}
+        />
 
         <div className="mx-auto w-full max-w-[1400px] px-0">
+          {!profilePublic && isOwnProfile ? (
+            <div className="border-x border-b border-amber-500/25 bg-amber-950/20 px-5 py-4 text-center text-sm text-amber-100/90 md:px-8">
+              Your profile is hidden from visitors. Turn visibility on below when you&apos;re ready.
+            </div>
+          ) : null}
+
+          {isOwnProfile ? (
+            <div className="border-x border-b border-border bg-[#080a0e] px-5 py-6 md:px-8">
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/40">Identity</p>
+              <RunningProfileIdentityForm
+                initialTagline={runner.profile_tagline ?? ""}
+                initialLocation={runner.profile_location ?? ""}
+                initialPublic={profilePublic}
+              />
+            </div>
+          ) : null}
+
           {isOwnProfile && pendingCandidates.length > 0 ? (
             <ProfilePendingRaceCandidates candidates={pendingCandidates} profilePath={profilePath} />
           ) : null}
 
-          <ProfileTopRaces completedRaces={profileApproved} />
+          {isOwnProfile ? <RunningProfilePublishQueue allRaces={allRaces ?? []} /> : null}
 
-          <ProfileConfirmedMajorRaces races={confirmedMajorRest} />
+          <RunningProfileSpotlight races={profileApproved} isOwner={isOwnProfile} />
 
-          {ownProfileStrava ? (
-            <StravaProfileBlock
-              raceCandidates={ownProfileStrava.raceCandidates}
-              raceCandidateStats={ownProfileStrava.raceCandidateStats}
-              matchedMajorDiscoverIds={ownProfileStrava.matchedMajorDiscoverIds}
-              stravaOAuthConfigured={stravaOAuthConfigured}
-              stravaOk={ownProfileStrava.stravaOk}
-              profileCurationMode
-            />
+          {gridRaces.length > 0 || spotlightRaces.length === 0 ? (
+            <RunningProfileCompletedGrid races={gridRaces} isOwner={isOwnProfile} />
+          ) : (
+            <section
+              id="profile-completed-races"
+              tabIndex={-1}
+              className="scroll-mt-24 border-x border-b border-border bg-[#07080d] px-5 py-8 text-center md:px-8"
+            >
+              <p className="type-meta text-sm text-white/50">
+                Every published finish is in your spotlight above — add another race or turn off &ldquo;Feature&rdquo; on
+                one finish to build the longer gallery below.
+              </p>
+            </section>
+          )}
+
+          <RunningProfileSelectedEfforts activities={pinnedSynced} isOwner={isOwnProfile} />
+          {isOwnProfile ? <RunningProfileRecentSyncStrip rows={recentSynced} /> : null}
+
+          {ownProfileStrava && stravaOAuthConfigured ? (
+            <p className="border-x border-b border-border bg-[#07080d] px-5 py-4 text-center text-[11px] text-white/45 md:px-8">
+              Strava long-run review and smart matches live on the{" "}
+              <Link href="/dashboard" className="text-gold hover:text-white">
+                dashboard
+              </Link>
+              .
+            </p>
           ) : null}
 
           <div className="grid gap-0 border-x border-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-            <RaceJourney races={profileApproved} />
+            <div className="hidden border-b border-border lg:block" aria-hidden />
             <ProfileBucketList
               completed={(allRaces ?? []).filter(raceCountsAsBucketListCompleted)}
               future={future.filter(raceIsBucketListFutureGoal)}

@@ -19,23 +19,13 @@ type CanonicalRaceDbRow = {
   category_tags: string[] | null;
 };
 
-type GoalJoinedRow = UserBucketListGoalRow & { canonical_races: CanonicalRaceDbRow | CanonicalRaceDbRow[] | null };
-
-function singleCanonicalRace(
-  raw: CanonicalRaceDbRow | CanonicalRaceDbRow[] | null | undefined
-): CanonicalRaceDbRow | null {
-  if (raw == null) return null;
-  return Array.isArray(raw) ? raw[0] ?? null : raw;
-}
-
 function locationLabel(r: CanonicalRaceDbRow | null): string {
   if (!r) return "";
   const parts = [r.city, r.region, r.country].filter((x) => Boolean(x?.trim()));
   return parts.join(", ");
 }
 
-function toView(row: GoalJoinedRow): CanonicalBucketGoalView {
-  const cr = singleCanonicalRace(row.canonical_races);
+function toView(row: UserBucketListGoalRow, cr: CanonicalRaceDbRow | null): CanonicalBucketGoalView {
   return {
     id: row.id,
     user_id: row.user_id,
@@ -68,56 +58,59 @@ const DONE_STATUSES: BucketListGoalStatus[] = [
   "featured_on_profile"
 ];
 
+const GOAL_SELECT =
+  "id, user_id, canonical_race_id, status, added_at, completed_at, linked_strava_activity_id, linked_user_race_id, profile_approved_at, notes";
+
+const CANON_RACE_SELECT =
+  "id, name, slug, city, region, country, start_date, distance_km, elevation_gain_m, logo_url, hero_image_url, race_type, surface_type, category_tags";
+
+/**
+ * Loads bucket list goals and joins canonical race metadata in a second query.
+ * Avoids PostgREST nested-select quirks and RLS edge cases on embedded resources.
+ */
 export async function fetchCanonicalBucketGoalsForUser(
   supabase: SupabaseClient,
   userId: string
 ): Promise<{ future: CanonicalBucketGoalView[]; completed: CanonicalBucketGoalView[] }> {
-  const { data, error } = await supabase
+  const { data: goals, error } = await supabase
     .from("user_bucket_list_goals")
-    .select(
-      `
-      id,
-      user_id,
-      canonical_race_id,
-      status,
-      added_at,
-      completed_at,
-      linked_strava_activity_id,
-      linked_user_race_id,
-      profile_approved_at,
-      notes,
-      canonical_races (
-        id,
-        name,
-        slug,
-        city,
-        region,
-        country,
-        start_date,
-        distance_km,
-        elevation_gain_m,
-        logo_url,
-        hero_image_url,
-        race_type,
-        surface_type,
-        category_tags
-      )
-    `
-    )
+    .select(GOAL_SELECT)
     .eq("user_id", userId)
     .order("added_at", { ascending: false });
 
   if (error) {
-    runfolioLog.warn("bucketListCanonical.fetch", error.message, { userId });
+    runfolioLog.warn("bucketListCanonical.fetchGoals", error.message, { userId });
     return { future: [], completed: [] };
   }
 
-  const rows = (data ?? []) as unknown as GoalJoinedRow[];
-  const views = rows.map(toView);
-  return {
-    future: views.filter((v) => FUTURE_STATUSES.includes(v.status)),
-    completed: views.filter((v) => DONE_STATUSES.includes(v.status))
-  };
+  const goalRows = (goals ?? []) as UserBucketListGoalRow[];
+  const ids = [...new Set(goalRows.map((g) => g.canonical_race_id).filter(Boolean))];
+
+  const raceById = new Map<string, CanonicalRaceDbRow>();
+  if (ids.length > 0) {
+    const { data: races, error: rErr } = await supabase.from("canonical_races").select(CANON_RACE_SELECT).in("id", ids);
+    if (rErr) {
+      runfolioLog.warn("bucketListCanonical.fetchRaceDetails", rErr.message, { userId, idCount: ids.length });
+    } else {
+      for (const r of (races ?? []) as CanonicalRaceDbRow[]) {
+        raceById.set(r.id, r);
+      }
+    }
+  }
+
+  const views = goalRows.map((row) => toView(row, raceById.get(row.canonical_race_id) ?? null));
+  const future = views.filter((v) => FUTURE_STATUSES.includes(v.status));
+  const completed = views.filter((v) => DONE_STATUSES.includes(v.status));
+
+  runfolioLog.info("bucketListCanonical.fetch", "goals loaded", {
+    userId,
+    goalCount: goalRows.length,
+    futureCount: future.length,
+    completedCount: completed.length,
+    raceDetailsResolved: raceById.size
+  });
+
+  return { future, completed };
 }
 
 export async function fetchCanonicalRaceIdsOnBucketList(
@@ -130,6 +123,9 @@ export async function fetchCanonicalRaceIdsOnBucketList(
     .eq("user_id", userId)
     .in("status", FUTURE_STATUSES);
 
-  if (error || !data) return new Set();
+  if (error || !data) {
+    runfolioLog.warn("bucketListCanonical.fetchIds", error?.message ?? "no data", { userId });
+    return new Set();
+  }
   return new Set(data.map((r) => r.canonical_race_id as string));
 }

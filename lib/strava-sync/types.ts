@@ -1,0 +1,33 @@
+export type StravaSyncedActivityRow = {
+  id: string;
+  user_id: string;
+  strava_activity_id: string;
+  name: string;
+  description: string | null;
+  distance_m: number | null;
+  distance_km: number | null;
+  elevation_gain_m: number | null;
+  moving_time_sec: number | null;
+  elapsed_time_sec: number | null;
+  start_date: string;
+  timezone: string | null;
+  city: string | null;
+  country: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  polyline: string | null;
+  photos: unknown[];
+  sport_type: string | null;
+  activity_type: string | null;
+  kudos_count: number | null;
+  achievement_count: number | null;
+  potential_race_activity: boolean;
+  strava_updated_at: string | null;
+  payload_hash: string | null;
+  linked_portfolio_race_id: string | null;
+  /** `not_race` | `snoozed` — see migration_match_hub.sql */
+  match_hub_status?: string | null;
+  profile_include?: boolean;
+  created_at: string;
+  updated_at: string;
+};
