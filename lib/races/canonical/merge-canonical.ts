@@ -58,6 +58,11 @@ export function mergeCanonicalFromNormalized(
 
   const next: CanonicalRace = {
     ...current,
+    seriesId: isLocked(locks, "seriesId")
+      ? current.seriesId
+      : incoming.canonicalSeriesId?.trim()
+        ? incoming.canonicalSeriesId.trim()
+        : current.seriesId,
     name: isLocked(locks, "name")
       ? current.name
       : longerString(current.name, incoming.name)?.trim() || current.name,
@@ -168,6 +173,7 @@ export function canonicalFromNormalizedSeed(
   const base: CanonicalRace = {
     id,
     slug,
+    seriesId: incoming.canonicalSeriesId?.trim() ?? null,
     name: incoming.name,
     description: incoming.description,
     organizerName: incoming.organizerName,

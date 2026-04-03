@@ -95,14 +95,11 @@ export function MatchHubClient({
   const [pending, start] = useTransition();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
 
-  const { suggestedHigh, needsReview, unmatched, snoozed, recentlyConfirmed, totalSyncedCount } = initialBundle;
+  const { suggestedHigh, unmatched, snoozed, recentlyConfirmed, totalSyncedCount } = initialBundle;
 
   const serverQueueSize = useMemo(
     () =>
-      initialBundle.suggestedHigh.length +
-      initialBundle.needsReview.length +
-      initialBundle.unmatched.length +
-      initialBundle.snoozed.length,
+      initialBundle.suggestedHigh.length + initialBundle.unmatched.length + initialBundle.snoozed.length,
     [initialBundle]
   );
 
@@ -116,7 +113,6 @@ export function MatchHubClient({
       if (prev.size === 0) return prev;
       const alive = new Set<string>([
         ...suggestedHigh.map((s) => s.stravaActivityId),
-        ...needsReview.map((s) => s.stravaActivityId),
         ...unmatched.map((u) => u.row.strava_activity_id)
       ]);
       let changed = false;
@@ -127,7 +123,7 @@ export function MatchHubClient({
       }
       return changed ? next : prev;
     });
-  }, [suggestedHigh, needsReview, unmatched]);
+  }, [suggestedHigh, unmatched]);
 
   const hideId = (stravaActivityId: string) => {
     setHiddenIds((prev) => new Set(prev).add(stravaActivityId));
@@ -236,10 +232,6 @@ export function MatchHubClient({
     () => suggestedHigh.filter((s) => !hiddenIds.has(s.stravaActivityId)),
     [suggestedHigh, hiddenIds]
   );
-  const filteredReview = useMemo(
-    () => needsReview.filter((s) => !hiddenIds.has(s.stravaActivityId)),
-    [needsReview, hiddenIds]
-  );
   const filteredUnmatched = useMemo(
     () => unmatched.filter((u) => !hiddenIds.has(u.row.strava_activity_id)),
     [unmatched, hiddenIds]
@@ -248,23 +240,11 @@ export function MatchHubClient({
   const counts = useMemo(
     () => ({
       hi: filteredHigh.length,
-      review: filteredReview.length,
       un: filteredUnmatched.length,
       snz: snoozed.length
     }),
-    [filteredHigh.length, filteredReview.length, filteredUnmatched.length, snoozed.length]
+    [filteredHigh.length, filteredUnmatched.length, snoozed.length]
   );
-
-  const hasServerReview = needsReview.length > 0;
-  const [hintsExpanded, setHintsExpanded] = useState(
-    () => hasServerReview && suggestedHigh.length === 0
-  );
-
-  useEffect(() => {
-    if (typeof window !== "undefined" && window.location.hash === "#optional-catalog-hints" && hasServerReview) {
-      setHintsExpanded(true);
-    }
-  }, [hasServerReview]);
 
   return (
     <div className="space-y-20">
@@ -374,8 +354,8 @@ export function MatchHubClient({
               <p className="font-medium text-white/90">You&apos;re caught up</p>
               <p className="mt-2">
                 <strong className="text-white/85">{totalSyncedCount}</strong> Strava activit
-                {totalSyncedCount === 1 ? "y" : "ies"} saved — nothing is waiting for an 80%+ suggestion, manual link, or
-                optional hint. New race-sized syncs will surface here when they qualify.
+                {totalSyncedCount === 1 ? "y" : "ies"} saved — nothing is waiting for a strong match or manual link. New
+                race-sized syncs will surface here when they qualify.
               </p>
             </>
           )}
@@ -386,18 +366,18 @@ export function MatchHubClient({
         <header>
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gold/90">Suggested matches</h2>
           <p className="type-meta mt-2 max-w-2xl text-sm text-white/55">
-            Only activities with an <strong className="font-medium text-white/75">80% or higher</strong> fit to a verified
-            catalog race appear here. One tap confirms — we don&apos;t use this row for weaker guesses.
+            Strong matches only: <strong className="font-medium text-white/75">80%+</strong> fit to the verified catalog.
+            Weaker overlaps are never suggested here — use manual linking instead.
           </p>
         </header>
         {counts.hi === 0 ? (
           <HubEmpty
             icon="◇"
-            title={totalSyncedCount === 0 ? "Nothing saved to match yet" : "No suggested matches right now"}
+            title={totalSyncedCount === 0 ? "Nothing saved to match yet" : "No strong matches found"}
             body={
               totalSyncedCount === 0
-                ? "Sync from Strava stores activities in Runfolio first. Suggested matches need real saved rows plus an 80%+ catalog fit."
-                : "You have synced activities, but none reached the 80% confidence bar for this hub — that’s normal when names, dates, or courses don’t align tightly. Use manual linking below to pick the verified race yourself."
+                ? "Sync from Strava stores activities in Runfolio first. Strong suggestions need saved rows plus an 80%+ catalog fit."
+                : "None of your saved race-sized activities reached the 80% confidence bar — that is common when titles, dates, or geography do not line up tightly. You can link your finish to a verified race manually below."
             }
             className={totalSyncedCount > 0 && counts.hi === 0 ? "border-gold/15 bg-gradient-to-b from-gold/[0.04] to-[#06080c]/90" : undefined}
           >
@@ -407,15 +387,6 @@ export function MatchHubClient({
             >
               Manual linking
             </Link>
-            {counts.review > 0 ? (
-              <Link
-                href="#optional-catalog-hints"
-                onClick={() => setHintsExpanded(true)}
-                className="rounded-xl border border-white/12 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-white/55 transition hover:border-white/22 hover:text-white/75"
-              >
-                Softer catalog hints ({counts.review})
-              </Link>
-            ) : null}
             <SyncHint stravaOAuthConfigured={stravaOAuthConfigured} />
           </HubEmpty>
         ) : (
@@ -449,7 +420,7 @@ export function MatchHubClient({
             body={
               totalSyncedCount === 0
                 ? "Sync stores race-sized efforts here first — then unmatched long runs show up for manual linking."
-                : "Every saved race-sized row is linked, has a suggestion above, was excluded, or didn’t pass the race-like flag."
+                : "Every saved race-sized row is linked, has a strong suggestion above, was excluded, or didn’t pass the race-like flag."
             }
           >
             <Link href="/races/find" className="text-[11px] font-semibold uppercase tracking-wider text-accent hover:underline">
@@ -458,11 +429,10 @@ export function MatchHubClient({
           </HubEmpty>
         ) : (
           <ul className="space-y-4">
-            {filteredUnmatched.map(({ row, weakCandidates }) => (
+            {filteredUnmatched.map(({ row }) => (
               <li key={row.strava_activity_id}>
                 <UnmatchedCard
                   row={row}
-                  weakCandidates={weakCandidates}
                   pending={pending}
                   onConfirm={confirmMatch}
                   onNotRace={() => notRace(row.strava_activity_id)}
@@ -473,74 +443,6 @@ export function MatchHubClient({
           </ul>
         )}
       </section>
-
-      {hasServerReview ? (
-        <section id="optional-catalog-hints" className="scroll-mt-24">
-          {counts.hi > 0 ? (
-            <div className="rounded-2xl border border-white/[0.07] bg-[#05070c]/90">
-              <button
-                type="button"
-                onClick={() => setHintsExpanded((e) => !e)}
-                className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-white/[0.02] md:px-6 md:py-5"
-              >
-                <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Optional · Lower priority</p>
-                  <p className="mt-1.5 text-sm font-medium text-white/70">
-                    Softer catalog hints <span className="text-white/45">(60–79% fit)</span>
-                  </p>
-                  <p className="type-meta mt-1 max-w-xl text-xs text-white/45">
-                Not suggested matches — only open if you want a shortcut before searching. Always verify the event.
-                  </p>
-                </div>
-                <span className="shrink-0 text-[11px] font-semibold tabular-nums text-white/40">
-                  {counts.review} · {hintsExpanded ? "Hide" : "Show"}
-                </span>
-              </button>
-              {hintsExpanded ? (
-                <div className="border-t border-white/[0.06] px-5 pb-6 pt-2 md:px-6">
-                  <ul className="grid gap-5 md:grid-cols-2">
-                    {filteredReview.map((s) => (
-                      <NeedsReviewCard
-                        key={s.stravaActivityId}
-                        s={s}
-                        pending={pending}
-                        onConfirm={confirmMatch}
-                        onDismiss={dismiss}
-                        onSnooze={snooze}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-white/[0.07] bg-[#06080c]/80 px-5 py-8 md:px-8">
-              <header className="mb-6">
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Optional · Lower priority</p>
-                <h2 className="mt-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
-                  Softer catalog hints <span className="font-normal text-white/40">(60–79% fit)</span>
-                </h2>
-                <p className="type-meta mt-2 max-w-2xl text-sm text-white/45">
-                  These did not meet the 80% bar for suggested matches. Use only if the guess looks right — or dismiss and
-                  link manually above.
-                </p>
-              </header>
-              <ul className="grid gap-5 md:grid-cols-2">
-                {filteredReview.map((spr) => (
-                  <NeedsReviewCard
-                    key={spr.stravaActivityId}
-                    s={spr}
-                    pending={pending}
-                    onConfirm={confirmMatch}
-                    onDismiss={dismiss}
-                    onSnooze={snooze}
-                  />
-                ))}
-              </ul>
-            </div>
-          )}
-        </section>
-      ) : null}
 
       {counts.snz > 0 ? (
         <section className="space-y-4">
@@ -728,136 +630,14 @@ function HighConfidenceCard({
   );
 }
 
-function NeedsReviewCard({
-  s,
-  pending,
-  onConfirm,
-  onDismiss,
-  onSnooze
-}: {
-  s: CanonicalStravaSuggestion;
-  pending: boolean;
-  onConfirm: (fd: FormData, id: string) => void;
-  onDismiss: (id: string) => void;
-  onSnooze: (id: string) => void;
-}) {
-  const top = s.topMatch!;
-  const m = activityMeta(s);
-
-  return (
-    <li>
-      <Card className="h-full border border-white/10 bg-[#0a0c12]/90 p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">Hint only</p>
-          <span className="rounded-md border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[9px] font-semibold tabular-nums text-white/45">
-            {top.score}% fit
-          </span>
-        </div>
-        <p className="mt-3 text-base font-semibold text-white">{m.title}</p>
-        <p className="type-meta mt-1 text-xs text-white/45">
-          {m.date} · {m.km ? `${m.km} km` : "—"}
-          {m.el != null && m.el > 0 ? ` · ${Math.round(m.el)} m` : ""}
-        </p>
-
-        <p className="type-meta mt-3 text-[11px] leading-relaxed text-white/45">
-          Did not reach the 80%+ suggested threshold. Confirm only if this is really your event.
-        </p>
-        <ol className="mt-5 space-y-3 text-[13px] leading-relaxed text-white/65">
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/70">
-              1
-            </span>
-            <span>
-              Catalog guess: <strong className="font-semibold text-white/90">{top.name}</strong>
-            </span>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/70">
-              2
-            </span>
-            <span className="text-white/60">{top.subtitle}</span>
-          </li>
-          <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/70">
-              3
-            </span>
-            <span>If it’s your race, confirm. If not, dismiss or find the right event under Manual linking.</span>
-          </li>
-        </ol>
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              onConfirm(new FormData(e.currentTarget), s.stravaActivityId);
-            }}
-          >
-            <input type="hidden" name="canonical_race_id" value={top.canonicalRaceId} />
-            <input type="hidden" name="strava_activity_id" value={s.stravaActivityId} />
-            <input type="hidden" name="date" value={s.startDateYmd} />
-            <input type="hidden" name="distance_km" value={String(s.distanceKm)} />
-            <input type="hidden" name="elevation_m" value={s.elevationM != null ? String(s.elevationM) : ""} />
-            <Button type="submit" disabled={pending} className="bg-accent text-[11px] font-semibold uppercase tracking-wider">
-              {pending ? "Saving…" : "Yes — this was my race"}
-            </Button>
-          </form>
-          <Button type="button" variant="secondary" disabled={pending} className="text-[11px]" onClick={() => onDismiss(s.stravaActivityId)}>
-            Dismiss suggestion
-          </Button>
-          <Button type="button" variant="ghost" disabled={pending} className="text-[11px]" onClick={() => onSnooze(s.stravaActivityId)}>
-            Decide later
-          </Button>
-        </div>
-
-        {s.alternatives.length > 0 ? (
-          <div className="mt-5 border-t border-white/10 pt-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Different event?</p>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {s.alternatives.slice(0, 4).map((a) => (
-                <li key={a.canonicalRaceId}>
-                  <form
-                    onSubmit={(e) => {
-                      e.preventDefault();
-                      onConfirm(new FormData(e.currentTarget), s.stravaActivityId);
-                    }}
-                    className="inline"
-                  >
-                    <input type="hidden" name="canonical_race_id" value={a.canonicalRaceId} />
-                    <input type="hidden" name="strava_activity_id" value={s.stravaActivityId} />
-                    <input type="hidden" name="date" value={s.startDateYmd} />
-                    <input type="hidden" name="distance_km" value={String(s.distanceKm)} />
-                    <input type="hidden" name="elevation_m" value={s.elevationM != null ? String(s.elevationM) : ""} />
-                    <Button type="submit" variant="ghost" disabled={pending} className="border border-white/12 text-[10px]">
-                      {a.name.length > 30 ? `${a.name.slice(0, 30)}…` : a.name}
-                    </Button>
-                  </form>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <p className="type-meta mt-4 text-[10px]">
-          Can&apos;t find it?{" "}
-          <Link href="/races/find" className="text-accent hover:underline">
-            Search the library
-          </Link>
-        </p>
-      </Card>
-    </li>
-  );
-}
-
 function UnmatchedCard({
   row,
-  weakCandidates,
   pending,
   onConfirm,
   onNotRace,
   onSnooze
 }: {
   row: StravaSyncedActivityRow;
-  weakCandidates: import("@/lib/strava-canonical-match/suggestions").CanonicalStravaRaceMatch[];
   pending: boolean;
   onConfirm: (fd: FormData, id: string) => void;
   onNotRace: () => void;
@@ -891,31 +671,6 @@ function UnmatchedCard({
         {m.date} · {m.km ? `${m.km} km` : "—"}
         {m.el != null && m.el > 0 ? ` · ${Math.round(m.el)} m` : ""}
       </p>
-      {weakCandidates.length > 0 ? (
-        <div className="mt-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Other catalog ideas — review first</p>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {weakCandidates.map((a) => (
-              <form
-                key={a.canonicalRaceId}
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  onConfirm(new FormData(e.currentTarget), row.strava_activity_id);
-                }}
-              >
-                <input type="hidden" name="canonical_race_id" value={a.canonicalRaceId} />
-                <input type="hidden" name="strava_activity_id" value={row.strava_activity_id} />
-                <input type="hidden" name="date" value={m.date} />
-                <input type="hidden" name="distance_km" value={String(m.km)} />
-                <input type="hidden" name="elevation_m" value={m.el != null ? String(m.el) : ""} />
-                <Button type="submit" variant="secondary" disabled={pending} className="text-[10px]">
-                  Try: {a.name.length > 26 ? `${a.name.slice(0, 26)}…` : a.name}
-                </Button>
-              </form>
-            ))}
-          </div>
-        </div>
-      ) : null}
 
       <div className="mt-4 space-y-2">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Search verified races</p>

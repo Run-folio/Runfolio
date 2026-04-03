@@ -46,7 +46,7 @@ type Props = {
   completedBucketRaces: Race[];
   /** Full merged catalog for search (same source as matchers). */
   catalogRaces: DiscoverRace[];
-  /** Full Strava feed for this session (same source as `getStravaFeed().activities`). */
+  /** Activities from Runfolio Strava sync table (DB — no live Strava list on this page). */
   stravaActivities: StravaFeedActivity[];
   usedStravaIds: string[];
   stravaOk: boolean;

@@ -22,6 +22,8 @@ export type StravaSyncedActivityRow = {
   kudos_count: number | null;
   achievement_count: number | null;
   potential_race_activity: boolean;
+  /** Sub-30 km (etc.) rows kept for manual Strava picker — not shown in auto match hub. */
+  manual_link_only?: boolean;
   strava_updated_at: string | null;
   payload_hash: string | null;
   linked_portfolio_race_id: string | null;

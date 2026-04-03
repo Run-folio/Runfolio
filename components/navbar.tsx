@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { href: "/dashboard", label: "Overview" },
   { href: "/matches", label: "Match & import" },
+  { href: "/import/past-races", label: "Past races" },
   { href: "/races/new", label: "Add race" },
   { href: "/races/find", label: "Find a race" },
   { href: "/compare", label: "Compare" },
@@ -26,6 +27,7 @@ function isNavActive(pathname: string | null, href: string) {
   if (href === "/collections") return pathname.startsWith("/collections");
   if (href === "/dashboard") return pathname === "/dashboard";
   if (href === "/matches") return pathname === "/matches" || pathname.startsWith("/matches/");
+  if (href === "/import/past-races") return pathname === "/import/past-races" || pathname.startsWith("/import/");
   if (href === "/compare") return pathname === "/compare";
   return pathname.startsWith(`${href}/`);
 }

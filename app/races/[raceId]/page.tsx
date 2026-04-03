@@ -17,10 +17,10 @@ import { usedStravaActivityIdsFromRaces } from "@/lib/catalog-discover-user-stat
 import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { getDiscoverRaceById } from "@/lib/known-race-match";
-import { getStravaFeed } from "@/lib/strava-feed";
+import { getStravaConnectionStubFeed } from "@/lib/strava-feed";
 import { isStravaManualLinkPoolActivity, rankStravaActivitiesForDiscoverRace } from "@/lib/strava-race-candidates";
 import { listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
-import { mergeStravaFeedActivitiesWithSynced } from "@/lib/strava-sync/merge-feed-with-synced";
+import { syncedRowToStravaFeedActivity } from "@/lib/strava-sync/synced-row-to-feed";
 import { CanonicalRaceDetailView } from "@/components/canonical-race-detail/canonical-race-detail-view";
 import { CanonicalRaceCatalogOffline } from "@/components/canonical-race-detail/catalog-offline";
 import {
@@ -95,7 +95,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
         if (user?.id) {
           const [racesRes, feed, syncedRows] = await Promise.all([
             supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false }),
-            getStravaFeed(),
+            getStravaConnectionStubFeed(),
             listSyncedActivitiesForUser(supabase, user.id)
           ]);
           const allRaces = (racesRes.data as Race[]) ?? [];
@@ -108,10 +108,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
           const usedStrava = usedStravaActivityIdsFromRaces(allRaces);
           stravaOk = feed.ok;
           stravaFeedError = feed.errorMessage;
-          const mergedActivities = mergeStravaFeedActivitiesWithSynced(
-            feed.ok ? feed.activities : [],
-            syncedRows
-          );
+          const mergedActivities = syncedRows.map(syncedRowToStravaFeedActivity);
           stravaSyncedActivityCount = mergedActivities.length;
           const discoverRow = getDiscoverRaceById(raceId);
           if (discoverRow) {

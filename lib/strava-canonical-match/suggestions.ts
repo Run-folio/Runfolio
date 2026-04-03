@@ -5,8 +5,16 @@ import {
   type ActivityForCanonicalMatch,
   type CanonicalMatchScoreBreakdown
 } from "@/lib/strava-canonical-match/score-activity-canonical";
-import { CANONICAL_MATCH_MIN_SCORE } from "@/lib/strava-canonical-match/match-policy";
-import { loadCanonicalRacesByNameToken, loadCanonicalRacesInDateWindow } from "@/lib/strava-canonical-match/load-candidates";
+import {
+  CANONICAL_MATCH_MIN_SCORE,
+  CANONICAL_SUGGESTED_HIGH_MIN_SCORE,
+  CANONICAL_SUGGESTED_UI_MAX_COUNT
+} from "@/lib/strava-canonical-match/match-policy";
+import { filterPlausibleCanonicalRaces } from "@/lib/strava-canonical-match/candidate-generation";
+import {
+  loadCanonicalMatchCandidateRaces,
+  type CanonicalMatchCandidateTrace
+} from "@/lib/strava-canonical-match/load-match-candidates";
 import type { CanonicalRace } from "@/lib/races/canonical/types";
 import type { RaceMatchConfidence } from "@/types";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
@@ -19,6 +27,8 @@ function rowEligibleForCanonicalMatching(row: StravaSyncedActivityRow): boolean 
 
 export type CanonicalStravaRaceMatch = {
   canonicalRaceId: string;
+  /** Parent `canonical_race_series.id` when the edition row is linked. */
+  seriesId: string | null;
   name: string;
   slug: string;
   confidence: RaceMatchConfidence;
@@ -59,6 +69,7 @@ function rankMatches(act: ActivityForCanonicalMatch, races: CanonicalRace[]) {
     const confidence = confidenceFromScore100(breakdown.total);
     return {
       canonicalRaceId: race.id,
+      seriesId: race.seriesId,
       name: race.name,
       slug: race.slug,
       confidence,
@@ -71,9 +82,11 @@ function rankMatches(act: ActivityForCanonicalMatch, races: CanonicalRace[]) {
   return scored;
 }
 
-export { CANONICAL_MATCH_MIN_SCORE, CANONICAL_SUGGESTED_HIGH_MIN_SCORE } from "@/lib/strava-canonical-match/match-policy";
-
-const ALTERNATIVE_MIN_SCORE = CANONICAL_MATCH_MIN_SCORE;
+export {
+  CANONICAL_MATCH_MIN_SCORE,
+  CANONICAL_SUGGESTED_HIGH_MIN_SCORE,
+  CANONICAL_SUGGESTED_UI_MAX_COUNT
+} from "@/lib/strava-canonical-match/match-policy";
 
 export function suggestionFromRanked(
   row: StravaSyncedActivityRow,
@@ -83,7 +96,9 @@ export function suggestionFromRanked(
   const top = ranked[0]!;
   if (top.score < CANONICAL_MATCH_MIN_SCORE) return null;
 
-  const alternatives = ranked.filter((r) => r !== top && r.score >= ALTERNATIVE_MIN_SCORE).slice(0, 5);
+  const alternatives = ranked
+    .filter((r) => r !== top && r.score >= CANONICAL_SUGGESTED_HIGH_MIN_SCORE)
+    .slice(0, CANONICAL_SUGGESTED_UI_MAX_COUNT);
 
   return {
     stravaActivityId: row.strava_activity_id,
@@ -99,26 +114,33 @@ export function suggestionFromRanked(
   };
 }
 
+export type CanonicalRankDetail = {
+  ranked: CanonicalStravaRaceMatch[];
+  candidateTrace: CanonicalMatchCandidateTrace | null;
+};
+
+/** Loads candidates (series → editions), filters, scores — trust-first ≥80% unchanged at suggestion layer. */
+export async function rankCanonicalMatchesForSyncedRowDetailed(
+  row: StravaSyncedActivityRow
+): Promise<CanonicalRankDetail> {
+  if (!rowEligibleForCanonicalMatching(row)) {
+    return { ranked: [], candidateTrace: null };
+  }
+  const act = rowToMatchInput(row);
+  const { races: rawRaces, trace } = await loadCanonicalMatchCandidateRaces(act);
+  let races = filterPlausibleCanonicalRaces(act, rawRaces);
+  if (races.length === 0) {
+    return { ranked: [], candidateTrace: trace };
+  }
+  return { ranked: rankMatches(act, races), candidateTrace: trace };
+}
+
 /** Loads candidate canonical races and scores them for a synced row (hub + suggestions). */
 export async function rankCanonicalMatchesForSyncedRow(
   row: StravaSyncedActivityRow
 ): Promise<CanonicalStravaRaceMatch[]> {
-  if (!rowEligibleForCanonicalMatching(row)) return [];
-  const act = rowToMatchInput(row);
-  let races = await loadCanonicalRacesInDateWindow(act.startDateYmd, 14);
-  if (races.length < 4) {
-    const token = act.name.split(/\s+/).find((w) => w.length > 4) ?? act.name.slice(0, 12);
-    const extra = await loadCanonicalRacesByNameToken(token);
-    const seen = new Set(races.map((r) => r.id));
-    for (const r of extra) {
-      if (!seen.has(r.id)) {
-        seen.add(r.id);
-        races.push(r);
-      }
-    }
-  }
-  if (races.length === 0) return [];
-  return rankMatches(act, races);
+  const { ranked } = await rankCanonicalMatchesForSyncedRowDetailed(row);
+  return ranked;
 }
 
 export async function buildCanonicalStravaSuggestionForSyncedRow(
@@ -147,7 +169,10 @@ export async function buildCanonicalStravaSuggestionsForUser(opts: {
     if (opts.dismissedStravaIds.has(row.strava_activity_id)) continue;
     if (opts.portfolioStravaIds.has(row.strava_activity_id)) continue;
     const s = await buildCanonicalStravaSuggestionForSyncedRow(row);
-    if (s?.topMatch) out.push(s);
+    const sc = s?.topMatch?.score ?? 0;
+    if (s?.topMatch && sc >= CANONICAL_SUGGESTED_HIGH_MIN_SCORE) out.push(s);
   }
-  return out.sort((a, b) => (b.topMatch?.score ?? 0) - (a.topMatch?.score ?? 0));
+  return out
+    .sort((a, b) => (b.topMatch?.score ?? 0) - (a.topMatch?.score ?? 0))
+    .slice(0, CANONICAL_SUGGESTED_UI_MAX_COUNT);
 }

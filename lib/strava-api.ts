@@ -114,13 +114,26 @@ export type StravaSummaryActivityJson = {
 
 export async function fetchStravaAthleteActivities(
   accessToken: string,
-  opts?: { page?: number; perPage?: number }
+  opts?: {
+    page?: number;
+    perPage?: number;
+    /** Unix seconds — activities after this time */
+    after?: number;
+    /** Unix seconds — activities before this time (walk backward in history) */
+    before?: number;
+  }
 ): Promise<StravaSummaryActivityJson[]> {
   const page = opts?.page ?? 1;
   const perPage = Math.min(Math.max(opts?.perPage ?? 50, 1), 100);
   const url = new URL("https://www.strava.com/api/v3/athlete/activities");
   url.searchParams.set("page", String(page));
   url.searchParams.set("per_page", String(perPage));
+  if (opts?.after != null && Number.isFinite(opts.after) && opts.after > 0) {
+    url.searchParams.set("after", String(Math.floor(opts.after)));
+  }
+  if (opts?.before != null && Number.isFinite(opts.before) && opts.before > 0) {
+    url.searchParams.set("before", String(Math.floor(opts.before)));
+  }
   const res = await fetch(url.toString(), {
     headers: { Authorization: `Bearer ${accessToken}` },
     next: { revalidate: 0 }
@@ -133,6 +146,9 @@ export async function fetchStravaAthleteActivities(
       detail = j.message ?? text;
     } catch {
       /* keep */
+    }
+    if (res.status === 429) {
+      throw new Error("Strava rate limit — wait a few minutes and try again.");
     }
     throw new Error(detail || `Strava list error ${res.status}`);
   }

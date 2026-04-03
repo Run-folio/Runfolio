@@ -11,10 +11,15 @@ export type CanonicalRaceStatus =
   | "needs_review"
   | "duplicate_candidate";
 
-/** App-owned canonical record — one row per real-world event we track. */
+/**
+ * App-owned canonical record: one row ≈ one **edition** when `startDate` is set.
+ * `seriesId` links recurring editions to `canonical_race_series` when backfilled.
+ */
 export type CanonicalRace = {
   id: string;
   slug: string;
+  /** Parent recurring series when backfilled (`canonical_race_series.id`). */
+  seriesId: string | null;
   name: string;
   description: string | null;
   organizerName: string | null;
@@ -35,6 +40,10 @@ export type CanonicalRace = {
   elevationGainM: number | null;
   raceType: string | null;
   surfaceType: string | null;
+  /**
+   * Tags / facets. Conventions (string prefixes): `alias:…` alternate names; future `series:…`
+   * to group editions when multi-row-per-event is modeled more explicitly.
+   */
   categoryTags: string[];
   difficultyScore: number | null;
   utmbIndexEligible: boolean | null;

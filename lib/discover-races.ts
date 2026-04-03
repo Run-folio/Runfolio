@@ -31,7 +31,9 @@ export function matchesDiscoverFilters(
   const q = query.trim().toLowerCase();
   if (q) {
     const aliasBlob = (race.aliases ?? []).join(" ");
-    const blob = `${race.name} ${race.location} ${aliasBlob}`.toLowerCase();
+    const official = race.official_name ?? "";
+    const geoBits = [race.city, race.region_state, race.country].filter(Boolean).join(" ");
+    const blob = `${race.name} ${official} ${race.location} ${geoBits} ${aliasBlob}`.toLowerCase();
     if (!blob.includes(q)) return false;
   }
 

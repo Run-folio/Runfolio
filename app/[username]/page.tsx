@@ -36,8 +36,14 @@ import {
   listSyncedActivitiesForUser
 } from "@/lib/strava-sync/repository";
 import { fetchProfileBundleByUserId, fetchPublicProfileBundle } from "@/lib/supabase/fetch-public-profile";
-import { getStravaFeed } from "@/lib/strava-feed";
-import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
+import { getStravaConnectionStubFeed } from "@/lib/strava-feed";
+import {
+  computeStravaFeedStats,
+  dedupeHighConfidenceDiscoverIds,
+  enrichRaceCandidatesWithCatalogMatches,
+  filterStravaRaceCandidates
+} from "@/lib/strava-race-candidates";
+import { syncedRowToStravaFeedActivity } from "@/lib/strava-sync/synced-row-to-feed";
 import type { ProfilePendingRaceCandidate, Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 
@@ -112,15 +118,17 @@ export default async function PublicProfilePage({ params }: Props) {
         const dismissedIds =
           disErr || !dis ? new Set<string>() : new Set(dis.map((d) => d.strava_activity_id));
 
-        const feed = await getStravaFeed();
-        stravaEnriched = feed.ok
-          ? enrichRaceCandidatesWithCatalogMatches(feed.raceCandidates, allRaces ?? [])
-          : [];
+        const feed = await getStravaConnectionStubFeed();
+        const syncedForStrip = (await listSyncedActivitiesForUser(supabase, profileAuthUser.id)).filter(
+          (r) => !r.manual_link_only && r.potential_race_activity
+        );
+        const stripActs = filterStravaRaceCandidates(syncedForStrip.map(syncedRowToStravaFeedActivity));
+        stravaEnriched = enrichRaceCandidatesWithCatalogMatches(stripActs, allRaces ?? []);
         ownProfileStrava = {
           raceCandidates: stravaEnriched,
-          raceCandidateStats: feed.raceCandidateStats,
+          raceCandidateStats: computeStravaFeedStats(stripActs),
           matchedMajorDiscoverIds: dedupeHighConfidenceDiscoverIds(stravaEnriched),
-          stravaOk: feed.ok
+          stravaOk: feed.ok || stripActs.length > 0
         };
         pendingCandidates = buildProfilePendingRaceCandidates(stravaEnriched, allRaces, dismissedIds);
         const canon = await fetchCanonicalBucketGoalsForUser(supabase, profileAuthUser.id);

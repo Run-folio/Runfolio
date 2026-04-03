@@ -200,6 +200,11 @@ export function RaceDiscoverPortfolioActions({
         >
           Link to Strava activity
         </button>
+        <p className="text-[11px] leading-relaxed text-muted">
+          Uses activities <strong className="text-white/75">saved in Runfolio</strong>, with a distance window tuned to
+          this race—<strong className="text-white/75">broader than automated backfill</strong> so half marathons and similar
+          can show when they&apos;re synced. For a finish that was never imported, use manual add with the Strava URL.
+        </p>
         <Link
           href={`/races/new?discover=${encodeURIComponent(discoverRaceId)}`}
           className="flex w-full items-center justify-center rounded-[12px] border border-white/10 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted transition hover:border-white/20 hover:text-white"

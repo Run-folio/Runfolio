@@ -4,13 +4,15 @@ import { notFound, redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
 import { ActivityPortfolioClient } from "@/components/activity-portfolio-client";
 import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
+import type { LinkedStravaActivitySnapshot } from "@/lib/linked-activity-snapshot";
 import {
   buildActivityPortfolioStravaView,
-  buildActivityPortfolioStravaViewFromRace
+  buildActivityPortfolioStravaViewFromRace,
+  buildActivityPortfolioStravaViewFromSnapshot
 } from "@/lib/activity-portfolio-strava";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import { getRaceByStravaActivityId } from "@/lib/get-race-by-strava-activity";
-import { rankKnownRaceMatches } from "@/lib/known-race-match";
+import { RACE_MATCH_HIGH_SCORE, rankKnownRaceMatches } from "@/lib/known-race-match";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
@@ -52,17 +54,22 @@ export default async function ActivityPortfolioPage({ params }: Props) {
   }
 
   const race = await getRaceByStravaActivityId(stravaId, user.id);
+  const snap = race?.linked_activity_snapshot as LinkedStravaActivitySnapshot | null | undefined;
 
   let stravaFetchFailed = false;
   let stravaView = null as ReturnType<typeof buildActivityPortfolioStravaView> | null;
 
-  try {
-    const { activity } = await fetchStravaActivityWithRecovery(stravaId);
-    stravaView = buildActivityPortfolioStravaView(stravaId, activity);
-  } catch {
-    stravaFetchFailed = true;
-    if (race) {
-      stravaView = buildActivityPortfolioStravaViewFromRace(race, stravaId);
+  if (snap && String(snap.strava_activity_id) === stravaId) {
+    stravaView = buildActivityPortfolioStravaViewFromSnapshot(snap);
+  } else {
+    try {
+      const { activity } = await fetchStravaActivityWithRecovery(stravaId);
+      stravaView = buildActivityPortfolioStravaView(stravaId, activity);
+    } catch {
+      stravaFetchFailed = true;
+      if (race) {
+        stravaView = buildActivityPortfolioStravaViewFromRace(race, stravaId);
+      }
     }
   }
 
@@ -88,7 +95,12 @@ export default async function ActivityPortfolioPage({ params }: Props) {
     type: stravaView.type
   };
   const ranked = rankKnownRaceMatches(matchInput, allRaces, 0.28);
-  const suggestedDiscoverRaceId = race?.discover_race_id ?? ranked[0]?.discoverRaceId ?? null;
+  const topDiscover = ranked[0];
+  const autoDiscoverId =
+    topDiscover && topDiscover.score >= RACE_MATCH_HIGH_SCORE && topDiscover.confidence === "high"
+      ? topDiscover.discoverRaceId
+      : null;
+  const suggestedDiscoverRaceId = race?.discover_race_id ?? autoDiscoverId ?? null;
   const catalogDisplayTitle = suggestedDiscoverRaceId ? getCatalogDisplayTitle(suggestedDiscoverRaceId) : null;
   const bucketListGoalActive = Boolean(
     suggestedDiscoverRaceId &&

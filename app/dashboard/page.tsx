@@ -9,7 +9,7 @@ import { DevMatchDebugSummary } from "@/components/dev-match-debug-summary";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { RaceJourney } from "@/components/race-journey";
 import { StravaRacePortfolioSection } from "@/components/strava-race-portfolio-section";
-import { SyncStravaActivitiesButton } from "@/components/sync-strava-activities-button";
+import { StravaIncrementalSyncButton } from "@/components/strava-incremental-sync-button";
 import { Card } from "@/components/ui/card";
 import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
 import { getServerAuthUser } from "@/lib/auth-server";
@@ -32,7 +32,9 @@ import {
 } from "@/lib/strava-race-candidates";
 import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
+import { loadStravaBackfillProgress } from "@/lib/strava-backfill-progress";
 import type { Race } from "@/types";
+import { StravaFirstTimeBackfillCta } from "@/components/strava-first-time-backfill-cta";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +62,7 @@ export default async function DashboardPage() {
   let canonicalStravaSuggestions: Awaited<ReturnType<typeof buildCanonicalStravaSuggestionsForUser>> = [];
   let confirmReturnTo = "/dashboard";
   let stravaOverview: Awaited<ReturnType<typeof loadUserStravaOverviewState>> | null = null;
+  let stravaBackfillProgress: Awaited<ReturnType<typeof loadStravaBackfillProgress>> | null = null;
   let devMatchDebug: Awaited<ReturnType<typeof loadDevMatchDebugSnapshot>> | null = null;
   try {
     const { user, authError } = await getServerAuthUser();
@@ -68,6 +71,7 @@ export default async function DashboardPage() {
     const supabase = await createClient();
     await ensurePublicUserRowForAuthedRequest(supabase, user);
     stravaOverview = await loadUserStravaOverviewState(supabase, user.id);
+    stravaBackfillProgress = await loadStravaBackfillProgress(supabase, user.id);
     userName = user.user_metadata?.name ?? "Your Runfolio";
     const result = await supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false });
     if (result.error) {
@@ -147,6 +151,13 @@ export default async function DashboardPage() {
     .filter((r) => Boolean(r.discover_race_id))
     .slice(0, 6);
 
+  const showFirstTimeStravaBackfill =
+    stravaOAuthConfigured &&
+    stravaBackfillProgress != null &&
+    stravaBackfillProgress.ingestStateTableAvailable &&
+    stravaBackfillProgress.syncedActivityCount === 0 &&
+    stravaBackfillProgress.phase === "ready";
+
   return (
     <>
       <AppNavbar />
@@ -212,6 +223,8 @@ export default async function DashboardPage() {
       </section>
 
       <main className="app-shell space-y-16">
+        {showFirstTimeStravaBackfill ? <StravaFirstTimeBackfillCta /> : null}
+
         <section>
           <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
@@ -275,11 +288,19 @@ export default async function DashboardPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="max-w-xl space-y-2">
                 <p className="type-meta text-sm text-muted">
-                  Sync keeps Strava here for verified race matching. The{" "}
+                  <Link
+                    href="/import/past-races"
+                    className="font-semibold text-accent underline-offset-4 hover:underline"
+                  >
+                    Import past race efforts
+                  </Link>{" "}
+                  pulls likely race history from Strava in safe batches and stores it here for matching—no live Strava
+                  reads after import. <strong className="font-medium text-white/90">Sync new activities</strong> (below)
+                  only fetches what&apos;s new since your last sync. The{" "}
                   <Link href="/matches" className="font-medium text-accent hover:underline">
                     Match &amp; import hub
                   </Link>{" "}
-                  is the home for review, rejects, and manual links — this strip is a quick preview.
+                  is where you review and confirm linked finishes permanently in Runfolio.
                 </p>
                 {!stravaFeed.ok && stravaOverview.syncedRows.length > 0 ? (
                   <p className="text-xs text-amber-200/90" role="status">
@@ -293,7 +314,15 @@ export default async function DashboardPage() {
                   </p>
                 ) : null}
               </div>
-              <SyncStravaActivitiesButton />
+              <div className="flex flex-col items-stretch gap-3 sm:items-end">
+                <Link
+                  href="/import/past-races"
+                  className="inline-flex min-h-[40px] items-center justify-center rounded-[12px] bg-accent px-5 text-[11px] font-semibold uppercase tracking-wider text-white transition hover:bg-[#f08a4d]"
+                >
+                  Find my race history
+                </Link>
+                <StravaIncrementalSyncButton className="items-end" />
+              </div>
             </div>
             <CanonicalStravaMatchSuggestions
               suggestions={canonicalStravaSuggestions}

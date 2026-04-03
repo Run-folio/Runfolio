@@ -6,7 +6,7 @@ import {
   pickStravaPrimaryPhotoUrl,
   type StravaSummaryActivityJson
 } from "@/lib/strava-api";
-import { getValidStravaAccessToken } from "@/lib/strava-access-server";
+import { getValidStravaAccessToken, hasStravaConnection } from "@/lib/strava-access-server";
 import { getStravaClientCredentials } from "@/lib/strava-env";
 import { getStravaTokensFromCookies, persistStravaTokensToCookies } from "@/lib/strava-cookies";
 import { refreshStravaAccessToken } from "@/lib/strava-oauth";
@@ -153,7 +153,8 @@ function buildFeedResult(activities: StravaFeedActivity[]): StravaFeedResult {
 
 /**
  * Fetch recent Strava activities for the current request (cookies / env token).
- * `activities` is the full loaded set; `raceCandidates` uses `filterStravaRaceCandidates` (~12 km+, run-like).
+ * `activities` is the full loaded set; `raceCandidates` uses `filterStravaRaceCandidates`.
+ * Prefer `getStravaConnectionStubFeed` for pages that only need DB-backed activities (production default).
  */
 export async function getStravaFeed(): Promise<StravaFeedResult> {
   let access = await getValidStravaAccessToken();
@@ -189,4 +190,20 @@ export async function getStravaFeed(): Promise<StravaFeedResult> {
 
     return emptyFeedResult(message);
   }
+}
+
+/** No Strava HTTP list call — token/cookie presence only. Pair with `listSyncedActivitiesForUser`. */
+export async function getStravaConnectionStubFeed(): Promise<StravaFeedResult> {
+  const ok = await hasStravaConnection();
+  const empty = computeStravaFeedStats([]);
+  return {
+    activities: [],
+    raceCandidates: [],
+    majorUltraCandidates: [],
+    stats: empty,
+    raceCandidateStats: empty,
+    majorUltraStats: empty,
+    ok,
+    errorMessage: ok ? undefined : "Connect Strava to sync new race-worthy efforts."
+  };
 }

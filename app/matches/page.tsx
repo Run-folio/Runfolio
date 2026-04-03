@@ -5,7 +5,7 @@ import { AppNavbar } from "@/components/app-navbar";
 import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { DevMatchDebugSummary } from "@/components/dev-match-debug-summary";
 import { MatchHubClient } from "@/components/match-hub/match-hub-client";
-import { SyncStravaActivitiesButton } from "@/components/sync-strava-activities-button";
+import { StravaIncrementalSyncButton } from "@/components/strava-incremental-sync-button";
 import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
@@ -24,7 +24,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Match & Import · Runfolio",
   description:
-    "Suggested matches at 80%+ catalog confidence. Manual linking and optional softer hints when you need more control."
+    "Strong suggested matches at 80%+ catalog confidence, plus manual linking when we do not auto-suggest."
 };
 
 export default async function MatchHubPage() {
@@ -48,9 +48,10 @@ export default async function MatchHubPage() {
 
   const stravaOverview = await loadUserStravaOverviewState(supabase, user.id);
   const bundle = await loadMatchHubBundle(supabase, user.id, portfolioRaces, {
-    syncedRows: stravaOverview.syncedRows
+    syncedRows: stravaOverview.syncedRows,
+    collectDevCanonicalTraces: process.env.NODE_ENV === "development"
   });
-  const liveStravaActivityCount = stravaOverview.feed.ok ? stravaOverview.feed.activities.length : null;
+  const liveStravaActivityCount = stravaOverview.syncedRows.length;
   const profilePath = await resolveDefaultProfilePathForUser(supabase, user.id);
   const profileHref = profilePath !== "/dashboard" ? profilePath : "/dashboard";
   const completedRacesHref =
@@ -62,11 +63,7 @@ export default async function MatchHubPage() {
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
   );
 
-  const totalAttention =
-    bundle.suggestedHigh.length +
-    bundle.needsReview.length +
-    bundle.unmatched.length +
-    bundle.snoozed.length;
+  const totalAttention = bundle.suggestedHigh.length + bundle.unmatched.length + bundle.snoozed.length;
 
   const devMatchDebug =
     process.env.NODE_ENV === "development"
@@ -95,10 +92,27 @@ export default async function MatchHubPage() {
             <p className="type-meta mt-4 max-w-2xl text-base leading-relaxed text-white/70">
               <strong className="font-medium text-white/85">Suggested matches</strong> are one-tap only when we&apos;re{" "}
               <strong className="font-medium text-white/85">at least 80%</strong> confident versus the verified catalog.
-              Everything else stays out of that row — use manual linking or optional softer hints below.
+              Everything else stays out of that row — use manual linking or optional softer hints below. Matching runs on
+              activities saved in Runfolio.{" "}
+              <Link href="/import/past-races" className="font-semibold text-accent underline-offset-4 hover:underline">
+                Import past race efforts
+              </Link>{" "}
+              walks your Strava history in batches; use <strong className="font-medium text-white/85">Sync new only</strong>{" "}
+              below for new activities since your last sync.
             </p>
+
             <div className="mt-8 flex flex-wrap items-center gap-4">
-              {stravaOAuthConfigured ? <SyncStravaActivitiesButton /> : null}
+              {stravaOAuthConfigured ? (
+                <>
+                  <Link
+                    href="/import/past-races"
+                    className="inline-flex min-h-[36px] items-center rounded-[12px] bg-accent px-4 text-[10px] font-semibold uppercase tracking-wider text-white transition hover:bg-[#f08a4d] md:text-[11px]"
+                  >
+                    Import past race efforts
+                  </Link>
+                  <StravaIncrementalSyncButton compact className="max-w-[220px]" />
+                </>
+              ) : null}
               <Link
                 href="/races/find"
                 className="text-[12px] font-semibold uppercase tracking-[0.15em] text-muted hover:text-white"
@@ -126,8 +140,8 @@ export default async function MatchHubPage() {
               <p className="mt-6 max-w-2xl text-sm text-white/55">
                 {stravaOAuthConfigured
                   ? liveStravaActivityCount != null && liveStravaActivityCount > 0
-                    ? "Strava returned activities in this session, but none are saved in Runfolio yet. Use Sync from Strava above — that copies summaries into your account so this hub can match them."
-                    : "No Strava activities stored in Runfolio yet. Sync above after a race effort — we match from what’s saved here, not from a live preview alone."
+                    ? "Strava returned activities in this session, but none are saved in Runfolio yet. Use Import past race efforts above — saved summaries power this hub."
+                    : "No Strava activities stored in Runfolio yet. Import past race efforts above — we match from what’s saved here, not from a live preview alone."
                   : "Strava OAuth isn’t set on this server, so nothing has been imported automatically. Use Browse verified races or Add a race manually, or configure STRAVA_CLIENT_ID / STRAVA_CLIENT_SECRET for sync."}{" "}
                 <Link
                   href={buildSetupUrl("/matches")}
@@ -138,8 +152,8 @@ export default async function MatchHubPage() {
               </p>
             ) : (
               <p className="mt-6 max-w-2xl text-sm text-white/55">
-                All clear — saved Strava rows are matched, excluded, snoozed, or not in the race-like bucket. Nothing
-                queued for 80%+ suggestions or manual review.
+                All clear — saved Strava rows are matched, excluded, snoozed, or not in the race-like bucket. Nothing is
+                queued for strong suggestions or manual linking.
               </p>
             )}
           </div>

@@ -31,7 +31,7 @@ type Props = {
   stravaCandidates: DiscoverStravaActivityCandidate[];
   stravaOk: boolean;
   stravaOAuthConfigured: boolean;
-  /** From `getStravaFeed().errorMessage` — e.g. not connected vs API failure. */
+  /** Connection stub message when Strava token missing (no list API on page load). */
   stravaFeedErrorMessage?: string;
   /** When set (e.g. race detail page), empty states distinguish “nothing from Strava” vs “synced but filtered”. */
   stravaSyncedActivityCount?: number;
@@ -118,8 +118,10 @@ export function StravaActivityMatchModal({
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">Link Strava finish</p>
             <h3 className="mt-2 font-display text-lg text-white">Choose your activity</h3>
             <p className="type-meta mt-1 text-sm text-slate-400">
-              Best-ranked activities appear first (name, date, distance, location). Use search to narrow your synced Strava runs.
-              Nothing is saved until you confirm.
+              This list comes from <strong className="text-white/80">activities already saved</strong> in Runfolio (not a
+              live Strava pull). For this race we use a <strong className="text-white/80">broader distance window</strong>{" "}
+              than historical backfill—you can link shorter finishes here when they&apos;re in your synced set. After you
+              confirm, the finish is stored here permanently.
             </p>
           </div>
           <button
@@ -176,14 +178,14 @@ export function StravaActivityMatchModal({
             {stravaSyncedActivityCount !== undefined && stravaSyncedActivityCount === 0 ? (
               <>
                 <p className="text-sm text-slate-200">
-                  We didn&apos;t receive any activities from Strava in this load, so there&apos;s nothing to pick yet.
+                  No activities are saved in Runfolio yet, so there&apos;s nothing to pick from here.
                 </p>
                 <p className="text-[11px] leading-relaxed text-muted">
-                  Try a refresh or reconnect Strava if you expect data here. We only pull a recent slice of your history
-                  (about the last 1,400 summaries), not your whole archive. To link one specific effort you already see on
-                  Strava, use{" "}
-                  <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link> and
-                  paste the activity link.
+                  Run <strong className="text-white/75">Import past race efforts</strong> (or{" "}
+                  <strong className="text-white/75">Sync new activities</strong>) first so efforts land in your account.
+                  Historical backfill only keeps high-signal efforts by design. For one specific activity on Strava, use{" "}
+                  <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link> with
+                  the activity URL.
                 </p>
               </>
             ) : stravaSyncedActivityCount !== undefined &&
@@ -192,23 +194,24 @@ export function StravaActivityMatchModal({
               stravaManualEligibleCount === 0 ? (
               <>
                 <p className="text-sm text-slate-200">
-                  Strava data is here, but nothing in this list fits the rules for this goal right now.
+                  Saved activities are here, but none fit this race&apos;s link window right now.
                 </p>
                 <p className="text-[11px] leading-relaxed text-muted">
-                  That usually means the effort is outside the distance window we use for this race, Strava saved it as a
-                  type we don&apos;t include (we do include typical runs and virtual runs), or it&apos;s already linked to
-                  another finish. It doesn&apos;t mean your race isn&apos;t on Strava. The most reliable option is{" "}
+                  That&apos;s not a failure—often the finish wasn&apos;t imported yet (e.g. strict historical backfill),
+                  Strava typed it outside run-like sports, it&apos;s outside this event&apos;s distance range, or it&apos;s
+                  already linked elsewhere. Try <strong className="text-white/75">Sync new</strong> / another import
+                  batch, or use{" "}
                   <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link> with
-                  the activity URL.
+                  the Strava URL for a direct path.
                 </p>
               </>
             ) : (
               <>
                 <p className="text-sm text-slate-200">Nothing to show in the list yet.</p>
                 <p className="text-[11px] leading-relaxed text-muted">
-                  An empty list often means your finish is older than the batch we load from Strava, or filters left nothing
-                  to display—not that you have no run. When rows appear, use the search box to find them by name. You can
-                  also link any activity with{" "}
+                  Filters or scoring for this catalog race may have left the list empty even though you have synced runs—that
+                  can happen and isn&apos;t Strava &quot;broken.&quot; Use search when items appear, run another import if
+                  the finish might be unsaved, or link with{" "}
                   <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link>.
                 </p>
               </>

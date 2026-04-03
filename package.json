@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "canonical-series-backfill": "tsx scripts/canonical-series-backfill.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.0",
@@ -28,6 +29,7 @@
     "eslint-config-next": "^15.2.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^3.4.17",
+    "tsx": "^4.19.3",
     "typescript": "^5.8.2",
     "vitest": "^3.0.5"
   }

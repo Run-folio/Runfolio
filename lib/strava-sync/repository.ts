@@ -19,10 +19,11 @@ function photosFromSummary(raw: StravaSummaryActivityJson): string[] {
 export function summaryToUpsertRow(
   userId: string,
   raw: StravaSummaryActivityJson,
-  now: string
+  now: string,
+  manualLinkOnly: boolean
 ): Record<string, unknown> {
   const norm = normalizeStravaSummary(raw);
-  const potential = computePotentialRaceActivity(norm);
+  const potential = manualLinkOnly ? false : computePotentialRaceActivity(norm);
   const hash = hashStravaSummaryPayload(raw);
   const lat = raw.start_latlng;
   return {
@@ -48,6 +49,7 @@ export function summaryToUpsertRow(
     kudos_count: raw.kudos_count ?? 0,
     achievement_count: raw.achievement_count ?? 0,
     potential_race_activity: potential,
+    manual_link_only: manualLinkOnly,
     payload_hash: hash,
     updated_at: now
   };
@@ -55,32 +57,48 @@ export function summaryToUpsertRow(
 
 export type SyncSummary = { upserted: number; skippedUnchanged: number; errors: number };
 
+export async function getLatestSyncedStartDateIso(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<string | null> {
+  const { data } = await supabase
+    .from(TABLE)
+    .select("start_date")
+    .eq("user_id", userId)
+    .order("start_date", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const d = (data as { start_date?: string } | null)?.start_date;
+  return d?.trim() ? d : null;
+}
+
 export async function upsertStravaSummariesForUser(
   supabase: SupabaseClient,
   userId: string,
-  summaries: StravaSummaryActivityJson[]
+  summaries: Array<{ raw: StravaSummaryActivityJson; manualLinkOnly: boolean }>
 ): Promise<SyncSummary> {
   const now = new Date().toISOString();
   let upserted = 0;
   let skippedUnchanged = 0;
   let errors = 0;
 
-  for (const raw of summaries) {
+  for (const { raw, manualLinkOnly } of summaries) {
     const hash = hashStravaSummaryPayload(raw);
     const sid = String(raw.id);
     const { data: existing } = await supabase
       .from(TABLE)
-      .select("id, payload_hash")
+      .select("id, payload_hash, manual_link_only")
       .eq("user_id", userId)
       .eq("strava_activity_id", sid)
       .maybeSingle();
 
-    if (existing && (existing as { payload_hash?: string | null }).payload_hash === hash) {
+    const ex = existing as { id?: string; payload_hash?: string | null; manual_link_only?: boolean } | null;
+    if (ex?.payload_hash === hash && Boolean(ex.manual_link_only) === manualLinkOnly) {
       skippedUnchanged += 1;
       continue;
     }
 
-    const row = summaryToUpsertRow(userId, raw, now);
+    const row = summaryToUpsertRow(userId, raw, now, manualLinkOnly);
     if (existing) {
       const { error } = await supabase.from(TABLE).update(row).eq("id", (existing as { id: string }).id);
       if (error) {

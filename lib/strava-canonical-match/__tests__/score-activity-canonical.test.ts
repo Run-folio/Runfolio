@@ -9,6 +9,7 @@ function race(over: Partial<CanonicalRace>): CanonicalRace {
   return {
     id: "c1",
     slug: "stub-ultra",
+    seriesId: null,
     name: "Alpine Valley Ultra 80K",
     description: null,
     organizerName: null,

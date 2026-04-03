@@ -34,11 +34,22 @@ function hasVisualSignal(a: StravaFeedActivity): boolean {
   return Boolean(a.primary_photo_url?.trim());
 }
 
+const RUN_LIKE_SPORTS = new Set(["Run", "Trail Run", "TrailRun", "Race", "VirtualRun"]);
+
+function isRunLikeSport(a: StravaFeedActivity): boolean {
+  const s = (a.sport_type ?? "").trim();
+  const t = (a.type ?? "").trim();
+  return RUN_LIKE_SPORTS.has(s) || RUN_LIKE_SPORTS.has(t);
+}
+
 /**
  * Derived flag: activity is worth sending through canonical race matching.
  * Extends the ≥21 km Run/Trail/Race gate with softer name, distance, social, or photo signals.
  */
 export function computePotentialRaceActivity(a: StravaFeedActivity): boolean {
+  if (isRunLikeSport(a) && a.distance_km >= 10 && nearClassicRaceDistance(a.distance_km)) {
+    return true;
+  }
   if (isStravaRaceCandidateActivity(a)) {
     if (raceLikeName(a.name)) return true;
     if (nearClassicRaceDistance(a.distance_km)) return true;

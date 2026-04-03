@@ -12,6 +12,7 @@ import { suggestRaceMatch } from "@/lib/match-races";
 import {
   getDiscoverRaceById,
   isUnmatchedMajorEffortCandidate,
+  RACE_MATCH_HIGH_SCORE,
   rankKnownRaceMatches
 } from "@/lib/known-race-match";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
@@ -24,7 +25,7 @@ type Props = {
   stravaOAuthConfigured?: boolean;
   stravaConnected?: boolean;
   stravaError?: string;
-  /** Race-candidate Strava activities (≥21 km, Run / Trail Run / Race). */
+  /** Strava activities from Runfolio sync (high-signal + manual-link cache — no live Strava list here). */
   recentStravaActivities?: StravaFeedActivity[];
   /** Prefill from Find a Race → catalog detail. */
   initialDiscoverRaceId?: string;
@@ -79,7 +80,7 @@ export function CreateRaceForm({
     return recentStravaActivities.map((a) => {
       const ranked = rankKnownRaceMatches(toMatchInputFromFeed(a), existingRaces, 0.28);
       const top = ranked[0];
-      if (!top || top.score < 0.34) {
+      if (!top || top.score < RACE_MATCH_HIGH_SCORE || top.confidence !== "high") {
         return { activity: a, catalogSuggestion: null as CatalogRaceSuggestion | null };
       }
       const catalogSuggestion: CatalogRaceSuggestion = {
@@ -132,6 +133,8 @@ export function CreateRaceForm({
       elevation_m: activity.elevation_m ?? null,
       location_city: null,
       location_country: null,
+      start_latitude: activity.start_lat,
+      start_longitude: activity.start_lng,
       sport_type: null,
       type: null
     };

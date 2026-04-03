@@ -1,7 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { CANONICAL_MATCH_MIN_SCORE, CANONICAL_SUGGESTED_HIGH_MIN_SCORE } from "@/lib/strava-canonical-match/match-policy";
-import type { CanonicalStravaRaceMatch, CanonicalStravaSuggestion } from "@/lib/strava-canonical-match/suggestions";
-import { rankCanonicalMatchesForSyncedRow, suggestionFromRanked } from "@/lib/strava-canonical-match/suggestions";
+import { CANONICAL_SUGGESTED_HIGH_MIN_SCORE } from "@/lib/strava-canonical-match/match-policy";
+import type { CanonicalStravaSuggestion } from "@/lib/strava-canonical-match/suggestions";
+import type { CanonicalMatchCandidateTrace } from "@/lib/strava-canonical-match/load-match-candidates";
+import { rankCanonicalMatchesForSyncedRowDetailed, suggestionFromRanked } from "@/lib/strava-canonical-match/suggestions";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { listDismissedCanonicalStravaIds, listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
 import type { Race } from "@/types";
@@ -9,8 +10,6 @@ import { isSyncedRowRunLikeForMatchVisibility } from "@/lib/strava-race-candidat
 
 export type MatchHubUnmatchedItem = {
   row: StravaSyncedActivityRow;
-  /** Best-effort catalog hints (may be empty or low score). */
-  weakCandidates: CanonicalStravaRaceMatch[];
 };
 
 export type MatchHubSnoozedItem = { row: StravaSyncedActivityRow };
@@ -29,7 +28,20 @@ function portfolioStravaIdsFromRaces(races: Race[]): Set<string> {
   return new Set(races.map((r) => r.strava_activity_id).filter((x): x is string => Boolean(x?.trim())));
 }
 
+export type DevCanonicalMatchRowDebug = {
+  candidateTrace: CanonicalMatchCandidateTrace | null;
+  bestScored: {
+    canonicalRaceId: string;
+    seriesId: string | null;
+    name: string;
+    score: number;
+    confidence: string;
+    subtitle: string;
+  } | null;
+};
+
 function isHubQueueRow(row: StravaSyncedActivityRow): boolean {
+  if (row.manual_link_only) return false;
   if (row.linked_portfolio_race_id) return false;
   if (row.match_hub_status?.trim() === "not_race") return false;
   if (!row.potential_race_activity && !isSyncedRowRunLikeForMatchVisibility(row)) return false;
@@ -42,28 +54,32 @@ function isHubQueueRow(row: StravaSyncedActivityRow): boolean {
  */
 export type MatchHubBundle = {
   suggestedHigh: CanonicalStravaSuggestion[];
+  /** Deprecated: always empty; sub-threshold matches are not surfaced as suggestions. */
   needsReview: CanonicalStravaSuggestion[];
   unmatched: MatchHubUnmatchedItem[];
   snoozed: MatchHubSnoozedItem[];
   recentlyConfirmed: RecentlyConfirmedFinish[];
   /** Total Strava rows stored for this user (including already linked). */
   totalSyncedCount: number;
+  /** Populated when `collectDevCanonicalTraces` is set — series/edition candidate trace + best scored edition (dev only). */
+  devCanonicalMatchByActivityId?: Record<string, DevCanonicalMatchRowDebug>;
 };
 
 export async function loadMatchHubBundle(
   supabase: SupabaseClient,
   userId: string,
   portfolioRaces: Race[],
-  opts?: { syncedRows?: StravaSyncedActivityRow[] }
+  opts?: { syncedRows?: StravaSyncedActivityRow[]; collectDevCanonicalTraces?: boolean }
 ): Promise<MatchHubBundle> {
   const rows = opts?.syncedRows ?? (await listSyncedActivitiesForUser(supabase, userId));
   const dismissed = await listDismissedCanonicalStravaIds(supabase, userId);
   const portfolioStrava = portfolioStravaIdsFromRaces(portfolioRaces);
 
   const suggestedHigh: CanonicalStravaSuggestion[] = [];
-  const needsReview: CanonicalStravaSuggestion[] = [];
   const unmatched: MatchHubUnmatchedItem[] = [];
   const snoozed: MatchHubSnoozedItem[] = [];
+  const devCanonicalMatchByActivityId: Record<string, DevCanonicalMatchRowDebug> | undefined =
+    opts?.collectDevCanonicalTraces ? {} : undefined;
 
   for (const row of rows) {
     if (!isHubQueueRow(row)) continue;
@@ -75,21 +91,36 @@ export async function loadMatchHubBundle(
       continue;
     }
 
-    const ranked = await rankCanonicalMatchesForSyncedRow(row);
+    const detail = await rankCanonicalMatchesForSyncedRowDetailed(row);
+    const ranked = detail.ranked;
     const s = ranked.length ? suggestionFromRanked(row, ranked) : null;
 
+    if (devCanonicalMatchByActivityId) {
+      const top = ranked[0];
+      devCanonicalMatchByActivityId[row.strava_activity_id] = {
+        candidateTrace: detail.candidateTrace,
+        bestScored: top
+          ? {
+              canonicalRaceId: top.canonicalRaceId,
+              seriesId: top.seriesId,
+              name: top.name,
+              score: top.score,
+              confidence: top.confidence,
+              subtitle: top.subtitle
+            }
+          : null
+      };
+    }
+
     if (!s?.topMatch) {
-      unmatched.push({
-        row,
-        weakCandidates: []
-      });
+      unmatched.push({ row });
       continue;
     }
 
     if (s.topMatch.score >= CANONICAL_SUGGESTED_HIGH_MIN_SCORE) {
       suggestedHigh.push(s);
     } else {
-      needsReview.push(s);
+      unmatched.push({ row });
     }
   }
 
@@ -97,7 +128,6 @@ export async function loadMatchHubBundle(
     (b.topMatch?.score ?? 0) - (a.topMatch?.score ?? 0);
 
   suggestedHigh.sort(sortS);
-  needsReview.sort(sortS);
 
   const { data: recentRaces, error: recentErr } = await supabase
     .from("races")
@@ -139,12 +169,17 @@ export async function loadMatchHubBundle(
 
   return {
     suggestedHigh,
-    needsReview,
+    needsReview: [] satisfies CanonicalStravaSuggestion[],
     unmatched,
     snoozed,
     recentlyConfirmed,
-    totalSyncedCount: rows.length
+    totalSyncedCount: rows.length,
+    ...(devCanonicalMatchByActivityId ? { devCanonicalMatchByActivityId } : {})
   };
 }
 
-export { CANONICAL_MATCH_MIN_SCORE, CANONICAL_SUGGESTED_HIGH_MIN_SCORE } from "@/lib/strava-canonical-match/match-policy";
+export {
+  CANONICAL_MATCH_MIN_SCORE,
+  CANONICAL_SUGGESTED_HIGH_MIN_SCORE,
+  CANONICAL_SUGGESTED_UI_MAX_COUNT
+} from "@/lib/strava-canonical-match/match-policy";

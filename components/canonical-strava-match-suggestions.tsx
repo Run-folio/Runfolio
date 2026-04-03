@@ -18,10 +18,6 @@ type Props = {
   returnAfterConfirm?: string;
 };
 
-function tierLabel(topScore: number): "High match" | "Needs review" {
-  return topScore >= CANONICAL_SUGGESTED_HIGH_MIN_SCORE ? "High match" : "Needs review";
-}
-
 export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfirm = "/dashboard" }: Props) {
   const router = useRouter();
   const { persistenceAvailable, reason: persistenceReason } = usePersistence();
@@ -29,44 +25,23 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
   const [confirmPending, startConfirm] = useTransition();
   const [confirmErr, setConfirmErr] = useState<{ id: string; message: string } | null>(null);
 
-  const { highTier, reviewTier } = useMemo(() => {
-    const high: CanonicalStravaSuggestion[] = [];
-    const review: CanonicalStravaSuggestion[] = [];
-    for (const s of suggestions) {
-      const sc = s.topMatch?.score ?? 0;
-      if (sc >= CANONICAL_SUGGESTED_HIGH_MIN_SCORE) high.push(s);
-      else review.push(s);
-    }
-    return { highTier: high, reviewTier: review };
+  const strongOnly = useMemo(() => {
+    return suggestions.filter((s) => (s.topMatch?.score ?? 0) >= CANONICAL_SUGGESTED_HIGH_MIN_SCORE);
   }, [suggestions]);
 
-  if (suggestions.length === 0) return null;
+  if (strongOnly.length === 0) return null;
 
   const renderCard = (s: CanonicalStravaSuggestion) => {
     const top = s.topMatch!;
-    const label = tierLabel(top.score);
-    const isHigh = label === "High match";
     return (
       <li key={s.stravaActivityId}>
-        <Card
-          className={cn(
-            "h-full border p-5",
-            isHigh ? "border-gold/35 bg-gold/[0.06]" : "border-amber-500/25 bg-amber-950/[0.08]"
-          )}
-        >
-          <p
-            className={cn(
-              "text-[10px] font-semibold uppercase tracking-wider",
-              isHigh ? "text-gold" : "text-amber-200/90"
-            )}
-          >
-            {label}
-          </p>
+        <Card className={cn("h-full border p-5", "border-gold/35 bg-gold/[0.06]")}>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-gold">Suggested match</p>
           <p className="mt-2 text-base font-semibold text-white">
             We think this was <span className="text-accent">{top.name}</span>
           </p>
           <p className="type-meta mt-1 text-xs text-muted">
-            {s.activityTitle} · {s.distanceKm ? `${s.distanceKm} km` : "—"}
+            {Math.round(top.score)}% confidence · {s.activityTitle} · {s.distanceKm ? `${s.distanceKm} km` : "—"}
             {s.startDateYmd ? ` · ${s.startDateYmd}` : ""}
           </p>
           <p className="type-meta mt-3 text-xs leading-relaxed text-slate-300">{top.subtitle}</p>
@@ -150,12 +125,12 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
           </div>
           {s.alternatives.length > 0 ? (
             <details className="mt-4 border-t border-white/10 pt-3 text-xs">
-              <summary className="cursor-pointer font-medium text-muted">Other verified events (same activity)</summary>
+              <summary className="cursor-pointer font-medium text-muted">Other strong matches (same activity)</summary>
               <ul className="mt-2 space-y-2">
                 {s.alternatives.map((a) => (
                   <li key={a.canonicalRaceId} className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-white/90">{a.name}</span>
-                    <span className="text-[10px] text-muted">{a.score} pts</span>
+                    <span className="text-[10px] text-muted">{a.score}%</span>
                   </li>
                 ))}
               </ul>
@@ -164,7 +139,7 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
                 <Link href="/matches" className="text-accent underline-offset-4 hover:underline">
                   Match &amp; import
                 </Link>{" "}
-                to swap events with search.
+                to confirm or search manually.
               </p>
             </details>
           ) : null}
@@ -177,10 +152,14 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
     <section className="space-y-8">
       <div>
         <p className="type-eyebrow">You might have raced</p>
-        <h2 className="type-section mt-2 text-lg md:text-xl">Smart race matches</h2>
+        <h2 className="type-section mt-2 text-lg md:text-xl">Suggested matches</h2>
         <p className="type-meta mt-2 max-w-2xl text-sm">
-          From activities saved when you sync Strava. High matches (80+ fit score) are listed first; others need a quick
-          sanity check before linking.
+          From activities saved when you sync Strava. We only surface catalog links at <strong className="text-white/80">80%+</strong>{" "}
+          confidence — everything else belongs in manual linking on{" "}
+          <Link href="/matches" className="font-medium text-accent underline-offset-4 hover:underline">
+            Match &amp; Import
+          </Link>
+          .
         </p>
         {!persistenceAvailable ? (
           <p className="mt-3 max-w-2xl rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
@@ -189,28 +168,16 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
         ) : null}
       </div>
 
-      {highTier.length > 0 ? (
-        <div className="space-y-3">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold/90">Suggested matches</h3>
-          <ul className="grid gap-4 md:grid-cols-2">{highTier.map(renderCard)}</ul>
-        </div>
-      ) : null}
-
-      {reviewTier.length > 0 ? (
-        <div className="space-y-3">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-amber-200/85">Needs review</h3>
-          <p className="type-meta max-w-2xl text-xs text-white/55">
-            Softer catalog fit (60–79). Confirm only if the details match your race day.
-          </p>
-          <ul className="grid gap-4 md:grid-cols-2">{reviewTier.map(renderCard)}</ul>
-        </div>
-      ) : null}
+      <div className="space-y-3">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold/90">Strong matches</h3>
+        <ul className="grid gap-4 md:grid-cols-2">{strongOnly.map(renderCard)}</ul>
+      </div>
 
       <p className="text-center text-[11px] text-muted">
         <Link href="/matches" className="font-semibold uppercase tracking-[0.12em] text-accent hover:underline">
           Full Match &amp; import hub →
         </Link>
-        {" · "}Bulk review, manual search, and saved-for-later
+        {" · "}Manual search and saved-for-later
       </p>
     </section>
   );

@@ -14,9 +14,9 @@ import { runfolioLog } from "@/lib/runfolio-log";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
-import { getStravaFeed } from "@/lib/strava-feed";
+import { getStravaConnectionStubFeed } from "@/lib/strava-feed";
 import { listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
-import { mergeStravaFeedActivitiesWithSynced } from "@/lib/strava-sync/merge-feed-with-synced";
+import { syncedRowToStravaFeedActivity } from "@/lib/strava-sync/synced-row-to-feed";
 import type { Race } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -63,14 +63,14 @@ export default async function BucketListPage() {
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
   );
-  const feed = await getStravaFeed();
+  const feed = await getStravaConnectionStubFeed();
   const usedStravaIds = [...usedStravaActivityIdsFromRaces(races ?? [])];
-  let stravaActivitiesForUi = feed.ok ? feed.activities : [];
-  let stravaMergedCount = stravaActivitiesForUi.length;
+  let stravaActivitiesForUi: ReturnType<typeof syncedRowToStravaFeedActivity>[] = [];
+  let stravaMergedCount = 0;
   if (authedUserId) {
     const supabase = await createClient();
     const synced = await listSyncedActivitiesForUser(supabase, authedUserId);
-    stravaActivitiesForUi = mergeStravaFeedActivitiesWithSynced(feed.ok ? feed.activities : [], synced);
+    stravaActivitiesForUi = synced.map(syncedRowToStravaFeedActivity);
     stravaMergedCount = stravaActivitiesForUi.length;
   }
 

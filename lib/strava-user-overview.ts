@@ -1,12 +1,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getStravaFeed } from "@/lib/strava-feed";
+import { getStravaConnectionStubFeed } from "@/lib/strava-feed";
 import {
   listDismissedCanonicalStravaIds,
   listSyncedActivitiesForUser
 } from "@/lib/strava-sync/repository";
 import { syncedRowToStravaFeedActivity } from "@/lib/strava-sync/synced-row-to-feed";
-import { mergeStravaFeedActivitiesWithSynced } from "@/lib/strava-sync/merge-feed-with-synced";
-import { isStravaRaceCandidateActivity, isSyncedRowRunLikeForMatchVisibility } from "@/lib/strava-race-candidates";
+import { isSyncedRowRunLikeForMatchVisibility } from "@/lib/strava-race-candidates";
 import type { StravaFeedActivity, StravaFeedResult } from "@/types";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 
@@ -21,6 +20,7 @@ export type UserStravaOverviewState = {
 
 /** Same gates as Match hub queue rows (snooze / not a race / canonical dismissals). */
 function isOverviewStripSyncedRow(row: StravaSyncedActivityRow, dismissed: Set<string>): boolean {
+  if (row.manual_link_only) return false;
   if (row.linked_portfolio_race_id) return false;
   const st = row.match_hub_status?.trim();
   if (st === "not_race" || st === "snoozed") return false;
@@ -30,8 +30,8 @@ function isOverviewStripSyncedRow(row: StravaSyncedActivityRow, dismissed: Set<s
 }
 
 /**
- * Single load path for Overview + Match & Import: one list sync query and one Strava feed fetch,
- * plus a consistent choice of which activities power the long-run discover strip.
+ * Overview + Match hub: load persisted Strava sync rows only. Strava API is not called here
+ * (connection stub is used for OAuth messaging only).
  */
 export async function loadUserStravaOverviewState(
   supabase: SupabaseClient,
@@ -39,28 +39,18 @@ export async function loadUserStravaOverviewState(
 ): Promise<UserStravaOverviewState> {
   const [syncedRows, feed, dismissed] = await Promise.all([
     listSyncedActivitiesForUser(supabase, userId),
-    getStravaFeed(),
+    getStravaConnectionStubFeed(),
     listDismissedCanonicalStravaIds(supabase, userId)
   ]);
 
-  const persistedCandidates = syncedRows
+  const raceActivitiesForDiscoverStrip: StravaFeedActivity[] = syncedRows
     .filter((r) => isOverviewStripSyncedRow(r, dismissed))
     .map(syncedRowToStravaFeedActivity);
 
-  let usingLiveRacePreviewOnly =
-    persistedCandidates.length === 0 && feed.ok && feed.raceCandidates.length > 0;
-
-  let raceActivitiesForDiscoverStrip: StravaFeedActivity[] =
-    persistedCandidates.length > 0 ? persistedCandidates : feed.ok ? feed.raceCandidates : [];
-
-  // When falling back to live API strip, apply the same ≥21 km / run-type filter as Match hub auto-suggestions.
-  if (persistedCandidates.length === 0 && (feed.ok || syncedRows.length > 0)) {
-    const merged = mergeStravaFeedActivitiesWithSynced(feed.ok ? feed.activities : [], syncedRows);
-    const fromMerged = merged.filter((a) => isStravaRaceCandidateActivity(a));
-    if (fromMerged.length > 0) {
-      raceActivitiesForDiscoverStrip = fromMerged;
-    }
-  }
-
-  return { syncedRows, feed, raceActivitiesForDiscoverStrip, usingLiveRacePreviewOnly };
+  return {
+    syncedRows,
+    feed,
+    raceActivitiesForDiscoverStrip,
+    usingLiveRacePreviewOnly: false
+  };
 }

@@ -10,6 +10,10 @@ export function buildStravaDiscoverConfirmFormData(
   const fd = new FormData();
   fd.set("discover_race_id", discoverRaceId);
   fd.set("strava_activity_id", candidate.strava_id);
+  fd.set("activity_title", candidate.name);
+  if (candidate.moving_time_sec != null && Number.isFinite(candidate.moving_time_sec)) {
+    fd.set("moving_time_sec", String(candidate.moving_time_sec));
+  }
   if (bucketFutureRaceId) fd.set("target_user_race_id", bucketFutureRaceId);
   fd.set("date", candidate.date);
   fd.set("distance_km", String(candidate.distance_km));
@@ -31,6 +35,10 @@ export function buildManualBucketCompleteFormData(
   const fd = new FormData();
   fd.set("user_race_id", userRaceId);
   fd.set("strava_activity_id", candidate.strava_id);
+  fd.set("activity_title", candidate.name);
+  if (candidate.moving_time_sec != null && Number.isFinite(candidate.moving_time_sec)) {
+    fd.set("moving_time_sec", String(candidate.moving_time_sec));
+  }
   fd.set("date", candidate.date);
   fd.set("distance_km", String(candidate.distance_km));
   fd.set("elevation_m", candidate.elevation_m != null ? String(candidate.elevation_m) : "");

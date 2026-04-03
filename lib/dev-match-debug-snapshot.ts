@@ -1,6 +1,6 @@
 import type { User } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { MatchHubBundle } from "@/lib/match-hub/service";
+import type { DevCanonicalMatchRowDebug, MatchHubBundle } from "@/lib/match-hub/service";
 import { loadMatchHubBundle } from "@/lib/match-hub/service";
 import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
 import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
@@ -11,7 +11,6 @@ export type DevMatchDebugSnapshot = {
   page: "dashboard" | "matches" | "profile";
   importedActivitiesCount: number;
   suggestedMatchesCount: number;
-  needsReviewCount: number;
   confirmedMatchesCount: number;
   recentHubConfirmationsCount: number;
   profileSlugInUrl: string;
@@ -20,6 +19,10 @@ export type DevMatchDebugSnapshot = {
   authMetadataName: string | null;
   authEmailPrefix: string | null;
   slugAlignedWithUsersTable: boolean;
+  /** First hub-queue activities with canonical candidate trace (matches page when bundle includes traces). */
+  canonicalMatchDebugSamples: Array<
+    DevCanonicalMatchRowDebug & { stravaActivityId: string; activityTitle: string }
+  >;
 };
 
 type Cache = {
@@ -62,11 +65,22 @@ export async function loadDevMatchDebugSnapshot(
 
   const completed = confirmedCompletedPortfolioRaces(portfolioRaces);
 
+  const devMap = bundle.devCanonicalMatchByActivityId;
+  let canonicalMatchDebugSamples: DevMatchDebugSnapshot["canonicalMatchDebugSamples"] = [];
+  if (devMap && Object.keys(devMap).length > 0) {
+    const titleByStravaId = new Map(stravaOverview.syncedRows.map((r) => [r.strava_activity_id, r.name]));
+    const ids = Object.keys(devMap).slice(0, 5);
+    canonicalMatchDebugSamples = ids.map((id) => ({
+      stravaActivityId: id,
+      activityTitle: titleByStravaId.get(id) ?? "—",
+      ...devMap[id]!
+    }));
+  }
+
   return {
     page: context.page,
     importedActivitiesCount: stravaOverview.syncedRows.length,
     suggestedMatchesCount: bundle.suggestedHigh.length,
-    needsReviewCount: bundle.needsReview.length,
     confirmedMatchesCount: completed.length,
     recentHubConfirmationsCount: bundle.recentlyConfirmed.length,
     profileSlugInUrl: decodedSlug || "—",
@@ -76,6 +90,7 @@ export async function loadDevMatchDebugSnapshot(
     authEmailPrefix: emailPre,
     slugAlignedWithUsersTable: Boolean(
       decodedSlug && usersName && decodedSlug.toLowerCase() === usersName.trim().toLowerCase()
-    )
+    ),
+    canonicalMatchDebugSamples
   };
 }

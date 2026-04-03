@@ -43,6 +43,8 @@ export type NormalizedRace = {
   raceType: string | null;
   surfaceType: string | null;
   categoryTags: string[];
+  /** When ingest resolves a recurring series (`canonical_race_series.id`), attach for edition rows. */
+  canonicalSeriesId?: string | null;
   difficultyScore: number | null;
   utmbIndexEligible: boolean | null;
   utmbCategory: string | null;

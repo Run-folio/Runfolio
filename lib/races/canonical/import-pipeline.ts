@@ -1,3 +1,11 @@
+/**
+ * Canonical import: normalized provider row → edition (`canonical_races`) + source fingerprint.
+ *
+ * Scaling / series-aware ingest (next steps, not all wired yet):
+ * - Resolve or create `canonical_race_series` from provider series id / name, set `NormalizedRace.canonicalSeriesId`.
+ * - Upsert `canonical_race_alias` rows (official, short, sponsor variants) keyed by `series_id` or `race_id`.
+ * - Batch slug allocation and duplicate detection across large dumps (marathon directories, trail catalogs).
+ */
 import { randomUUID } from "node:crypto";
 import { normalizeRaceName } from "@/lib/races/dedupe";
 import { canonicalFromNormalizedSeed, mergeCanonicalFromNormalized } from "@/lib/races/canonical/merge-canonical";

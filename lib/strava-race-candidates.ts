@@ -9,17 +9,22 @@ import type {
   StravaRaceCandidate
 } from "@/types";
 import type { DiscoverRace } from "@/lib/discover-race-schema";
-import { getDiscoverRaceById, rankKnownRaceMatches, scoreActivityAgainstDiscover } from "@/lib/known-race-match";
+import {
+  getDiscoverRaceById,
+  RACE_MATCH_HIGH_SCORE,
+  rankKnownRaceMatches,
+  scoreActivityAgainstDiscover
+} from "@/lib/known-race-match";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 
-/** Minimum distance for “race-shaped” auto-matching and overview strips (km). */
-export const MIN_RACE_CANDIDATE_DISTANCE_KM = 12;
+/** Minimum distance for auto match hub / overview strip (km); aligns with default Strava ingest bar. */
+export const MIN_RACE_CANDIDATE_DISTANCE_KM = 30;
 
 /** Trail / ultra emphasis — matching & “major effort” flows. */
 export const MIN_MAJOR_ULTRA_DISTANCE_KM = 50;
 
-const ALLOWED_SPORT_TYPES = new Set(["Run", "Trail Run", "Race", "VirtualRun", "Walk"]);
+const ALLOWED_SPORT_TYPES = new Set(["Run", "Trail Run", "Race", "VirtualRun"]);
 
 const EXCLUDED_SPORT_OR_TYPE = new Set([
   "Ride",
@@ -87,7 +92,7 @@ export function filterStravaRaceCandidates(activities: StravaFeedActivity[]): St
 }
 
 /** Run / trail / race-type sports allowed in the race-detail manual Strava link picker (broader than auto race-candidate strip). */
-const MANUAL_LINK_RUN_LIKE = new Set(["Run", "Trail Run", "VirtualRun", "Race", "Walk"]);
+const MANUAL_LINK_RUN_LIKE = new Set(["Run", "Trail Run", "TrailRun", "VirtualRun", "Race", "Walk"]);
 
 /** Distance floor for Match hub / overview when `potential_race_activity` is stale false on older sync rows. */
 const MIN_SYNCED_ROW_MATCH_VISIBILITY_KM = 8;
@@ -97,6 +102,7 @@ const MIN_SYNCED_ROW_MATCH_VISIBILITY_KM = 8;
  * (older rows may keep that flag false until the activity changes on Strava).
  */
 export function isSyncedRowRunLikeForMatchVisibility(row: StravaSyncedActivityRow): boolean {
+  if (row.manual_link_only) return false;
   const sport = row.sport_type ?? "";
   const legacy = row.activity_type ?? "";
   if (EXCLUDED_SPORT_OR_TYPE.has(sport) || EXCLUDED_SPORT_OR_TYPE.has(legacy)) return false;
@@ -229,10 +235,8 @@ export function stravaFeedActivityToMatchInput(a: StravaFeedActivity): ActivityM
   };
 }
 
-const SUGGESTION_MIN_SCORE = 0.34;
-
 function candidateFromTopMatch(a: StravaFeedActivity, top: RaceMatchCandidate | undefined): StravaRaceCandidate {
-  if (!top || top.score < SUGGESTION_MIN_SCORE) {
+  if (!top || top.score < RACE_MATCH_HIGH_SCORE || top.confidence !== "high") {
     return { ...a, catalogSuggestion: null };
   }
   const suggestion: CatalogRaceSuggestion = {
@@ -270,9 +274,10 @@ function locationLabel(a: StravaFeedActivity): string {
  *
  * - Default (`forManualLink` false): expect `activities` to be pre-filtered race candidates (e.g. ≥21 km strip).
  *   Applies a minimum match score so hub / bucket flows stay selective.
- * - `forManualLink` true: pass the **full** synced Strava list from `getStravaFeed().activities`. Uses a broader
- *   run-type / distance-per-race pool and **no** minimum score so obvious titles (e.g. “London Marathon”) still appear
- *   even when metadata is thin; results are ranked by `scoreActivityAgainstDiscover` (name, date, distance, location).
+ * - `forManualLink` true: pass the **persisted** `strava_synced_activities` list (merge not needed). Uses
+ *   `isStravaManualLinkPoolActivity` (per-race distance floor, often far below the 40km historical backfill bar) and **no**
+ *   minimum match score so obvious titles still appear when metadata is thin; results are ranked by
+ *   `scoreActivityAgainstDiscover` (name, date, distance, location).
  */
 export function rankStravaActivitiesForDiscoverRace(
   discoverRaceId: string,
@@ -307,6 +312,7 @@ export function rankStravaActivitiesForDiscoverRace(
       elevation_m: a.elevation_m,
       sport_type: a.sport_type,
       type: a.type,
+      moving_time_sec: a.moving_time_sec,
       moving_time_label: a.moving_time_label,
       location_label: locationLabel(a),
       strava_url: a.strava_url,
@@ -371,6 +377,7 @@ export function stravaActivitiesToPickListCandidates(
       elevation_m: a.elevation_m,
       sport_type: a.sport_type,
       type: a.type,
+      moving_time_sec: a.moving_time_sec,
       moving_time_label: a.moving_time_label,
       location_label: locationLabel(a),
       strava_url: a.strava_url,

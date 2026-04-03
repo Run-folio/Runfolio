@@ -48,6 +48,8 @@ export type Race = {
   /** Enriched by `get_public_profile_bundle` join to canonical_races (not stored on `races`). */
   canonical_logo_url?: string | null;
   canonical_hero_url?: string | null;
+  /** Strava activity fields captured at link time (`migration_strava_ingest_v2`). */
+  linked_activity_snapshot?: import("@/lib/linked-activity-snapshot").LinkedStravaActivitySnapshot | null;
 };
 
 /** Public runner row from `get_public_profile_bundle`. */
@@ -105,6 +107,9 @@ export type ActivityMatchInput = {
   elevation_m: number | null;
   location_city: string | null;
   location_country: string | null;
+  /** When present (e.g. Strava summary `start_latlng`), enables discover coordinate checks. */
+  start_latitude?: number | null;
+  start_longitude?: number | null;
   sport_type: string | null;
   type: string | null;
 };
@@ -221,6 +226,7 @@ export type DiscoverStravaActivityCandidate = {
   elevation_m: number | null;
   sport_type: string | null;
   type: string | null;
+  moving_time_sec?: number | null;
   moving_time_label: string;
   location_label: string;
   strava_url: string;

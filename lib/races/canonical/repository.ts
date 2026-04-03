@@ -16,6 +16,7 @@ const SOURCES = "canonical_race_sources";
 export type CanonicalRaceRow = {
   id: string;
   slug: string;
+  series_id?: string | null;
   name: string;
   description: string | null;
   organizer_name: string | null;
@@ -71,6 +72,7 @@ export function raceRowToDomain(row: CanonicalRaceRow): CanonicalRace {
   return {
     id: row.id,
     slug: row.slug,
+    seriesId: row.series_id ?? null,
     name: row.name,
     description: row.description,
     organizerName: row.organizer_name,
@@ -128,6 +130,7 @@ export function sourceRowToDomain(row: CanonicalRaceSourceRow): CanonicalRaceSou
 function domainToRaceRowPatch(r: CanonicalRace): Record<string, unknown> {
   return {
     slug: r.slug,
+    series_id: r.seriesId,
     name: r.name,
     description: r.description,
     organizer_name: r.organizerName,

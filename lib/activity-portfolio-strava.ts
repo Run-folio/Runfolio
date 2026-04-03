@@ -1,3 +1,4 @@
+import type { LinkedStravaActivitySnapshot } from "@/lib/linked-activity-snapshot";
 import type { ActivityPortfolioStravaView } from "@/types";
 import type { Race } from "@/types";
 import {
@@ -44,6 +45,37 @@ export function buildActivityPortfolioStravaView(
     has_map: Boolean(raw.map?.summary_polyline),
     strava_url: `https://www.strava.com/activities/${stravaId}`,
     photo_urls: collectStravaActivityPhotoUrls(raw.photos)
+  };
+}
+
+/** Persisted snapshot at link time — no Strava API. */
+export function buildActivityPortfolioStravaViewFromSnapshot(
+  snap: LinkedStravaActivitySnapshot
+): ActivityPortfolioStravaView {
+  const movSec = snap.moving_time_sec ?? 0;
+  const movLabel =
+    snap.moving_time_label?.trim() ||
+    (movSec > 0 ? formatStravaMovingTime(movSec) : "—");
+  const elapsedSec = snap.elapsed_time_sec ?? movSec;
+  return {
+    strava_id: snap.strava_activity_id,
+    name: snap.activity_title,
+    sport_type: snap.sport_type,
+    type: snap.activity_type,
+    start_date: snap.start_date.slice(0, 10),
+    location_label: "—",
+    distance_km: snap.distance_km,
+    moving_time_label: movLabel,
+    elapsed_time_label:
+      elapsedSec > 0 && elapsedSec !== movSec ? formatDurationFromSeconds(elapsedSec) : null,
+    pace_label: null,
+    elevation_m: snap.elevation_m,
+    kudos_count: 0,
+    achievement_count: 0,
+    description: snap.description ?? null,
+    has_map: false,
+    strava_url: snap.strava_url,
+    photo_urls: []
   };
 }
 

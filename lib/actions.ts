@@ -14,9 +14,14 @@ import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 import { getEnvPersistenceFailure, requireActionPersistence } from "@/lib/persistence-readiness";
 import { createClient } from "@/lib/supabase/server";
 import { runfolioLog } from "@/lib/runfolio-log";
-import { fetchStravaActivity, formatStravaMovingTime } from "@/lib/strava-api";
+import { formatStravaMovingTime } from "@/lib/strava-api";
 import { dismissCanonicalMatchSuggestion } from "@/lib/strava-sync/repository";
-import { syncStravaActivitiesForUserId } from "@/lib/strava-sync/sync-service";
+import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
+import { snapshotFromRaceLinkFields, snapshotFromSyncedRow } from "@/lib/linked-activity-snapshot";
+import {
+  backfillStravaHistoryForUserId,
+  syncStravaActivitiesForUserId
+} from "@/lib/strava-sync/sync-service";
 import { getValidStravaAccessToken } from "@/lib/strava-access-server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isConfirmedPortfolioCompletion } from "@/lib/portfolio-race";
@@ -28,6 +33,50 @@ import { revalidatePortfolioSurfaces } from "@/lib/revalidate-portfolio-paths";
 function dbErr(e: { message: string; code?: string; details?: string; hint?: string }): string {
   logSupabaseSchemaIssue("actions.db", e);
   return clarifySupabaseError(e);
+}
+
+async function linkedSnapshotForStravaConfirm(
+  supabase: SupabaseClient,
+  userId: string,
+  stravaActivityId: string,
+  discoverRaceId: string | null,
+  form: {
+    activityTitle: string;
+    date: string;
+    distanceKm: number;
+    elevationM: number;
+    timeLabel: string;
+    movingTimeSec: number | null;
+    description: string | null;
+    canonicalRaceId?: string | null;
+  }
+) {
+  const { data: row } = await supabase
+    .from("strava_synced_activities")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("strava_activity_id", stravaActivityId)
+    .maybeSingle();
+  if (row) {
+    const snap = snapshotFromSyncedRow(row as StravaSyncedActivityRow, {
+      discover_race_id: discoverRaceId,
+      canonical_race_id: form.canonicalRaceId ?? null
+    });
+    if (form.description?.trim()) return { ...snap, description: form.description.trim() };
+    return snap;
+  }
+  return snapshotFromRaceLinkFields({
+    stravaActivityId,
+    activityTitle: form.activityTitle || "Strava activity",
+    startDateYmd: form.date,
+    distanceKm: form.distanceKm,
+    elevationM: form.elevationM > 0 ? form.elevationM : null,
+    movingTimeSec: form.movingTimeSec,
+    movingTimeLabel: form.timeLabel?.trim() ? form.timeLabel : null,
+    description: form.description,
+    discoverRaceId,
+    canonicalRaceId: form.canonicalRaceId ?? null
+  });
 }
 
 /** After a Strava↔race confirm, send runners to their profile by default (not a dead-end dashboard). */
@@ -250,6 +299,10 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
     const time = String(formData.get("time") ?? "").trim();
     const location = String(formData.get("location") ?? "").trim();
     let description = String(formData.get("description") ?? "").trim();
+    const activityTitle = String(formData.get("activity_title") ?? "").trim();
+    const movingTimeSecRaw = String(formData.get("moving_time_sec") ?? "").trim();
+    const movingTimeSecN = movingTimeSecRaw ? Number(movingTimeSecRaw) : NaN;
+    const movingTimeSec = Number.isFinite(movingTimeSecN) ? movingTimeSecN : null;
 
     if (!discoverRaceId || !stravaActivityId) {
       return { error: "Missing race or activity reference." };
@@ -261,17 +314,32 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
     }
 
     if (!description) {
-      const access = await getValidStravaAccessToken();
-      if (access) {
-        try {
-          const detail = await fetchStravaActivity(stravaActivityId, access);
-          const d = detail.description?.trim();
-          if (d) description = d;
-        } catch {
-          /* Strava detail optional */
-        }
-      }
+      const { data: syncRow } = await supabase
+        .from("strava_synced_activities")
+        .select("description")
+        .eq("user_id", user.id)
+        .eq("strava_activity_id", stravaActivityId)
+        .maybeSingle();
+      const d = (syncRow as { description?: string | null } | null)?.description?.trim();
+      if (d) description = d;
     }
+
+    const titleForSnapshot = activityTitle || discover.name;
+    const linked_activity_snapshot = await linkedSnapshotForStravaConfirm(
+      supabase,
+      user.id,
+      stravaActivityId,
+      discoverRaceId,
+      {
+        activityTitle: titleForSnapshot,
+        date,
+        distanceKm,
+        elevationM,
+        timeLabel: time,
+        movingTimeSec,
+        description: description || null
+      }
+    );
 
     const coreMatchPayload = {
       name: discover.name,
@@ -283,7 +351,8 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
       description: description || null,
       is_completed: true,
       strava_activity_id: stravaActivityId,
-      discover_race_id: discoverRaceId
+      discover_race_id: discoverRaceId,
+      linked_activity_snapshot
     };
     const publish = profilePublishPayload();
 
@@ -398,6 +467,22 @@ export async function confirmCustomMajorEffortAction(formData: FormData) {
 
     const existing = await getRaceByStravaActivityId(stravaActivityId, user.id);
     const publish = profilePublishPayload();
+    const dateYmd = (date && String(date).trim() ? String(date) : new Date().toISOString()).slice(0, 10);
+    const linked_activity_snapshot = await linkedSnapshotForStravaConfirm(
+      supabase,
+      user.id,
+      stravaActivityId,
+      null,
+      {
+        activityTitle: customName,
+        date: dateYmd,
+        distanceKm,
+        elevationM,
+        timeLabel: time ?? "",
+        movingTimeSec: null,
+        description: null
+      }
+    );
 
     const corePayload = {
       name: customName,
@@ -411,6 +496,7 @@ export async function confirmCustomMajorEffortAction(formData: FormData) {
       strava_activity_id: stravaActivityId,
       discover_race_id: null as string | null,
       is_bucket_list_item: false,
+      linked_activity_snapshot,
       ...publish
     };
 
@@ -757,19 +843,38 @@ export async function completeBucketGoalWithStravaAction(formData: FormData) {
     const time = String(formData.get("time") ?? "").trim();
     const location = String(formData.get("location") ?? "").trim();
     let description = String(formData.get("description") ?? "").trim();
+    const activityBucketTitle = String(formData.get("activity_title") ?? "").trim();
+    const movingTimeSecRaw = String(formData.get("moving_time_sec") ?? "").trim();
+    const movingTimeSecN = movingTimeSecRaw ? Number(movingTimeSecRaw) : NaN;
+    const movingTimeSec = Number.isFinite(movingTimeSecN) ? movingTimeSecN : null;
 
     if (!description) {
-      const access = await getValidStravaAccessToken();
-      if (access) {
-        try {
-          const detail = await fetchStravaActivity(stravaActivityId, access);
-          const d = detail.description?.trim();
-          if (d) description = d;
-        } catch {
-          /* optional */
-        }
-      }
+      const { data: syncRow } = await supabase
+        .from("strava_synced_activities")
+        .select("description")
+        .eq("user_id", user.id)
+        .eq("strava_activity_id", stravaActivityId)
+        .maybeSingle();
+      const d = (syncRow as { description?: string | null } | null)?.description?.trim();
+      if (d) description = d;
     }
+
+    const titleForSnapshot = activityBucketTitle || row.name;
+    const linked_activity_snapshot = await linkedSnapshotForStravaConfirm(
+      supabase,
+      user.id,
+      stravaActivityId,
+      null,
+      {
+        activityTitle: titleForSnapshot,
+        date,
+        distanceKm,
+        elevationM,
+        timeLabel: time,
+        movingTimeSec,
+        description: description || null
+      }
+    );
 
     const coreBucketCompletePayload = {
       name: row.name,
@@ -783,6 +888,7 @@ export async function completeBucketGoalWithStravaAction(formData: FormData) {
       strava_activity_id: stravaActivityId,
       discover_race_id: null as string | null,
       is_bucket_list_item: true,
+      linked_activity_snapshot,
       ...profilePublishPayload()
     };
 
@@ -1013,7 +1119,7 @@ export async function undoCanonicalBucketCompletionAction(formData: FormData) {
   }
 }
 
-/** Pull Strava activities into `strava_synced_activities` (incremental by payload hash). */
+/** New activities only since last successful sync (does not re-walk full Strava history). */
 export async function syncStravaActivitiesAction() {
   try {
     const gate = await requireActionPersistence();
@@ -1021,14 +1127,21 @@ export async function syncStravaActivitiesAction() {
     const { user, supabase } = gate;
     const res = await syncStravaActivitiesForUserId(user.id);
     if (!res.ok) {
+      if (res.needBackfill) {
+        return { error: res.error, needBackfill: true as const };
+      }
       return { error: res.error };
     }
     await revalidatePortfolioSurfaces(supabase, user.id, {
-      alsoPaths: ["/dashboard", "/bucket-list", "/races/find"]
+      alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/import/past-races"]
     });
-    runfolioLog.info("actions.stravaSync", "ok", { upserted: res.upserted, skipped: res.skippedUnchanged });
+    runfolioLog.info("actions.stravaSync", "incremental_ok", {
+      upserted: res.upserted,
+      skipped: res.skippedUnchanged
+    });
     return {
       ok: true as const,
+      mode: res.mode,
       upserted: res.upserted,
       skippedUnchanged: res.skippedUnchanged,
       errors: res.errors
@@ -1038,6 +1151,47 @@ export async function syncStravaActivitiesAction() {
     if (isRedirectError(e)) throw e;
     runfolioLog.error("actions.syncStravaActivities", e);
     return { error: e instanceof Error ? e.message : "Sync failed." };
+  }
+}
+
+/**
+ * Bounded batch of **older** Strava list pages (high-signal race-like efforts only after filtering).
+ * Resumable via `user_strava_ingest_state.backfill_before_epoch`. Safe to call repeatedly (“Import older efforts”).
+ */
+export async function backfillStravaHistoryAction() {
+  try {
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
+    const res = await backfillStravaHistoryForUserId(user.id);
+    if (!res.ok) {
+      return { error: res.error };
+    }
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/matches", "/import/past-races"]
+    });
+    runfolioLog.info("actions.stravaBackfill", "ok", {
+      upserted: res.upserted,
+      skipped: res.skippedUnchanged,
+      exhausted: res.backfillExhausted,
+      rawFetched: res.rawFetched,
+      eligibleInBatch: res.eligibleInBatch
+    });
+    return {
+      ok: true as const,
+      mode: res.mode,
+      upserted: res.upserted,
+      skippedUnchanged: res.skippedUnchanged,
+      errors: res.errors,
+      backfillExhausted: res.backfillExhausted,
+      rawFetched: res.rawFetched,
+      eligibleInBatch: res.eligibleInBatch
+    };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.backfillStravaHistory", e);
+    return { error: e instanceof Error ? e.message : "Historical import failed." };
   }
 }
 
@@ -1215,18 +1369,33 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
         [syncRow?.city, syncRow?.country].filter(Boolean).join(", ") ||
         [cRow.city, cRow.region, cRow.country].filter(Boolean).join(", ");
     }
-    if (!description) {
-      const access = await getValidStravaAccessToken();
-      if (access) {
-        try {
-          const detail = await fetchStravaActivity(stravaActivityId, access);
-          const d = detail.description?.trim();
-          if (d) description = d;
-        } catch {
-          /* optional */
-        }
-      }
+    if (!description && syncRow) {
+      const d = (syncRow as StravaSyncedActivityRow).description?.trim();
+      if (d) description = d;
     }
+
+    const movingTimeSecCanon =
+      syncRow && typeof (syncRow as StravaSyncedActivityRow).moving_time_sec === "number"
+        ? (syncRow as StravaSyncedActivityRow).moving_time_sec
+        : null;
+    const titleForCanonSnap = (syncRow as StravaSyncedActivityRow | null)?.name ?? cRow.name;
+
+    const linked_activity_snapshot = await linkedSnapshotForStravaConfirm(
+      supabase,
+      user.id,
+      stravaActivityId,
+      null,
+      {
+        activityTitle: titleForCanonSnap,
+        date,
+        distanceKm,
+        elevationM,
+        timeLabel: time,
+        movingTimeSec: movingTimeSecCanon,
+        description: description?.trim() || null,
+        canonicalRaceId
+      }
+    );
 
     const publish = profilePublishPayload();
     const dataPayload: Record<string, unknown> = {
@@ -1243,6 +1412,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
       canonical_race_id: canonicalRaceId,
       is_bucket_list_item: true,
       tag_bucket_list_done: true,
+      linked_activity_snapshot,
       ...publish
     };
 

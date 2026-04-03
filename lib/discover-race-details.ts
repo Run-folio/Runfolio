@@ -158,7 +158,10 @@ function defaultPrestige(group: DiscoverGroup): string {
 }
 
 export function getCatalogDisplayTitle(discoverId: string): string {
-  return DISPLAY_TITLES[discoverId] ?? discoverRaces.find((r) => r.id === discoverId)?.name ?? discoverId;
+  const fixed = DISPLAY_TITLES[discoverId];
+  if (fixed) return fixed;
+  const r = discoverRaces.find((x) => x.id === discoverId);
+  return r?.official_name?.trim() || r?.name || discoverId;
 }
 
 export function getDiscoverRaceDetail(id: string): DiscoverRaceDetail | null {
