@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto";
 import { normalizeRaceName } from "@/lib/races/dedupe";
 import { canonicalFromNormalizedSeed, mergeCanonicalFromNormalized } from "@/lib/races/canonical/merge-canonical";
+import { recomputeCanonicalScores } from "@/lib/races/canonical/scoring";
 import { mappedFieldsFromNormalized } from "@/lib/races/canonical/mapped-fields";
 import { pickBestCanonicalMatch } from "@/lib/races/canonical/match";
 import { hashRawPayload } from "@/lib/races/canonical/raw-hash";
@@ -24,7 +25,7 @@ import {
   upsertRaceSourceRow
 } from "@/lib/races/canonical/repository";
 import { sourceTrustRank } from "@/lib/races/canonical/source-trust";
-import type { CanonicalRace } from "@/lib/races/canonical/types";
+import type { CanonicalRace, CanonicalRaceStatus } from "@/lib/races/canonical/types";
 import type { NormalizedRace } from "@/lib/races/types/normalized";
 import { runfolioLog } from "@/lib/runfolio-log";
 import { baseSlugFromNormalized } from "@/lib/races/canonical/slug";
@@ -91,10 +92,11 @@ async function applyMergeToCanonicalRace(
 
 /**
  * Import one normalized provider row into the canonical layer (idempotent on `raw_hash`).
+ * `statusOnCreate` applies only when inserting a new `canonical_races` row (not on merge/link).
  */
 export async function importNormalizedRace(
   normalized: NormalizedRace,
-  options?: { skipUnchangedPayload?: boolean }
+  options?: { skipUnchangedPayload?: boolean; statusOnCreate?: CanonicalRaceStatus }
 ): Promise<CanonicalImportResult> {
   const skipUnchanged = options?.skipUnchangedPayload !== false;
   const now = new Date().toISOString();
@@ -218,7 +220,10 @@ export async function importNormalizedRace(
     runfolioLog.error("canonical.import.error", new Error(slugRes.error), {});
     return { ok: false, error: slugRes.error };
   }
-  const seeded = canonicalFromNormalizedSeed(normalized, slugRes.data, raceId, now);
+  let seeded = canonicalFromNormalizedSeed(normalized, slugRes.data, raceId, now);
+  if (options?.statusOnCreate) {
+    seeded = recomputeCanonicalScores({ ...seeded, status: options.statusOnCreate });
+  }
   const inserted = await insertCanonicalRace(seeded);
   if (!inserted.ok) {
     runfolioLog.error("canonical.import.error", new Error(inserted.error), { slug: slugRes.data });
@@ -244,7 +249,7 @@ export async function importNormalizedRace(
 
 export async function importNormalizedRacesBatch(
   races: NormalizedRace[],
-  options?: { skipUnchangedPayload?: boolean }
+  options?: { skipUnchangedPayload?: boolean; statusOnCreate?: CanonicalRaceStatus }
 ): Promise<CanonicalImportResult[]> {
   const out: CanonicalImportResult[] = [];
   for (const r of races) {

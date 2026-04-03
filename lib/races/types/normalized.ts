@@ -8,6 +8,8 @@ export type RaceIngestSource =
   | "runsignup"
   | "chronotrack"
   | "utmb_catalog"
+  /** Curated UTMB World Series / Index style rows ingested into canonical (series + dated editions). */
+  | "utmb_ws"
   | "raceresult"
   | "mock"
   | "manual";

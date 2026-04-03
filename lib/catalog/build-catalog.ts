@@ -1,19 +1,24 @@
 import type { CatalogRaceRecord } from "@/lib/catalog/types";
+import { computeDiscoverCatalogSummary, type DiscoverCatalogSummary } from "@/lib/catalog/catalog-summary";
 import { validateDiscoverCatalogRecords } from "@/lib/catalog/discover-catalog-validate";
 import { EPIC_LEGACY_RECORDS } from "@/lib/catalog/epic-legacy";
 import { GLOBAL_TRAIL_ULTRA_RECORDS } from "@/lib/catalog/global-trail-ultras";
+import { INTERNATIONAL_MARATHON_WAVE_RECORDS } from "@/lib/catalog/international-marathons-wave";
 import { ROAD_MAJOR_RECORDS } from "@/lib/catalog/road-majors";
 import { UK_MAJOR_RECORDS } from "@/lib/catalog/uk-majors";
 import { UTMB_WORLD_SERIES_RECORDS } from "@/lib/catalog/utmb-world-series";
 import type { DiscoverRace } from "@/lib/discover-race-schema";
 
 export { validateDiscoverCatalogRecords } from "@/lib/catalog/discover-catalog-validate";
+export { CATALOG_EXPANSION_NOTES, computeDiscoverCatalogSummary } from "@/lib/catalog/catalog-summary";
+export type { DiscoverCatalogSummary } from "@/lib/catalog/catalog-summary";
 
 /**
  * Merge order = precedence (first occurrence wins). Add new modules by appending to `CATALOG_SOURCES`.
  */
 const CATALOG_SOURCES: CatalogRaceRecord[][] = [
   ROAD_MAJOR_RECORDS,
+  INTERNATIONAL_MARATHON_WAVE_RECORDS,
   UK_MAJOR_RECORDS,
   UTMB_WORLD_SERIES_RECORDS,
   GLOBAL_TRAIL_ULTRA_RECORDS,
@@ -81,6 +86,7 @@ const MERGED_RECORDS = dedupeCatalog(CATALOG_SOURCES);
 
 const CATALOG_VALIDATION = validateDiscoverCatalogRecords(MERGED_RECORDS);
 const CATALOG_ERRORS = CATALOG_VALIDATION.filter((i) => i.level === "error");
+const CATALOG_WARNINGS = CATALOG_VALIDATION.filter((i) => i.level === "warning");
 if (typeof process !== "undefined" && process.env.NODE_ENV === "development" && CATALOG_ERRORS.length > 0) {
   console.warn(
     "[discover catalog] validation errors:",
@@ -90,6 +96,14 @@ if (typeof process !== "undefined" && process.env.NODE_ENV === "development" && 
 
 /** Full merged catalog (matching, trophy logic, activity dropdowns that need aliases). */
 export const discoverRaces: DiscoverRace[] = MERGED_RECORDS.map(recordToDiscoverRace);
+
+/** Dev / QA: counts and coverage — safe to log in development or admin tools. */
+export function getDiscoverCatalogSummary(): DiscoverCatalogSummary {
+  return computeDiscoverCatalogSummary(discoverRaces, {
+    errors: CATALOG_ERRORS.length,
+    warnings: CATALOG_WARNINGS.length
+  });
+}
 
 /** Find a Race & public race library — excludes `match_only` rows. */
 export function getPublicCatalogRaces(): DiscoverRace[] {

@@ -3,7 +3,9 @@ export * from "@/lib/discover-races-constants";
 export {
   buildCatalogAliasMap,
   buildCatalogTypicalMonths,
+  CATALOG_EXPANSION_NOTES,
   discoverRaces,
+  getDiscoverCatalogSummary,
   getPublicCatalogRaces
 } from "@/lib/catalog/build-catalog";
 

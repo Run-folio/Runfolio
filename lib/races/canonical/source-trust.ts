@@ -16,6 +16,8 @@ const TRUST_RANK: Record<RaceIngestSource, number> = {
   runsignup: 78,
   chronotrack: 65,
   utmb_catalog: 72,
+  /** Dated canonical editions + series metadata from curated UTMB ingest (preferred over catalog stubs for merge). */
+  utmb_ws: 76,
   manual: 95,
   mock: 10
 };

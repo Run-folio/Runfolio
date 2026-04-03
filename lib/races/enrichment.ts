@@ -7,6 +7,7 @@ const SOURCE_PRIORITY: Record<RaceIngestSource, number> = {
   runsignup: 70,
   chronotrack: 60,
   utmb_catalog: 50,
+  utmb_ws: 55,
   mock: 15,
   manual: 40
 };

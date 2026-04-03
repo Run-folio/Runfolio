@@ -9,7 +9,8 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "canonical-series-backfill": "tsx scripts/canonical-series-backfill.ts"
+    "canonical-series-backfill": "tsx scripts/canonical-series-backfill.ts",
+    "utmb-canonical-ingest": "tsx scripts/utmb-canonical-ingest.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.0",

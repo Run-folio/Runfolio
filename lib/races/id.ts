@@ -14,6 +14,7 @@ export function parseInternalRaceId(internalId: string): { source: RaceIngestSou
     "runsignup",
     "chronotrack",
     "utmb_catalog",
+    "utmb_ws",
     "raceresult",
     "mock",
     "manual"
