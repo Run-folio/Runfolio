@@ -14,6 +14,9 @@ import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 /** Half marathon minimum — Runfolio only surfaces long race-relevant efforts. */
 export const MIN_RACE_CANDIDATE_DISTANCE_KM = 21;
 
+/** Trail / ultra emphasis — matching & “major effort” flows. */
+export const MIN_MAJOR_ULTRA_DISTANCE_KM = 50;
+
 const ALLOWED_SPORT_TYPES = new Set(["Run", "Trail Run", "Race"]);
 
 const EXCLUDED_SPORT_OR_TYPE = new Set([
@@ -79,6 +82,10 @@ export function isStravaRaceCandidateActivity(a: StravaFeedActivity): boolean {
 
 export function filterStravaRaceCandidates(activities: StravaFeedActivity[]): StravaFeedActivity[] {
   return activities.filter(isStravaRaceCandidateActivity);
+}
+
+export function filterStravaMajorUltraCandidates(activities: StravaFeedActivity[]): StravaFeedActivity[] {
+  return activities.filter((a) => a.distance_km >= MIN_MAJOR_ULTRA_DISTANCE_KM && isStravaRaceCandidateActivity(a));
 }
 
 function emptyStats(): StravaFeedStats {
@@ -211,6 +218,57 @@ export function rankStravaActivitiesForDiscoverRace(
     });
   }
   return out.sort((x, y) => y.score - x.score).slice(0, limit);
+}
+
+/**
+ * For manual bucket goals (no catalog id): show recent imported race-like activities so the user can pick a real Strava finish.
+ * Sorted newest first; optionally filtered to distances near the goal.
+ */
+export function stravaActivitiesToPickListCandidates(
+  activities: StravaFeedActivity[],
+  usedStravaIds: Set<string>,
+  opts?: { goalDistanceKm?: number | null; limit?: number }
+): DiscoverStravaActivityCandidate[] {
+  const limit = opts?.limit ?? 20;
+  const gd = opts?.goalDistanceKm;
+  let list = activities.filter((a) => isStravaRaceCandidateActivity(a) && !usedStravaIds.has(a.strava_id));
+  if (gd != null && gd > 0) {
+    list = list.filter((a) => {
+      const ratio = Math.abs(a.distance_km - gd) / gd;
+      return ratio <= 0.35 || a.distance_km >= gd * 0.55;
+    });
+  }
+  list.sort((a, b) => b.start_date.localeCompare(a.start_date));
+  return list.slice(0, limit).map((a) => {
+    const m = stravaFeedActivityToMatchInput(a);
+    const reasons: string[] = [];
+    if (gd != null && gd > 0) {
+      const ratio = Math.abs(a.distance_km - gd) / gd;
+      if (ratio <= 0.12) reasons.push("Distance is close to your goal");
+      else if (ratio <= 0.28) reasons.push("Distance is in range for this goal");
+      else reasons.push("Imported long effort — confirm if this was your race");
+    } else {
+      reasons.push("Imported long run / race-type activity");
+    }
+    if (a.sport_type || a.type) {
+      reasons.push(`Activity type: ${a.sport_type ?? a.type ?? "Run"}`);
+    }
+    return {
+      strava_id: a.strava_id,
+      name: a.name,
+      date: m.date,
+      distance_km: a.distance_km,
+      elevation_m: a.elevation_m,
+      sport_type: a.sport_type,
+      type: a.type,
+      moving_time_label: a.moving_time_label,
+      location_label: locationLabel(a),
+      strava_url: a.strava_url,
+      score: 0,
+      confidence: "low" as const,
+      reasons
+    };
+  });
 }
 
 export function dedupeHighConfidenceDiscoverIds(candidates: StravaRaceCandidate[]): string[] {

@@ -6,14 +6,16 @@ import { FindRaceCardActions } from "@/components/find-race-card-actions";
 import {
   DISCOVER_GROUP_LABEL,
   DISCOVER_GROUP_ORDER,
-  discoverRaces,
   formatDiscoverDistance,
+  getPublicCatalogRaces,
   matchesDiscoverFilters,
   type DiscoverGroup,
   type DiscoverRace,
   type DistanceFilterId,
   type SurfaceFilterId
 } from "@/lib/discover-races";
+
+const PUBLIC_DISCOVER_RACES = getPublicCatalogRaces();
 import { catalogDiscoverViewerState } from "@/lib/catalog-discover-user-state";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -51,7 +53,7 @@ export function FindRacesExplorer({ viewer, userRaces }: ExplorerProps) {
   const [surface, setSurface] = useState<SurfaceFilterId>("any");
 
   const filtered = useMemo(
-    () => discoverRaces.filter((r) => matchesDiscoverFilters(r, query, distance, surface)),
+    () => PUBLIC_DISCOVER_RACES.filter((r) => matchesDiscoverFilters(r, query, distance, surface)),
     [query, distance, surface]
   );
 

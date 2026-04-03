@@ -4,6 +4,7 @@ import { StravaActivityCard } from "@/components/strava-activity-card";
 import { StravaInsightsStrip } from "@/components/strava-insights-strip";
 import { Card } from "@/components/ui/card";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
+import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 
@@ -16,6 +17,8 @@ type Props = {
   stravaOk: boolean;
   /** Profile page: tighter slice, no full grid of candidates. */
   layout?: "dashboard" | "profile";
+  /** Profile: only stats + copy — candidates are curated in “Pending review” above. */
+  profileCurationMode?: boolean;
 };
 
 export function StravaRacePortfolioSection({
@@ -25,7 +28,8 @@ export function StravaRacePortfolioSection({
   recentlyCompletedCatalog,
   stravaOAuthConfigured = false,
   stravaOk,
-  layout = "dashboard"
+  layout = "dashboard",
+  profileCurationMode = false
 }: Props) {
   const isProfile = layout === "profile";
   const list = isProfile ? candidates.slice(0, 3) : candidates;
@@ -86,6 +90,23 @@ export function StravaRacePortfolioSection({
     );
   }
 
+  if (isProfile && profileCurationMode) {
+    return (
+      <section className="space-y-6">
+        <div>
+          <p className="type-eyebrow">Strava import</p>
+          <h2 className="type-section mt-2 text-lg md:text-xl">Race-shaped efforts</h2>
+          <p className="type-meta mt-2 max-w-2xl text-sm">
+            Long runs and race-type activities from Strava (≥21 km, Run / Trail Run / Race) surface in{" "}
+            <strong className="text-white/90">Pending review</strong> until you approve them for your public portfolio.
+            This block is context only — not a second feed.
+          </p>
+        </div>
+        <StravaInsightsStrip stats={raceCandidateStats} context="race_candidates" />
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-10">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
@@ -134,7 +155,9 @@ export function StravaRacePortfolioSection({
             Recently completed · catalog-linked
           </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {recentlyCompletedCatalog.map((race) => (
+            {recentlyCompletedCatalog.map((race) => {
+              const label = getPortfolioRaceLabel(race);
+              return (
               <Link
                 key={race.id}
                 href={portfolioRaceHref(race)}
@@ -142,17 +165,18 @@ export function StravaRacePortfolioSection({
               >
                 <div
                   className="h-24 w-28 shrink-0 bg-cover bg-center"
-                  style={{ backgroundImage: `url('${getRaceSceneImagePath(race.name)}')` }}
+                  style={{ backgroundImage: `url('${getRaceSceneImagePath(label)}')` }}
                 />
                 <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2">
-                  <p className="truncate text-sm font-semibold text-white">{race.name}</p>
+                  <p className="truncate text-sm font-semibold text-white">{label}</p>
                   <p className="type-meta truncate text-[11px]">{race.date ?? "—"}</p>
                   {race.strava_activity_id ? (
                     <p className="mt-1 text-[9px] font-semibold uppercase tracking-wider text-accent">Strava linked</p>
                   ) : null}
                 </div>
               </Link>
-            ))}
+            );
+            })}
           </div>
         </div>
       ) : null}

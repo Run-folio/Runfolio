@@ -285,6 +285,18 @@ function defaultMetaFromDiscover(
       category_group: "utmb"
     };
   }
+  if (group === "global_trail") {
+    const hundred = distanceKm >= 161;
+    return {
+      race_tier: 3,
+      prestige_base: hundred ? 76 : 68,
+      is_major_marathon: false,
+      is_utmb_series: false,
+      is_iconic_ultra: hundred || distanceKm >= 120,
+      is_hundred_miler: hundred,
+      category_group: "global_trail"
+    };
+  }
   return {
     race_tier: 3,
     prestige_base: hundred ? 78 : 70,

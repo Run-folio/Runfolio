@@ -1,22 +1,25 @@
 import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
 import { AppNavbar } from "@/components/app-navbar";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
+import { ProfileConfirmedMajorRaces } from "@/components/profile-confirmed-major-races";
 import { ProfileHero } from "@/components/profile-hero";
-import { ProfileMediumMatchStrip } from "@/components/profile-medium-match-strip";
+import { ProfilePendingRaceCandidates } from "@/components/profile-pending-race-candidates";
 import { ProfileTopRaces } from "@/components/profile-top-races";
 import { RaceJourney } from "@/components/race-journey";
 import { StravaProfileBlock } from "@/components/strava-profile-block";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
-import { extractMediumStravaMatchesForProfile } from "@/lib/profile-portfolio";
-import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
+import { buildProfilePendingRaceCandidates } from "@/lib/profile-pending-candidates";
+import { profileApprovedCompletedRaces } from "@/lib/portfolio-race";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { resolveProfileHeroPhoto } from "@/lib/profile-hero-asset";
 import { runfolioLog } from "@/lib/runfolio-log";
+import { fetchPublicProfileBundle } from "@/lib/supabase/fetch-public-profile";
 import { getStravaFeed } from "@/lib/strava-feed";
+import { rankRacesForProfileTopRaces } from "@/lib/top-race-rank";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
-import type { Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
+import type { ProfilePendingRaceCandidate, Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -42,34 +45,29 @@ export default async function PublicProfilePage({ params }: Props) {
   } | null = null;
   let isOwnProfile = false;
   let stravaEnriched: StravaRaceCandidate[] = [];
+  let pendingCandidates: ProfilePendingRaceCandidate[] = [];
 
   if (!isSupabaseConfigured()) {
     runner = { id: "offline", name: decodeURIComponent(username) };
     allRaces = [];
   } else {
     try {
-      const supabase = await createClient();
-      const userResult = await supabase.from("users").select("*").eq("name", username).single();
-      if (userResult.error && userResult.error.code !== "PGRST116") {
-        throw new Error(userResult.error.message);
-      }
-      runner = userResult.data;
-      if (runner) {
-        const racesResult = await supabase
-          .from("races")
-          .select("*")
-          .eq("user_id", runner.id)
-          .order("date", { ascending: false });
-        if (racesResult.error) throw new Error(racesResult.error.message);
-        allRaces = racesResult.data ?? [];
-      } else {
-        allRaces = [];
-      }
+      const bundle = await fetchPublicProfileBundle(username);
+      runner = bundle.runner;
+      allRaces = bundle.races ?? [];
 
       const { user } = await getServerAuthUser();
       isOwnProfile = Boolean(user?.id && runner && user.id === runner.id);
 
-      if (isOwnProfile) {
+      if (isOwnProfile && user && runner) {
+        const supabase = await createClient();
+        const { data: dis, error: disErr } = await supabase
+          .from("strava_profile_dismissals")
+          .select("strava_activity_id")
+          .eq("user_id", user.id);
+        const dismissedIds =
+          disErr || !dis ? new Set<string>() : new Set(dis.map((d) => d.strava_activity_id));
+
         const feed = await getStravaFeed();
         stravaEnriched = feed.ok
           ? enrichRaceCandidatesWithCatalogMatches(feed.raceCandidates, allRaces ?? [])
@@ -80,21 +78,26 @@ export default async function PublicProfilePage({ params }: Props) {
           matchedMajorDiscoverIds: dedupeHighConfidenceDiscoverIds(stravaEnriched),
           stravaOk: feed.ok
         };
+        pendingCandidates = buildProfilePendingRaceCandidates(stravaEnriched, allRaces, dismissedIds);
       }
     } catch (e) {
       if (isDynamicServerError(e)) throw e;
       runfolioLog.error("PublicProfile.supabase", e, { username });
       runner = null;
       allRaces = [];
+      pendingCandidates = [];
     }
   }
 
   const future = (allRaces ?? []).filter((r) => !r.is_completed);
-  /** Top Races + Race Journey: confirmed catalog/Strava finishes only. */
-  const profileCompleted = confirmedCompletedPortfolioRaces(allRaces ?? []);
+  /** Top Races + Race Journey: user-approved portfolio finishes only. */
+  const profileApproved = profileApprovedCompletedRaces(allRaces ?? []).sort((a, b) =>
+    String(b.date ?? "").localeCompare(String(a.date ?? ""))
+  );
 
-  const mediumMatches =
-    isOwnProfile && stravaEnriched.length > 0 ? extractMediumStravaMatchesForProfile(stravaEnriched) : [];
+  const ranked = rankRacesForProfileTopRaces(profileApproved);
+  const topThreeIds = new Set(ranked.slice(0, 3).map((x) => x.race.id));
+  const confirmedMajorRest = profileApproved.filter((r) => !topThreeIds.has(r.id));
 
   const displayName = runner?.name ?? decodeURIComponent(username);
 
@@ -105,9 +108,13 @@ export default async function PublicProfilePage({ params }: Props) {
         <ProfileHero key={profileHeroPhoto} displayName={displayName} imageSrc={profileHeroPhoto} />
 
         <div className="mx-auto w-full max-w-[1400px] px-0">
-          <ProfileTopRaces completedRaces={profileCompleted} />
+          {isOwnProfile && pendingCandidates.length > 0 ? (
+            <ProfilePendingRaceCandidates candidates={pendingCandidates} profilePath={profilePath} />
+          ) : null}
 
-          {mediumMatches.length > 0 ? <ProfileMediumMatchStrip matches={mediumMatches} profilePath={profilePath} /> : null}
+          <ProfileTopRaces completedRaces={profileApproved} />
+
+          <ProfileConfirmedMajorRaces races={confirmedMajorRest} />
 
           {ownProfileStrava ? (
             <StravaProfileBlock
@@ -116,11 +123,12 @@ export default async function PublicProfilePage({ params }: Props) {
               matchedMajorDiscoverIds={ownProfileStrava.matchedMajorDiscoverIds}
               stravaOAuthConfigured={stravaOAuthConfigured}
               stravaOk={ownProfileStrava.stravaOk}
+              profileCurationMode
             />
           ) : null}
 
           <div className="grid gap-0 border-x border-border lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
-            <RaceJourney races={profileCompleted} />
+            <RaceJourney races={profileApproved} />
             <ProfileBucketList
               completed={(allRaces ?? []).filter(raceCountsAsBucketListCompleted)}
               future={future.filter(raceIsBucketListFutureGoal)}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import type { Race } from "@/types";
 import { formatRaceMonth } from "@/lib/format-race-date";
+import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { getRaceLogoPath } from "@/lib/race-logos";
 import { cn } from "@/lib/utils";
@@ -14,7 +15,8 @@ function BucketRaceCard({
   variant: "completed" | "future";
 }) {
   const month = formatRaceMonth(race.date);
-  const src = getRaceLogoPath(race.name);
+  const label = getPortfolioRaceLabel(race);
+  const src = getRaceLogoPath(label);
 
   const href =
     variant === "completed" ? portfolioRaceHref(race) : `/races/${race.id}/info`;
@@ -41,7 +43,7 @@ function BucketRaceCard({
         />
       </div>
       <div className="flex flex-1 flex-col gap-1 p-3">
-        <p className="text-center text-[12px] font-semibold leading-tight text-white">{race.name}</p>
+        <p className="text-center text-[12px] font-semibold leading-tight text-white">{label}</p>
         {variant === "completed" && month ? (
           <p className="text-center text-[11px] text-muted">
             <span className="inline-flex items-center justify-center gap-1 text-[#d4af37]">

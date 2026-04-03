@@ -7,6 +7,7 @@ type Props = {
   matchedMajorDiscoverIds: string[];
   stravaOAuthConfigured?: boolean;
   stravaOk: boolean;
+  profileCurationMode?: boolean;
 };
 
 /** Owner-only block on public profile — curated long-run feed when you view your own URL. */
@@ -15,7 +16,8 @@ export function StravaProfileBlock({
   raceCandidateStats,
   matchedMajorDiscoverIds,
   stravaOAuthConfigured,
-  stravaOk
+  stravaOk,
+  profileCurationMode = false
 }: Props) {
   return (
     <div className="border-x border-b border-border bg-[#080a0e] px-5 py-8 md:px-8 md:py-10">
@@ -27,6 +29,7 @@ export function StravaProfileBlock({
         stravaOAuthConfigured={stravaOAuthConfigured}
         stravaOk={stravaOk}
         layout="profile"
+        profileCurationMode={profileCurationMode}
       />
     </div>
   );

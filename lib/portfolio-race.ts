@@ -21,3 +21,12 @@ export function isConfirmedPortfolioCompletion(race: Race): boolean {
 export function confirmedCompletedPortfolioRaces(races: Race[]): Race[] {
   return races.filter(isConfirmedPortfolioCompletion);
 }
+
+/** Public profile + Top Races / Journey: user-approved portfolio finishes only. */
+export function raceIncludedOnProfile(race: Race): boolean {
+  return race.include_on_profile !== false;
+}
+
+export function profileApprovedCompletedRaces(races: Race[]): Race[] {
+  return confirmedCompletedPortfolioRaces(races).filter(raceIncludedOnProfile);
+}

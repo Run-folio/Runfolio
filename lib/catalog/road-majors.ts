@@ -1,0 +1,115 @@
+import type { CatalogRaceRecord } from "@/lib/catalog/types";
+
+/** Abbott World Marathon Majors + other iconic road marathons (single entity per race). */
+export const ROAD_MAJOR_RECORDS: CatalogRaceRecord[] = [
+  {
+    id: "disc-london",
+    name: "London Marathon",
+    location: "London, UK",
+    distance_km: 42.2,
+    surface: "road",
+    group: "major_marathons",
+    typical_months: [4],
+    tags: ["fast", "city_major"],
+    aliases: ["london marathon", "virgin money london"],
+    match_boost: 0.05,
+    region: "europe",
+    source: "road_major"
+  },
+  {
+    id: "disc-boston",
+    name: "Boston Marathon",
+    location: "Boston, USA",
+    distance_km: 42.2,
+    surface: "road",
+    group: "major_marathons",
+    typical_months: [4],
+    tags: ["historic", "bq"],
+    aliases: ["boston marathon", "boston strong"],
+    match_boost: 0.05,
+    region: "north_america",
+    source: "road_major"
+  },
+  {
+    id: "disc-berlin",
+    name: "Berlin Marathon",
+    location: "Berlin, Germany",
+    distance_km: 42.2,
+    surface: "road",
+    group: "major_marathons",
+    typical_months: [9],
+    tags: ["fast", "flat"],
+    match_boost: 0.05,
+    region: "europe",
+    source: "road_major"
+  },
+  {
+    id: "disc-chicago",
+    name: "Chicago Marathon",
+    location: "Chicago, USA",
+    distance_km: 42.2,
+    surface: "road",
+    group: "major_marathons",
+    typical_months: [10],
+    tags: ["flat", "city_major"],
+    aliases: ["bank of america chicago", "chicago marathon"],
+    match_boost: 0.05,
+    region: "north_america",
+    source: "road_major"
+  },
+  {
+    id: "disc-nyc",
+    name: "New York City Marathon",
+    location: "New York, USA",
+    distance_km: 42.2,
+    surface: "road",
+    group: "major_marathons",
+    typical_months: [11],
+    tags: ["city_major", "bridges"],
+    aliases: ["tcs nyc", "nyc marathon", "new york marathon"],
+    match_boost: 0.05,
+    region: "north_america",
+    source: "road_major"
+  },
+  {
+    id: "disc-tokyo",
+    name: "Tokyo Marathon",
+    location: "Tokyo, Japan",
+    distance_km: 42.2,
+    surface: "road",
+    group: "major_marathons",
+    typical_months: [3],
+    tags: ["city_major"],
+    match_boost: 0.05,
+    region: "asia",
+    source: "road_major"
+  },
+  {
+    id: "disc-valencia",
+    name: "Valencia Marathon",
+    location: "Valencia, Spain",
+    distance_km: 42.2,
+    surface: "road",
+    group: "major_marathons",
+    typical_months: [12],
+    tags: ["fast", "flat"],
+    aliases: ["maraton valencia", "valencia marathon"],
+    match_boost: 0.04,
+    region: "europe",
+    source: "road_major"
+  },
+  {
+    id: "disc-paris",
+    name: "Paris Marathon",
+    location: "Paris, France",
+    distance_km: 42.2,
+    surface: "road",
+    group: "major_marathons",
+    typical_months: [4],
+    tags: ["city_major"],
+    aliases: ["schneider electric paris", "paris marathon"],
+    match_boost: 0.04,
+    region: "europe",
+    source: "road_major"
+  }
+];

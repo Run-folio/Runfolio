@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import type { Race } from "@/types";
+import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 
@@ -17,30 +18,28 @@ function groupByYear(races: Race[]): { year: string; items: Race[] }[] {
 }
 
 type Props = {
-  /** Completed races saved in Runfolio (confirmed or manual); incomplete rows ignored. */
+  /** Portfolio-approved completed races; incomplete rows ignored. */
   races: Race[];
 };
 
 function JourneyRow({ race }: { race: Race }) {
   const href = portfolioRaceHref(race);
   const external = href.startsWith("http");
+  const label = getPortfolioRaceLabel(race);
   const inner = (
     <>
       <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-md">
         <Image
-          src={getRaceSceneImagePath(race.name)}
-          alt={race.name}
+          src={getRaceSceneImagePath(label)}
+          alt={label}
           fill
           className="object-cover"
           sizes="80px"
         />
       </div>
       <div className="min-w-0 flex-1 border-b border-border/50 pb-4">
-        <p className="font-semibold text-white">{race.name}</p>
+        <p className="font-semibold text-white">{label}</p>
         <p className="text-sm text-muted">{race.location ?? "—"}</p>
-        {race.id.startsWith("strava-virt-") ? (
-          <p className="mt-1 text-[9px] font-semibold uppercase tracking-wider text-accent">Strava major · confirm to save</p>
-        ) : null}
       </div>
       <p className="shrink-0 text-sm tabular-nums text-white/90">{race.time ?? "—"}</p>
     </>

@@ -1,15 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import type { Activity, ActivityMatchInput, CatalogRaceSuggestion, Race, StravaFeedActivity } from "@/types";
-import { createRaceAction } from "@/lib/actions";
+import { confirmCustomMajorEffortAction, createRaceAction } from "@/lib/actions";
 import { stravaFeedToActivity } from "@/lib/strava-feed-to-activity";
 import { StravaActivityCard } from "@/components/strava-activity-card";
 import { RaceMatchConfirmation } from "@/components/race-match-confirmation";
 import { asFormAction } from "@/lib/server-action-form";
 import { suggestRaceMatch } from "@/lib/match-races";
-import { getDiscoverRaceById, rankKnownRaceMatches } from "@/lib/known-race-match";
+import {
+  getDiscoverRaceById,
+  isUnmatchedMajorEffortCandidate,
+  rankKnownRaceMatches
+} from "@/lib/known-race-match";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,6 +56,9 @@ export function CreateRaceForm({
   const [pendingMatchInput, setPendingMatchInput] = useState<ActivityMatchInput | null>(null);
   const [matchDismissedForStravaId, setMatchDismissedForStravaId] = useState<string | null>(null);
   const [stravaHeroPhoto, setStravaHeroPhoto] = useState<string | null>(null);
+  const [customMajorName, setCustomMajorName] = useState("");
+  const [customMajorPending, startCustomMajor] = useTransition();
+  const [customMajorError, setCustomMajorError] = useState<string | null>(null);
   const appliedDiscoverRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -98,6 +105,20 @@ export function CreateRaceForm({
     return rankKnownRaceMatches(pendingMatchInput, existingRaces);
   }, [pendingMatchInput, existingRaces]);
 
+  const showUnmatchedMajor = useMemo(() => {
+    if (!pendingMatchInput) return false;
+    return isUnmatchedMajorEffortCandidate(pendingMatchInput, matchCandidates);
+  }, [pendingMatchInput, matchCandidates]);
+
+  useEffect(() => {
+    if (!pendingMatchInput) {
+      setCustomMajorName("");
+      setCustomMajorError(null);
+      return;
+    }
+    setCustomMajorName(pendingMatchInput.name || "");
+  }, [pendingMatchInput?.strava_id]);
+
   function toMatchInputFromActivity(activity: Activity): ActivityMatchInput {
     return {
       strava_id: activity.strava_id,
@@ -136,7 +157,8 @@ export function CreateRaceForm({
       return;
     }
     const ranked = rankKnownRaceMatches(input, existingRaces);
-    if (ranked.length === 0) {
+    const unmatchedMajor = isUnmatchedMajorEffortCandidate(input, ranked);
+    if (ranked.length === 0 && !unmatchedMajor) {
       setPendingMatchInput(null);
       return;
     }
@@ -212,6 +234,34 @@ export function CreateRaceForm({
     time: form.time,
     location: form.location,
     description: form.description
+  };
+
+  const runSaveCustomMajor = () => {
+    if (!pendingMatchInput) return;
+    const dist = Number(formSnap.distance_km);
+    if (!Number.isFinite(dist) || dist < 50) {
+      setCustomMajorError("Distance must be at least 50 km to save as a custom ultra.");
+      return;
+    }
+    setCustomMajorError(null);
+    startCustomMajor(async () => {
+      const fd = new FormData();
+      fd.set("strava_activity_id", pendingMatchInput.strava_id);
+      fd.set(
+        "custom_name",
+        customMajorName.trim() || pendingMatchInput.name || "Major trail / ultra effort"
+      );
+      fd.set("date", formSnap.date);
+      fd.set("distance_km", formSnap.distance_km);
+      fd.set("elevation_m", formSnap.elevation_m);
+      fd.set("time", formSnap.time);
+      fd.set("location", formSnap.location);
+      fd.set("return_to", "/races/new");
+      const res = await confirmCustomMajorEffortAction(fd);
+      if (res && typeof res === "object" && "error" in res && res.error) {
+        setCustomMajorError(String(res.error));
+      }
+    });
   };
 
   return (
@@ -479,6 +529,50 @@ export function CreateRaceForm({
           }}
         />
       </div>
+    ) : null}
+
+    {pendingMatchInput && showUnmatchedMajor ? (
+      <Card className="mt-6 border-amber-500/25 bg-amber-950/15 p-5">
+        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-amber-200/90">
+          Unmatched major effort
+        </p>
+        <p className="mt-2 text-sm text-muted">
+          This activity is ≥50 km and doesn&apos;t match the catalog strongly. Save it as a portfolio finish now; you can
+          link a catalog race later from your profile.
+        </p>
+        {customMajorError ? (
+          <p className="mt-2 text-sm text-red-300" role="alert">
+            {customMajorError}
+          </p>
+        ) : null}
+        <div className="mt-4 flex max-w-xl flex-col gap-3 sm:flex-row sm:items-end">
+          <div className="min-w-0 flex-1">
+            <label className="text-[10px] font-semibold uppercase tracking-wider text-muted">Display name</label>
+            <Input
+              value={customMajorName}
+              onChange={(e) => setCustomMajorName(e.target.value)}
+              placeholder="Race or event name (optional)"
+              className="mt-1"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" disabled={customMajorPending} onClick={runSaveCustomMajor}>
+              {customMajorPending ? "Saving…" : "Save without catalog match"}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={customMajorPending}
+              onClick={() => {
+                setMatchDismissedForStravaId(pendingMatchInput.strava_id);
+                setPendingMatchInput(null);
+              }}
+            >
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      </Card>
     ) : null}
     </>
   );

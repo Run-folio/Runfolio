@@ -8,6 +8,7 @@ import type { ActivityPortfolioStravaView, Race } from "@/types";
 import { upsertActivityPortfolioAction } from "@/lib/actions";
 import { discoverRaces } from "@/lib/discover-races";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
+import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { getDiscoverPrestigeMeta } from "@/lib/discover-race-prestige";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { Button } from "@/components/ui/button";
@@ -50,7 +51,7 @@ export function ActivityPortfolioClient({
 
   const effectiveDiscoverId = race?.discover_race_id ?? suggestedDiscoverRaceId;
   const prestige = getDiscoverPrestigeMeta(effectiveDiscoverId);
-  const displayTitle = race?.name?.trim() || stravaView.name;
+  const displayTitle = race ? getPortfolioRaceLabel(race) : stravaView.name;
   const photos = useMemo(
     () => mergePhotoUrls(stravaView.photo_urls, race?.manual_photo_urls),
     [stravaView.photo_urls, race?.manual_photo_urls]

@@ -10,7 +10,11 @@ import { getValidStravaAccessToken } from "@/lib/strava-access-server";
 import { getStravaClientCredentials } from "@/lib/strava-env";
 import { getStravaTokensFromCookies, persistStravaTokensToCookies } from "@/lib/strava-cookies";
 import { refreshStravaAccessToken } from "@/lib/strava-oauth";
-import { computeStravaFeedStats, filterStravaRaceCandidates } from "@/lib/strava-race-candidates";
+import {
+  computeStravaFeedStats,
+  filterStravaMajorUltraCandidates,
+  filterStravaRaceCandidates
+} from "@/lib/strava-race-candidates";
 
 const RUN_LIKE = new Set([
   "Run",
@@ -65,8 +69,10 @@ function emptyFeedResult(errorMessage?: string): StravaFeedResult {
   return {
     activities: [],
     raceCandidates: [],
+    majorUltraCandidates: [],
     stats: empty,
     raceCandidateStats: empty,
+    majorUltraStats: empty,
     ok: false,
     errorMessage
   };
@@ -109,9 +115,10 @@ function isUnauthorizedMessage(msg: string): boolean {
 }
 
 /** Strava returns newest-first; paginate for multi-year major-race discovery (rate-limit aware cap). */
-const STRAVA_FEED_MAX_PAGES = 25;
+/** Deeper history for global trail / ultra matching (rate-limit aware). */
+const STRAVA_FEED_MAX_PAGES = 40;
 const STRAVA_FEED_PER_PAGE = 50;
-const STRAVA_FEED_MAX_ACTIVITIES = 900;
+const STRAVA_FEED_MAX_ACTIVITIES = 1400;
 
 async function listWithToken(access: string): Promise<StravaSummaryActivityJson[]> {
   const all: StravaSummaryActivityJson[] = [];
@@ -132,11 +139,14 @@ async function listWithToken(access: string): Promise<StravaSummaryActivityJson[
 
 function buildFeedResult(activities: StravaFeedActivity[]): StravaFeedResult {
   const raceCandidates = filterStravaRaceCandidates(activities);
+  const majorUltraCandidates = filterStravaMajorUltraCandidates(activities);
   return {
     activities,
     raceCandidates,
+    majorUltraCandidates,
     stats: computeLegacyStats(activities),
     raceCandidateStats: computeStravaFeedStats(raceCandidates),
+    majorUltraStats: computeStravaFeedStats(majorUltraCandidates),
     ok: true
   };
 }

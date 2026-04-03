@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Race } from "@/types";
+import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { rankRacesForProfileTopRaces, type TopRaceBadge } from "@/lib/top-race-rank";
@@ -26,6 +27,7 @@ function TopRaceCard({
   href: string;
 }) {
   const isExternal = href.startsWith("http");
+  const label = getPortfolioRaceLabel(race);
   const cardInner = (
     <>
       <div className="absolute right-2 top-2 z-20 flex max-w-[65%] flex-wrap justify-end gap-1">
@@ -48,15 +50,15 @@ function TopRaceCard({
       </div>
       <div className="relative aspect-[4/3] w-full">
         <Image
-          src={getRaceSceneImagePath(race.name)}
-          alt={race.name}
+          src={getRaceSceneImagePath(label)}
+          alt={label}
           fill
           className="object-cover transition group-hover:scale-[1.02]"
           sizes="(max-width:768px) 100vw, 33vw"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/20 to-transparent" />
         <div className="absolute bottom-0 left-0 right-0 p-4">
-          <h3 className={`font-display text-xl font-normal text-white md:text-2xl`}>{race.name}</h3>
+          <h3 className={`font-display text-xl font-normal text-white md:text-2xl`}>{label}</h3>
           <p className="mt-1 text-xs text-white/65">
             {race.time ?? "—"} · {race.distance_km} km
             {race.elevation_m ? ` / ${race.elevation_m} m` : ""}
@@ -90,7 +92,7 @@ function TopRaceCard({
 }
 
 type Props = {
-  /** Durable completed races (database); unconfirmed Strava suggestions excluded. */
+  /** Portfolio-approved completed races (DB); pending Strava candidates excluded. */
   completedRaces: Race[];
 };
 
@@ -107,8 +109,9 @@ export function ProfileTopRaces({ completedRaces }: Props) {
         <div className="mx-auto max-w-xl text-center">
           <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white">Top Races</h2>
           <p className="type-meta mt-3 text-xs leading-relaxed">
-            Your standout finishes will land here once you confirm a Strava match or save a finish linked to the race
-            catalog. No placeholders — only races you actually logged.
+            Approve imported majors in <span className="text-white/90">Pending review</span> on your profile, or add a
+            finish from the race catalog. Only portfolio-approved races appear here — no placeholders or auto-dumped
+            Strava.
           </p>
           <Link
             href="/races/new"
@@ -127,8 +130,8 @@ export function ProfileTopRaces({ completedRaces }: Props) {
         <div>
           <h2 className="text-sm font-bold uppercase tracking-[0.2em] text-white">Top Races</h2>
           <p className="type-meta mt-2 max-w-xl text-xs">
-            Saved finishes only — ranked by prestige (majors, UTMB, hundreds), distance, vert, catalog links, and story
-            tags. Confirm a Strava match to land a race here; recency is a light tie-breaker.
+            Your approved major finishes — ranked by prestige, distance, vert, catalog links, and tags. Approve imports
+            on your profile first; recency is a light tie-breaker.
           </p>
         </div>
         <Link href="/races/new" className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold hover:text-white">

@@ -1,15 +1,17 @@
 import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { BucketListWorkflow } from "@/components/bucket-list-workflow";
 import { getServerAuthUser } from "@/lib/auth-server";
+import { usedStravaActivityIdsFromRaces } from "@/lib/catalog-discover-user-state";
+import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
+import { discoverRaces } from "@/lib/discover-races";
+import { runfolioLog } from "@/lib/runfolio-log";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
-import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
-import { runfolioLog } from "@/lib/runfolio-log";
+import { getStravaFeed } from "@/lib/strava-feed";
 import type { Race } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -36,8 +38,15 @@ export default async function BucketListPage() {
       races = [];
     }
   }
+
   const completed = (races ?? []).filter(raceCountsAsBucketListCompleted);
   const future = (races ?? []).filter(raceIsBucketListFutureGoal);
+
+  const stravaOAuthConfigured = Boolean(
+    process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
+  );
+  const feed = await getStravaFeed();
+  const usedStravaIds = [...usedStravaActivityIdsFromRaces(races ?? [])];
 
   return (
     <>
@@ -47,63 +56,39 @@ export default async function BucketListPage() {
         <div className="hero-overlay" />
         <div className="hero-inner flex min-h-[280px] flex-col justify-end pb-12">
           <p className="type-eyebrow">Bucket List</p>
-          <h1 className="type-display mt-3 max-w-3xl">Races that define your journey</h1>
-          <p className="type-meta mt-4 max-w-2xl">Completed dreams beside future start lines.</p>
+          <h1 className="type-display mt-3 max-w-3xl">Goals you choose. Finishes you prove.</h1>
+          <p className="type-meta mt-4 max-w-2xl">
+            Search the library, save future goals, then link a real Strava activity to move each goal into your completed
+            collection.
+          </p>
         </div>
       </section>
 
-      <main className="app-shell space-y-10">
-        <div className="flex flex-col gap-4 border border-border bg-panel/80 p-4 sm:flex-row sm:items-center sm:justify-between md:p-6">
-          <Input placeholder="Search races to add" className="max-w-xl" />
-          <Button>Add custom race</Button>
+      <main className="app-shell space-y-10 pb-16">
+        <BucketListWorkflow
+          futureGoals={future}
+          completedBucketRaces={completed}
+          catalogRaces={discoverRaces}
+          raceCandidates={feed.raceCandidates}
+          usedStravaIds={usedStravaIds}
+          stravaOk={feed.ok}
+          stravaOAuthConfigured={stravaOAuthConfigured}
+        />
+
+        <div className="flex flex-wrap gap-3 border-t border-white/10 pt-8">
+          <Link
+            href="/races/find"
+            className="inline-flex items-center justify-center rounded-[12px] bg-accent px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
+          >
+            Browse race library
+          </Link>
+          <Link
+            href="/races/new"
+            className="inline-flex items-center justify-center rounded-[12px] border border-white/18 px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-muted transition hover:border-white/35 hover:text-white"
+          >
+            Add race manually
+          </Link>
         </div>
-
-        <section className="space-y-4">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-green">Completed Races</h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            {completed.length === 0 ? (
-              <Card className="col-span-full border-dashed border-white/12 bg-panel/35 p-8 text-center md:col-span-2">
-                <p className="text-sm font-medium text-white">No bucket-list finishes yet</p>
-                <p className="type-meta mx-auto mt-2 max-w-lg text-xs">
-                  Completed goals appear here only when a race was on your bucket list and you have a confirmed finish
-                  (catalog or Strava). Other finishes stay in your main portfolio.
-                </p>
-              </Card>
-            ) : (
-              completed.map((race) => (
-                <Card key={race.id} className="bg-panelAlt/90">
-                  <p className="font-semibold uppercase tracking-[0.04em]">{race.name}</p>
-                  <p className="type-meta mt-2 text-sm">
-                    {race.distance_km ?? "-"} km · {race.location ?? "Unknown"} · {race.date ?? "TBD"}
-                  </p>
-                </Card>
-              ))
-            )}
-          </div>
-        </section>
-
-        <section className="space-y-4">
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">Future Goals</h2>
-          <div className="grid gap-4 md:grid-cols-2">
-            {future.length === 0 ? (
-              <Card className="col-span-full border-dashed border-white/12 bg-panel/35 p-8 text-center md:col-span-2">
-                <p className="text-sm font-medium text-white">Your start lines are open</p>
-                <p className="type-meta mx-auto mt-2 max-w-lg text-xs">
-                  Add races from the catalog or Add race — future bucket goals you choose show up here.
-                </p>
-              </Card>
-            ) : (
-              future.map((race) => (
-                <Card key={race.id} className="bg-panelAlt/90">
-                  <p className="font-semibold uppercase tracking-[0.04em]">{race.name}</p>
-                  <p className="type-meta mt-2 text-sm">
-                    {race.distance_km ?? "-"} km · {race.location ?? "Unknown"} · {race.date ?? "TBD"}
-                  </p>
-                </Card>
-              ))
-            )}
-          </div>
-        </section>
       </main>
     </>
   );

@@ -99,7 +99,8 @@ export async function createRaceAction(formData: FormData) {
       description: String(formData.get("description") ?? ""),
       is_completed: isCompleted,
       /** Future goals and normal adds count toward bucket list UI; Strava-only rows use confirm flow. */
-      is_bucket_list_item: true
+      is_bucket_list_item: true,
+      include_on_profile: true
     };
 
     const { error } = await supabase.from("races").insert(payload);
@@ -214,7 +215,8 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
       description: description || null,
       is_completed: true,
       strava_activity_id: stravaActivityId,
-      discover_race_id: discoverRaceId
+      discover_race_id: discoverRaceId,
+      include_on_profile: true
     };
 
     const { data: existingStravaRow } = await supabase
@@ -283,6 +285,81 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
   }
 }
 
+/**
+ * Save a ≥50 km Strava effort as a completed portfolio row without a catalog race id (dynamic fallback).
+ * User can rename; `discover_race_id` stays null until they link a catalog race later.
+ */
+export async function confirmCustomMajorEffortAction(formData: FormData) {
+  if (!isSupabaseConfigured()) redirect("/dashboard");
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) redirect("/auth/login");
+    const supabase = await createClient();
+
+    const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
+    if (!stravaActivityId) {
+      return { error: "Missing Strava activity." };
+    }
+
+    const customName =
+      String(formData.get("custom_name") ?? "").trim() || "Major trail / ultra effort";
+    const date = String(formData.get("date") ?? "").trim() || null;
+    const distanceKm = Number(formData.get("distance_km") ?? 0);
+    const elevationM = Number(formData.get("elevation_m") ?? 0);
+    const time = String(formData.get("time") ?? "").trim() || null;
+    const location = String(formData.get("location") ?? "").trim() || null;
+
+    if (!Number.isFinite(distanceKm) || distanceKm < 50) {
+      return { error: "Custom major efforts must be at least 50 km." };
+    }
+
+    const returnToRaw = String(formData.get("return_to") ?? "").trim();
+    const returnTo =
+      returnToRaw.startsWith("/") && !returnToRaw.startsWith("//") && !returnToRaw.includes("://")
+        ? returnToRaw
+        : "/dashboard";
+
+    const existing = await getRaceByStravaActivityId(stravaActivityId, user.id);
+
+    const payload = {
+      name: customName,
+      location,
+      date,
+      distance_km: distanceKm,
+      elevation_m: Number.isFinite(elevationM) && elevationM > 0 ? elevationM : null,
+      time,
+      description: null,
+      is_completed: true,
+      strava_activity_id: stravaActivityId,
+      discover_race_id: null as string | null,
+      is_bucket_list_item: false,
+      include_on_profile: true
+    };
+
+    if (existing) {
+      const { error: upErr } = await supabase.from("races").update(payload).eq("id", existing.id).eq("user_id", user.id);
+      if (upErr) return { error: upErr.message };
+    } else {
+      const { error: insErr } = await supabase.from("races").insert({
+        ...payload,
+        user_id: user.id
+      });
+      if (insErr) return { error: insErr.message };
+    }
+
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      stravaActivityId,
+      alsoPaths: [returnTo]
+    });
+    redirect(returnTo);
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.confirmCustomMajorEffort", e);
+    return { error: e instanceof Error ? e.message : "Could not save effort." };
+  }
+}
+
 function parseManualPhotoUrlsBlock(raw: string): string[] {
   const lines = raw.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
   return [...new Set(lines.filter((s) => /^https?:\/\//i.test(s)))];
@@ -336,7 +413,8 @@ export async function upsertActivityPortfolioAction(formData: FormData) {
       tag_career_highlight: formData.get("tag_career_highlight") === "on",
       tag_hardest: formData.get("tag_hardest") === "on",
       tag_bucket_list_done: formData.get("tag_bucket_list_done") === "on",
-      manual_photo_urls: parseManualPhotoUrlsBlock(String(formData.get("manual_photo_urls") ?? ""))
+      manual_photo_urls: parseManualPhotoUrlsBlock(String(formData.get("manual_photo_urls") ?? "")),
+      include_on_profile: true
     };
 
     if (existing) {
@@ -545,13 +623,14 @@ export async function addCatalogRaceToBucketListAction(formData: FormData) {
       description: null,
       is_completed: false,
       is_bucket_list_item: true,
-      discover_race_id: discoverId
+      discover_race_id: discoverId,
+      include_on_profile: true
     });
     if (insErr) return { error: insErr.message };
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: discoverId,
-      alsoPaths: ["/races/find"]
+      alsoPaths: ["/races/find", "/bucket-list"]
     });
     return { ok: true as const };
   } catch (e) {
@@ -559,5 +638,133 @@ export async function addCatalogRaceToBucketListAction(formData: FormData) {
     if (isRedirectError(e)) throw e;
     runfolioLog.error("actions.addCatalogRaceToBucketList", e);
     return { error: e instanceof Error ? e.message : "Could not add goal." };
+  }
+}
+
+/**
+ * Complete a **manual** future bucket goal (no `discover_race_id`) by linking a Strava activity.
+ * Catalog/library goals must use `confirmKnownRaceMatchAction` so the race id stays canonical.
+ */
+export async function completeBucketGoalWithStravaAction(formData: FormData) {
+  if (!isSupabaseConfigured()) redirect("/dashboard");
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) redirect("/auth/login");
+    const supabase = await createClient();
+
+    const raceId = String(formData.get("user_race_id") ?? "").trim();
+    const stravaActivityId = String(formData.get("strava_activity_id") ?? "").trim();
+    if (!raceId || !stravaActivityId) {
+      return { error: "Missing race or activity." };
+    }
+
+    const row = await requireOwnedRace(supabase, user.id, raceId);
+    if (!row) return { error: "Race not found." };
+    if (row.is_completed) return { error: "This goal is already completed." };
+    if (!raceIsBucketListFutureGoal(row)) return { error: "Not an active bucket list goal." };
+    if (row.discover_race_id?.trim()) {
+      return { error: "Use the catalog match flow for library races." };
+    }
+
+    const date = String(formData.get("date") ?? "").trim();
+    const distanceKm = Number(formData.get("distance_km") ?? 0);
+    const elevationM = Number(formData.get("elevation_m") ?? 0);
+    const time = String(formData.get("time") ?? "").trim();
+    const location = String(formData.get("location") ?? "").trim();
+    let description = String(formData.get("description") ?? "").trim();
+
+    if (!description) {
+      const access = await getValidStravaAccessToken();
+      if (access) {
+        try {
+          const detail = await fetchStravaActivity(stravaActivityId, access);
+          const d = detail.description?.trim();
+          if (d) description = d;
+        } catch {
+          /* optional */
+        }
+      }
+    }
+
+    const basePayload = {
+      name: row.name,
+      location: location || row.location,
+      date: date || null,
+      distance_km: Number.isFinite(distanceKm) && distanceKm > 0 ? distanceKm : row.distance_km,
+      elevation_m: Number.isFinite(elevationM) && elevationM > 0 ? elevationM : null,
+      time: time || null,
+      description: description || null,
+      is_completed: true,
+      strava_activity_id: stravaActivityId,
+      discover_race_id: null as string | null,
+      is_bucket_list_item: true,
+      include_on_profile: true
+    };
+
+    const { data: existingStravaRow } = await supabase
+      .from("races")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("strava_activity_id", stravaActivityId)
+      .maybeSingle();
+
+    const returnToRaw = String(formData.get("return_to") ?? "").trim();
+    const returnTo =
+      returnToRaw.startsWith("/") && !returnToRaw.startsWith("//") && !returnToRaw.includes("://")
+        ? returnToRaw
+        : "/bucket-list";
+
+    if (existingStravaRow && existingStravaRow.id !== raceId) {
+      const updatePayload = mergeRacePortfolioFromOrphan(basePayload, existingStravaRow as Race);
+      const { error: delErr } = await supabase.from("races").delete().eq("id", existingStravaRow.id);
+      if (delErr) return { error: delErr.message };
+      const { error: upErr } = await supabase.from("races").update(updatePayload).eq("id", raceId).eq("user_id", user.id);
+      if (upErr) return { error: upErr.message };
+    } else {
+      const { error: upErr } = await supabase.from("races").update(basePayload).eq("id", raceId).eq("user_id", user.id);
+      if (upErr) return { error: upErr.message };
+    }
+
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      stravaActivityId,
+      alsoPaths: [returnTo]
+    });
+    redirect(returnTo);
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.completeBucketGoalWithStrava", e);
+    return { error: e instanceof Error ? e.message : "Could not complete goal." };
+  }
+}
+
+/** Hide an imported Strava race candidate from the profile pending queue (durable). */
+export async function dismissStravaProfileCandidateAction(formData: FormData) {
+  if (!isSupabaseConfigured()) return { error: "Connect Supabase to save." };
+  try {
+    const { user, authError } = await getServerAuthUser();
+    if (authError || !user) return { error: "Sign in required." };
+    const stravaId = String(formData.get("strava_activity_id") ?? "").trim();
+    if (!stravaId) return { error: "Missing activity." };
+    const returnToRaw = String(formData.get("return_to") ?? "").trim();
+    const returnTo =
+      returnToRaw.startsWith("/") && !returnToRaw.startsWith("//") && !returnToRaw.includes("://")
+        ? returnToRaw
+        : "/dashboard";
+
+    const supabase = await createClient();
+    const { error } = await supabase.from("strava_profile_dismissals").upsert({
+      user_id: user.id,
+      strava_activity_id: stravaId
+    });
+    if (error) return { error: error.message };
+
+    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: [returnTo] });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.dismissStravaProfileCandidate", e);
+    return { error: e instanceof Error ? e.message : "Could not dismiss." };
   }
 }

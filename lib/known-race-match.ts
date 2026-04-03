@@ -1,67 +1,33 @@
-import type { DiscoverRace } from "@/lib/discover-races";
-import { discoverRaces } from "@/lib/discover-races";
+import type { DiscoverRace } from "@/lib/discover-race-schema";
+import { buildCatalogAliasMap, buildCatalogTypicalMonths, discoverRaces } from "@/lib/discover-races";
 import type { ActivityMatchInput, Race, RaceMatchCandidate, RaceMatchConfidence } from "@/types";
 
 /** Score at or above this is treated as “high confidence” in UI (still requires confirm for bucket mutations). */
 export const RACE_MATCH_HIGH_SCORE = 0.72;
 
-/** Extra tokens / phrases → discover race id (lowercase). */
-export const DISCOVER_RACE_ALIASES: Record<string, string[]> = {
-  "disc-ccc": ["ccc", "utmb ccc", "courmayeur", "chamonix ccc", "100k utmb"],
-  "disc-utmb": ["utmb", "ultra-trail du mont-blanc", "ultra trail du mont blanc", "mont blanc"],
-  "disc-occ": ["occ", "orsieres", "orcières"],
-  "disc-tds": ["tds", "sur les traces", "ducs de savoie"],
-  "disc-etr": ["etr", "trail des géants"],
-  "disc-lavaredo": ["lavaredo", "cortina", "ultra trail cortina"],
-  "disc-wser": ["western states", "ws100", "western states 100", "squaw"],
-  "disc-hardrock": ["hardrock", "hard rock 100", "hardrock100"],
-  "disc-leadville": ["leadville", "lt100", "leadville trail"],
-  "disc-diagonale": ["diagonale", "grand raid", "réunion", "reunion", "diagonale des fous"],
-  "disc-boston": ["boston marathon", "boston strong", "boston 26.2", "boston", "bq"],
-  "disc-chicago": [
-    "chicago marathon",
-    "bank of america chicago",
-    "bank of america chicago marathon",
-    "chicago",
-    "chicago pb",
-    "windy city marathon"
-  ],
-  "disc-nyc": ["tcs nyc", "new york marathon", "nyc marathon", "new york city marathon"],
-  "disc-london": ["london marathon", "virgin money london", "london landmarks"],
-  "disc-berlin": ["berlin marathon"],
-  "disc-tokyo": ["tokyo marathon"],
-  "disc-valencia": ["valencia marathon", "maraton valencia"],
-  "disc-paris": ["paris marathon", "schneider electric paris"],
-  "disc-mds": ["marathon des sables", "mds", "sahara"],
-  "disc-badwater": ["badwater", "135"],
-  "disc-spartathlon": ["spartathlon", "athens to sparta"],
-  "disc-tor": ["tor des géants", "tor des geants", "tdg"],
-  "disc-moab": ["moab 240", "moab"],
-  "disc-pikes": ["pikes peak", "pikes peak marathon"],
-  "disc-two-oceans": ["two oceans", "cape town ultra"]
+/** Extra phrases not worth auto-merging into catalog JSON (override / supplement). */
+const EXTRA_ALIASES: Record<string, string[]> = {
+  "disc-boston": ["bq", "boston 26.2"],
+  "disc-chicago": ["chicago pb", "windy city marathon"],
+  "disc-nyc": ["new york city marathon"]
 };
 
-/**
- * Typical calendar months (1–12) when the event usually occurs — used as a soft signal with distance/title.
- */
+function mergeAliasMaps(
+  base: Record<string, string[]>,
+  extra: Record<string, string[]>
+): Record<string, string[]> {
+  const out: Record<string, string[]> = { ...base };
+  for (const [k, v] of Object.entries(extra)) {
+    out[k] = [...new Set([...(out[k] ?? []), ...v])];
+  }
+  return out;
+}
+
+/** Extra tokens / phrases → discover race id (merged from modular catalog + extras). */
+export const DISCOVER_RACE_ALIASES: Record<string, string[]> = mergeAliasMaps(buildCatalogAliasMap(), EXTRA_ALIASES);
+
 export const DISCOVER_TYPICAL_MONTHS: Record<string, number[]> = {
-  "disc-tokyo": [3],
-  "disc-boston": [4],
-  "disc-london": [4],
-  "disc-paris": [4],
-  "disc-mds": [4],
-  "disc-wser": [6, 7],
-  "disc-hardrock": [7],
-  "disc-utmb": [8, 9],
-  "disc-ccc": [8, 9],
-  "disc-occ": [8, 9],
-  "disc-tds": [8, 9],
-  "disc-etr": [8, 9],
-  "disc-leadville": [8],
-  "disc-berlin": [9],
-  "disc-chicago": [10],
-  "disc-nyc": [11],
-  "disc-valencia": [12]
+  ...buildCatalogTypicalMonths()
 };
 
 function normalize(s: string): string {
@@ -109,14 +75,34 @@ function locationScore(discover: DiscoverRace, act: ActivityMatchInput): { score
   return { score: Math.min(s, 0.28), reasons };
 }
 
-function distanceScore(discoverKm: number, actKm: number): { score: number; reasons: string[] } {
-  if (!actKm || !discoverKm) return { score: 0, reasons: [] };
-  const ratio = Math.abs(actKm - discoverKm) / discoverKm;
-  if (ratio <= 0.06) return { score: 0.3, reasons: ["Distance closely matches the race"] };
-  if (ratio <= 0.12) return { score: 0.22, reasons: ["Distance aligns with the race"] };
-  if (ratio <= 0.2) return { score: 0.12, reasons: ["Distance is in range for this race"] };
-  if (ratio <= 0.28) return { score: 0.05, reasons: ["Distance is loosely in range"] };
-  return { score: 0, reasons: [] };
+function distanceScoreForDiscover(discover: DiscoverRace, actKm: number): { score: number; reasons: string[] } {
+  if (!actKm) return { score: 0, reasons: [] };
+  const distances = [discover.distance_km, ...(discover.distance_variants_km ?? [])].filter((x) => x > 0);
+  let bestScore = 0;
+  let bestReasons: string[] = [];
+  for (const dk of distances) {
+    const ratio = Math.abs(actKm - dk) / dk;
+    let sc = 0;
+    let rs: string[] = [];
+    if (ratio <= 0.06) {
+      sc = 0.3;
+      rs = ["Distance closely matches the race"];
+    } else if (ratio <= 0.12) {
+      sc = 0.22;
+      rs = ["Distance aligns with the race"];
+    } else if (ratio <= 0.2) {
+      sc = 0.12;
+      rs = ["Distance is in range for this race"];
+    } else if (ratio <= 0.28) {
+      sc = 0.05;
+      rs = ["Distance is loosely in range"];
+    }
+    if (sc > bestScore) {
+      bestScore = sc;
+      bestReasons = rs;
+    }
+  }
+  return { score: bestScore, reasons: bestReasons };
 }
 
 function aliasMatchesDiscoverTitle(act: ActivityMatchInput, discover: DiscoverRace, aliasRaw: string): boolean {
@@ -124,13 +110,16 @@ function aliasMatchesDiscoverTitle(act: ActivityMatchInput, discover: DiscoverRa
   const t = normalize(act.name);
   if (na.length < 2 || !t.includes(na)) return false;
 
-  const ratio =
-    discover.distance_km > 0 ? Math.abs(act.distance_km - discover.distance_km) / discover.distance_km : 1;
+  const distances = [discover.distance_km, ...(discover.distance_variants_km ?? [])].filter((x) => x > 0);
+  let bestRatio = 1;
+  for (const dk of distances) {
+    if (dk > 0) bestRatio = Math.min(bestRatio, Math.abs(act.distance_km - dk) / dk);
+  }
 
   if (na.length <= 10) {
     if (discover.surface === "road" && Math.abs(discover.distance_km - 42.2) < 3) {
-      if (ratio > 0.16) return false;
-    } else if (ratio > 0.3) return false;
+      if (bestRatio > 0.16) return false;
+    } else if (bestRatio > 0.3) return false;
   }
   return true;
 }
@@ -185,13 +174,24 @@ function titleScore(discover: DiscoverRace, act: ActivityMatchInput): { score: n
   return { score: Math.min(s, 0.58), reasons };
 }
 
-function elevationBonus(discover: DiscoverRace, act: ActivityMatchInput): { score: number; reasons: string[] } {
+function elevationBonusHeuristic(discover: DiscoverRace, act: ActivityMatchInput): { score: number; reasons: string[] } {
   if (act.elevation_m == null || discover.surface !== "trail") return { score: 0, reasons: [] };
   const dKm = discover.distance_km;
   const rough = dKm * 50;
   const diff = Math.abs(act.elevation_m - rough) / Math.max(rough, 1);
   if (diff < 0.45) return { score: 0.08, reasons: ["Elevation profile fits a mountain ultra"] };
   return { score: 0, reasons: [] };
+}
+
+function elevationProfileScore(discover: DiscoverRace, act: ActivityMatchInput): { score: number; reasons: string[] } {
+  if (act.elevation_m == null) return { score: 0, reasons: [] };
+  const est = discover.elevation_m_est;
+  if (est != null && est > 200 && discover.surface !== "road") {
+    const diff = Math.abs(act.elevation_m - est) / est;
+    if (diff < 0.22) return { score: 0.12, reasons: ["Elevation close to typical course profile"] };
+    if (diff < 0.4) return { score: 0.07, reasons: ["Elevation roughly matches this course"] };
+  }
+  return elevationBonusHeuristic(discover, act);
 }
 
 function sportBonus(discover: DiscoverRace, act: ActivityMatchInput): number {
@@ -214,17 +214,20 @@ export function scoreActivityAgainstDiscover(
   activity: ActivityMatchInput
 ): { score: number; reasons: string[]; confidence: RaceMatchConfidence } {
   const t = titleScore(discover, activity);
-  const d = distanceScore(discover.distance_km, activity.distance_km);
+  const d = distanceScoreForDiscover(discover, activity.distance_km);
   const l = locationScore(discover, activity);
-  const e = elevationBonus(discover, activity);
+  const e = elevationProfileScore(discover, activity);
   const sp = sportBonus(discover, activity);
   const dt = dateProximityScore(discover.id, activity.date);
-  const score = Math.min(1, t.score + d.score + l.score + e.score + sp + dt.score);
+  let score = Math.min(1, t.score + d.score + l.score + e.score + sp + dt.score);
+  const boost = discover.match_boost ?? 0;
+  score = Math.min(1, score + boost);
   const reasons = [...t.reasons, ...d.reasons, ...l.reasons, ...e.reasons, ...dt.reasons];
   if (sp > 0) reasons.push("Sport type fits the event");
+  if (boost >= 0.06) reasons.push("Boost: flagship / series event in catalog");
   return {
     score: Math.round(score * 100) / 100,
-    reasons: [...new Set(reasons)].slice(0, 8),
+    reasons: [...new Set(reasons)].slice(0, 10),
     confidence: confidenceFromScore(score)
   };
 }
@@ -252,6 +255,13 @@ function findBucketListRace(userRaces: Race[], discover: DiscoverRace): Race | n
   return best?.r ?? null;
 }
 
+function shouldSkipDiscoverForActivity(discover: DiscoverRace, activity: ActivityMatchInput): boolean {
+  if (activity.distance_km >= 50) {
+    if (discover.surface === "road" && discover.distance_km < 45) return true;
+  }
+  return false;
+}
+
 /**
  * Rank known major races for a Strava-like activity. Does not auto-apply — UI confirms.
  */
@@ -262,6 +272,7 @@ export function rankKnownRaceMatches(
 ): RaceMatchCandidate[] {
   const out: RaceMatchCandidate[] = [];
   for (const discover of discoverRaces) {
+    if (shouldSkipDiscoverForActivity(discover, activity)) continue;
     const { score, reasons, confidence } = scoreActivityAgainstDiscover(discover, activity);
     if (score < minScore) continue;
     const bucket = findBucketListRace(userRaces, discover);
@@ -282,4 +293,16 @@ export function rankKnownRaceMatches(
 
 export function getDiscoverRaceById(id: string): DiscoverRace | undefined {
   return discoverRaces.find((r) => r.id === id);
+}
+
+/**
+ * True when a long trail/ultra effort has no strong catalog match — offer “custom major effort” save.
+ */
+export function isUnmatchedMajorEffortCandidate(
+  activity: ActivityMatchInput,
+  ranked: RaceMatchCandidate[]
+): boolean {
+  if (activity.distance_km < 50) return false;
+  const best = ranked[0]?.score ?? 0;
+  return best < 0.42;
 }

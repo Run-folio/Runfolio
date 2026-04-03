@@ -34,6 +34,11 @@ export type Race = {
   finish_notes?: string | null;
   /** User-pasted image URLs when Strava gallery is thin */
   manual_photo_urls?: string[] | null;
+  /**
+   * When false, this finish is not shown in public profile highlights (Top Races, Journey, confirmed strip).
+   * Default true for legacy rows; set true when the user confirms a Strava major for their portfolio.
+   */
+  include_on_profile?: boolean | null;
 };
 
 /** Serializable Strava snapshot for `/activities/[id]` (from API or feed fallback). */
@@ -145,6 +150,28 @@ export type CatalogRaceSuggestion = {
   userRaceId: string | null;
 };
 
+/** Owner profile: one imported race candidate awaiting portfolio approval. */
+export type ProfilePendingRaceCandidate = {
+  stravaId: string;
+  activityTitle: string;
+  date: string;
+  distanceKm: number;
+  elevationM: number | null;
+  movingTimeLabel: string;
+  location: string;
+  sportType: string | null;
+  activityType: string | null;
+  suggestedDiscoverId: string | null;
+  suggestedDisplayTitle: string | null;
+  confidence: RaceMatchConfidence | null;
+  score: number;
+  reasons: string[];
+  onUserBucketList: boolean;
+  userRaceId: string | null;
+  /** Other catalog races this activity might be (for “Choose another”). */
+  alternatives: RaceMatchCandidate[];
+};
+
 /** Serializable row for medium-confidence match prompts on the profile. */
 export type ProfileStravaMediumMatch = {
   stravaId: string;
@@ -200,8 +227,11 @@ export type StravaFeedStats = {
 export type StravaFeedResult = {
   activities: StravaFeedActivity[];
   raceCandidates: StravaFeedActivity[];
+  /** Subset ≥50 km — trail / ultra curation & matching emphasis. */
+  majorUltraCandidates: StravaFeedActivity[];
   stats: StravaFeedStats;
   raceCandidateStats: StravaFeedStats;
+  majorUltraStats: StravaFeedStats;
   ok: boolean;
   errorMessage?: string;
 };
