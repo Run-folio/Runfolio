@@ -241,7 +241,7 @@ export type StravaFeedStats = {
   topByDistance: StravaFeedActivity[];
 };
 
-/** Strava list fetch: full raw list plus filtered race candidates (≥21 km, Run / Trail Run / Race). */
+/** Strava list fetch: full raw list plus filtered race candidates (~12 km+, run-like types; see `MIN_RACE_CANDIDATE_DISTANCE_KM`). */
 export type StravaFeedResult = {
   activities: StravaFeedActivity[];
   raceCandidates: StravaFeedActivity[];

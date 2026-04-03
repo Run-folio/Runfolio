@@ -19,6 +19,8 @@ import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { getDiscoverRaceById } from "@/lib/known-race-match";
 import { getStravaFeed } from "@/lib/strava-feed";
 import { isStravaManualLinkPoolActivity, rankStravaActivitiesForDiscoverRace } from "@/lib/strava-race-candidates";
+import { listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
+import { mergeStravaFeedActivitiesWithSynced } from "@/lib/strava-sync/merge-feed-with-synced";
 import { CanonicalRaceDetailView } from "@/components/canonical-race-detail/canonical-race-detail-view";
 import { CanonicalRaceCatalogOffline } from "@/components/canonical-race-detail/catalog-offline";
 import {
@@ -72,6 +74,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
     let catalogOwner = false;
     let stravaCandidates: DiscoverStravaActivityCandidate[] = [];
     let stravaOk = false;
+    let stravaFeedError: string | undefined;
     let stravaSyncedActivityCount = 0;
     let stravaManualEligibleCount = 0;
     let publicFinishers: PublicRaceFinisher[] = [];
@@ -90,9 +93,10 @@ export default async function RaceIdRouterPage({ params }: Props) {
         discoverViewerId = user?.id ?? null;
         catalogOwner = Boolean(user?.id);
         if (user?.id) {
-          const [racesRes, feed] = await Promise.all([
+          const [racesRes, feed, syncedRows] = await Promise.all([
             supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false }),
-            getStravaFeed()
+            getStravaFeed(),
+            listSyncedActivitiesForUser(supabase, user.id)
           ]);
           const allRaces = (racesRes.data as Race[]) ?? [];
           const portfolioRows = allRaces.filter((r) => r.discover_race_id === raceId);
@@ -103,14 +107,19 @@ export default async function RaceIdRouterPage({ params }: Props) {
 
           const usedStrava = usedStravaActivityIdsFromRaces(allRaces);
           stravaOk = feed.ok;
-          stravaSyncedActivityCount = feed.ok ? feed.activities.length : 0;
+          stravaFeedError = feed.errorMessage;
+          const mergedActivities = mergeStravaFeedActivitiesWithSynced(
+            feed.ok ? feed.activities : [],
+            syncedRows
+          );
+          stravaSyncedActivityCount = mergedActivities.length;
           const discoverRow = getDiscoverRaceById(raceId);
           if (discoverRow) {
-            stravaManualEligibleCount = feed.activities.filter(
+            stravaManualEligibleCount = mergedActivities.filter(
               (a) => !usedStrava.has(a.strava_id) && isStravaManualLinkPoolActivity(a, discoverRow)
             ).length;
           }
-          stravaCandidates = rankStravaActivitiesForDiscoverRace(raceId, feed.activities, usedStrava, {
+          stravaCandidates = rankStravaActivitiesForDiscoverRace(raceId, mergedActivities, usedStrava, {
             forManualLink: true
           });
         }
@@ -120,6 +129,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
         catalogOwner = false;
         stravaCandidates = [];
         stravaOk = false;
+        stravaFeedError = undefined;
         stravaSyncedActivityCount = 0;
         stravaManualEligibleCount = 0;
         publicFinishers = [];
@@ -213,6 +223,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
                     stravaCandidates={stravaCandidates}
                     stravaOk={stravaOk}
                     stravaOAuthConfigured={stravaOAuthConfigured}
+                    stravaFeedErrorMessage={stravaFeedError}
                     stravaSyncedActivityCount={stravaSyncedActivityCount}
                     stravaManualEligibleCount={stravaManualEligibleCount}
                   />

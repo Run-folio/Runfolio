@@ -7,6 +7,7 @@ export const RACE_MATCH_HIGH_SCORE = 0.72;
 
 /** Extra phrases not worth auto-merging into catalog JSON (override / supplement). */
 const EXTRA_ALIASES: Record<string, string[]> = {
+  "disc-london": ["london marathon", "tcs london", "vitality london", "london mara"],
   "disc-boston": ["bq", "boston 26.2"],
   "disc-chicago": ["chicago pb", "windy city marathon"],
   "disc-nyc": ["new york city marathon"]

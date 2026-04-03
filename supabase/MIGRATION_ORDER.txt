@@ -14,6 +14,8 @@ Run these SQL files in the Supabase SQL editor for your project, in this exact o
 12. migration_auth_users_sync.sql
 13. migration_strava_canonical_dismissals_update.sql
 14. migration_public_race_finishers.sql
+15. migration_auth_user_update_sync_name.sql (if not already applied — keeps public.users.name in sync on auth updates)
+16. migration_backfill_public_users_from_auth.sql (optional one-time repair for legacy signups)
 
 After running, the public schema must include at least:
 - users, races, activities (optional legacy), activity_race_links (optional)

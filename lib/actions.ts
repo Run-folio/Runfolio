@@ -128,7 +128,7 @@ export async function signInAction(formData: FormData) {
     if (signInData.user) {
       const ensured = await ensurePublicUserRow(supabase, signInData.user);
       if (!ensured.ok) {
-        runfolioLog.warn("actions.signIn.usersRow", ensured.error, {
+        runfolioLog.error("actions.signIn.usersRow", ensured.error, {
           code: ensured.code ?? "",
           userId: signInData.user.id
         });
@@ -141,24 +141,6 @@ export async function signInAction(formData: FormData) {
     if (isRedirectError(e)) throw e;
     runfolioLog.error("actions.signIn", e);
     return { error: e instanceof Error ? e.message : "Sign in failed unexpectedly." };
-  }
-}
-
-export async function signOutAction() {
-  const envBlock = getEnvPersistenceFailure();
-  if (envBlock) {
-    runfolioLog.warn("actions.signOut", "no supabase client", { status: envBlock.status });
-    redirect("/");
-  }
-  try {
-    const supabase = await createClient();
-    await supabase.auth.signOut();
-    redirect("/auth/login");
-  } catch (e) {
-    if (isDynamicServerError(e)) throw e;
-    if (isRedirectError(e)) throw e;
-    runfolioLog.error("actions.signOut", e);
-    redirect("/auth/login");
   }
 }
 
@@ -721,7 +703,15 @@ export async function addCatalogRaceToBucketListAction(formData: FormData) {
       discover_race_id: discoverId,
       include_on_profile: true
     });
-    if (insErr) return { error: dbErr(insErr) };
+    if (insErr) {
+      const msg = dbErr(insErr);
+      runfolioLog.warn("actions.addCatalogRaceToBucketList.insert", msg, {
+        discoverId,
+        userId: user.id,
+        code: insErr.code ?? ""
+      });
+      return { error: msg };
+    }
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: discoverId,
@@ -929,13 +919,18 @@ export async function removeCanonicalBucketGoalAction(formData: FormData) {
     const { user, supabase } = gate;
     const goalId = String(formData.get("goal_id") ?? "").trim();
     if (!goalId) return { error: "Missing goal." };
+    const racePage = String(formData.get("race_page_path") ?? "").trim();
+    const alsoPaths = ["/races/find", "/bucket-list"];
+    if (racePage.startsWith("/races/") && !racePage.startsWith("//") && !racePage.includes("://")) {
+      alsoPaths.push(racePage.split("#")[0]!.split("?")[0]!);
+    }
     const { error: delErr } = await supabase
       .from("user_bucket_list_goals")
       .delete()
       .eq("id", goalId)
       .eq("user_id", user.id);
     if (delErr) return { error: dbErr(delErr) };
-    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/races/find", "/bucket-list"] });
+    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths });
     return { ok: true as const };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;

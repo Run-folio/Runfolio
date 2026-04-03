@@ -46,7 +46,7 @@ export function computePotentialRaceActivity(a: StravaFeedActivity): boolean {
     if (eventStyleEffort(a)) return true;
     return true;
   }
-  if (a.distance_km >= 18 && raceLikeName(a.name)) return true;
+  if (a.distance_km >= 12 && raceLikeName(a.name)) return true;
   if (a.distance_km >= 30 && nearClassicRaceDistance(a.distance_km)) return true;
   return false;
 }

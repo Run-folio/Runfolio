@@ -11,6 +11,7 @@ import { RaceJourney } from "@/components/race-journey";
 import { StravaRacePortfolioSection } from "@/components/strava-race-portfolio-section";
 import { SyncStravaActivitiesButton } from "@/components/sync-strava-activities-button";
 import { Card } from "@/components/ui/card";
+import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
@@ -65,6 +66,7 @@ export default async function DashboardPage() {
     if (authError) throw new Error(authError);
     if (!user) redirect("/auth/login");
     const supabase = await createClient();
+    await ensurePublicUserRowForAuthedRequest(supabase, user);
     stravaOverview = await loadUserStravaOverviewState(supabase, user.id);
     userName = user.user_metadata?.name ?? "Your Runfolio";
     const result = await supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false });
@@ -133,9 +135,12 @@ export default async function DashboardPage() {
   const stravaFeed = stravaOverview.feed;
   const usingLiveRacePreviewOnly = stravaOverview.usingLiveRacePreviewOnly;
   const raceStripActivities = stravaOverview.raceActivitiesForDiscoverStrip;
-  const stravaRaceEnriched = stravaFeed.ok
-    ? enrichRaceCandidatesWithCatalogMatches(raceStripActivities, races ?? [])
-    : [];
+  const stravaRaceEnriched =
+    raceStripActivities.length > 0
+      ? enrichRaceCandidatesWithCatalogMatches(raceStripActivities, races ?? [])
+      : [];
+  const hasSyncedStravaRows = stravaOverview.syncedRows.length > 0;
+  const stravaPortfolioShowsStrip = stravaFeed.ok || stravaRaceEnriched.length > 0 || hasSyncedStravaRows;
   const matchedMajorDiscoverIds = dedupeHighConfidenceDiscoverIds(stravaRaceEnriched);
   const raceStripStats = computeStravaFeedStats(raceStripActivities);
   const recentlyCompletedCatalog = completedSorted
@@ -265,7 +270,7 @@ export default async function DashboardPage() {
           </div>
         </section>
 
-        {stravaOAuthConfigured && stravaFeed.ok ? (
+        {stravaOAuthConfigured ? (
           <section className="space-y-5 rounded-[14px] border border-white/10 bg-panel/30 p-5 md:p-6">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="max-w-xl space-y-2">
@@ -276,6 +281,17 @@ export default async function DashboardPage() {
                   </Link>{" "}
                   is the home for review, rejects, and manual links — this strip is a quick preview.
                 </p>
+                {!stravaFeed.ok && stravaOverview.syncedRows.length > 0 ? (
+                  <p className="text-xs text-amber-200/90" role="status">
+                    Live Strava didn&apos;t load this visit, but saved activities from your last sync are still below.
+                    {stravaFeed.errorMessage ? ` (${stravaFeed.errorMessage})` : ""}
+                  </p>
+                ) : null}
+                {!stravaFeed.ok && stravaOverview.syncedRows.length === 0 ? (
+                  <p className="text-xs text-amber-200/90" role="status">
+                    {stravaFeed.errorMessage ?? "Connect Strava or run Sync so activities can load."}
+                  </p>
+                ) : null}
               </div>
               <SyncStravaActivitiesButton />
             </div>
@@ -297,7 +313,10 @@ export default async function DashboardPage() {
           matchedMajorDiscoverIds={matchedMajorDiscoverIds}
           recentlyCompletedCatalog={recentlyCompletedCatalog}
           stravaOAuthConfigured={stravaOAuthConfigured}
-          stravaOk={stravaFeed.ok}
+          stravaOk={stravaPortfolioShowsStrip}
+          stravaLiveFeedOk={stravaFeed.ok}
+          stravaFeedErrorMessage={stravaFeed.errorMessage}
+          hasSyncedStravaRows={hasSyncedStravaRows}
           usingLiveRacePreviewOnly={usingLiveRacePreviewOnly}
         />
 

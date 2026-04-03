@@ -153,12 +153,12 @@ function buildFeedResult(activities: StravaFeedActivity[]): StravaFeedResult {
 
 /**
  * Fetch recent Strava activities for the current request (cookies / env token).
- * `activities` is the full loaded set; `raceCandidates` is filtered (≥21 km, Run / Trail Run / Race only).
+ * `activities` is the full loaded set; `raceCandidates` uses `filterStravaRaceCandidates` (~12 km+, run-like).
  */
 export async function getStravaFeed(): Promise<StravaFeedResult> {
   let access = await getValidStravaAccessToken();
   if (!access) {
-    return emptyFeedResult();
+    return emptyFeedResult("Connect Strava to load your activities.");
   }
 
   try {

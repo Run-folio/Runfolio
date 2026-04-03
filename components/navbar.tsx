@@ -2,8 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { signOutAction } from "@/lib/actions";
+import { usePathname, useRouter } from "next/navigation";
+import { useCallback, useTransition, type MouseEvent } from "react";
+import { signOutAction } from "@/lib/sign-out-action";
 import { usePersistence } from "@/components/persistence-context";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,40 @@ type NavbarProps = {
   profileHref: string;
   profileInitial: string;
 };
+
+function ProfileNavAvatar({ profileHref, profileInitial }: { profileHref: string; profileInitial: string }) {
+  const router = useRouter();
+  const [navPending, startNavTransition] = useTransition();
+
+  const onClick = useCallback(
+    (e: MouseEvent<HTMLAnchorElement>) => {
+      if (e.defaultPrevented) return;
+      if (e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      startNavTransition(() => {
+        router.push(profileHref);
+      });
+    },
+    [router, profileHref]
+  );
+
+  return (
+    <a
+      href={profileHref}
+      className={cn(
+        "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-accent/50 bg-panelAlt font-display text-sm font-semibold text-white ring-1 ring-white/10 transition hover:border-accent",
+        navPending && "pointer-events-none opacity-60"
+      )}
+      title="Your public profile"
+      aria-label="View your public profile"
+      aria-busy={navPending}
+      onClick={onClick}
+    >
+      {profileInitial}
+    </a>
+  );
+}
 
 export function Navbar({ profileHref, profileInitial }: NavbarProps) {
   const pathname = usePathname();
@@ -107,14 +142,7 @@ export function Navbar({ profileHref, profileInitial }: NavbarProps) {
               Setup
             </Link>
           ) : null}
-          <Link
-            href={profileHref}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-panelAlt font-display text-sm font-semibold text-white ring-1 ring-white/10 transition hover:border-accent"
-            title="Your public profile"
-            aria-label="View your public profile"
-          >
-            {profileInitial}
-          </Link>
+          <ProfileNavAvatar profileHref={profileHref} profileInitial={profileInitial} />
           <form action={signOutAction}>
             <Button variant="secondary" className="px-3 py-1.5 text-[10px] uppercase tracking-[0.15em]" type="submit">
               Log out

@@ -3,7 +3,11 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
-import { addCanonicalRaceToBucketListAction, markCanonicalBucketGoalCompletedAction } from "@/lib/actions";
+import {
+  addCanonicalRaceToBucketListAction,
+  markCanonicalBucketGoalCompletedAction,
+  removeCanonicalBucketGoalAction
+} from "@/lib/actions";
 import { usePersistence } from "@/components/persistence-context";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
@@ -51,6 +55,26 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
       const fd = new FormData();
       fd.set("canonical_race_id", canonicalRaceId);
       const r = await addCanonicalRaceToBucketListAction(fd);
+      if ("error" in r && r.error) {
+        setMsg(`Couldn’t save. ${r.error}`);
+        return;
+      }
+      router.refresh();
+    });
+  };
+
+  const runRemove = () => {
+    if (!bucketGoal?.id) return;
+    if (!persistenceAvailable) {
+      setMsg(persistenceReason ?? "Saving isn’t available.");
+      return;
+    }
+    setMsg(null);
+    start(async () => {
+      const fd = new FormData();
+      fd.set("goal_id", bucketGoal.id);
+      fd.set("race_page_path", `/races/${slug}`);
+      const r = await removeCanonicalBucketGoalAction(fd);
       if ("error" in r && r.error) {
         setMsg(`Couldn’t save. ${r.error}`);
         return;
@@ -151,6 +175,15 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
         <div className="flex flex-wrap gap-3">
           <Button type="button" onClick={runMarkComplete} disabled={pending || !persistenceAvailable} variant="secondary">
             {pending ? "Saving…" : "Mark as complete"}
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            className="text-[13px] text-muted hover:text-red-300"
+            disabled={pending || !persistenceAvailable}
+            onClick={runRemove}
+          >
+            {pending ? "Saving…" : "Remove from bucket list"}
           </Button>
           <Link
             href="/dashboard"

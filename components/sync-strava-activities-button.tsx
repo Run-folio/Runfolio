@@ -31,8 +31,16 @@ export function SyncStravaActivitiesButton() {
               return;
             }
             if ("ok" in res && res.ok) {
+              const errPart =
+                res.errors && res.errors > 0
+                  ? ` ${res.errors} row(s) failed to save — check Supabase logs or RLS policies.`
+                  : "";
+              const zeroNote =
+                res.upserted === 0 && res.skippedUnchanged === 0 && !res.errors
+                  ? " No changes — try Connect Strava if you expected new data."
+                  : "";
               setMsg(
-                `Updated ${res.upserted} activities${res.skippedUnchanged ? ` · ${res.skippedUnchanged} already current` : ""}.`
+                `Updated ${res.upserted} activities${res.skippedUnchanged ? ` · ${res.skippedUnchanged} already current` : ""}.${errPart}${zeroNote}`
               );
             }
             router.refresh();

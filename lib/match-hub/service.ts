@@ -5,6 +5,7 @@ import { rankCanonicalMatchesForSyncedRow, suggestionFromRanked } from "@/lib/st
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { listDismissedCanonicalStravaIds, listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
 import type { Race } from "@/types";
+import { isSyncedRowRunLikeForMatchVisibility } from "@/lib/strava-race-candidates";
 
 export type MatchHubUnmatchedItem = {
   row: StravaSyncedActivityRow;
@@ -29,8 +30,9 @@ function portfolioStravaIdsFromRaces(races: Race[]): Set<string> {
 }
 
 function isHubQueueRow(row: StravaSyncedActivityRow): boolean {
-  if (!row.potential_race_activity || row.linked_portfolio_race_id) return false;
+  if (row.linked_portfolio_race_id) return false;
   if (row.match_hub_status?.trim() === "not_race") return false;
+  if (!row.potential_race_activity && !isSyncedRowRunLikeForMatchVisibility(row)) return false;
   return true;
 }
 
@@ -79,9 +81,7 @@ export async function loadMatchHubBundle(
     if (!s?.topMatch) {
       unmatched.push({
         row,
-        weakCandidates: ranked
-          .filter((r) => r.score >= CANONICAL_MATCH_MIN_SCORE && r.score < CANONICAL_SUGGESTED_HIGH_MIN_SCORE)
-          .slice(0, 3)
+        weakCandidates: []
       });
       continue;
     }

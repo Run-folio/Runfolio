@@ -11,14 +11,15 @@ import type {
 import type { DiscoverRace } from "@/lib/discover-race-schema";
 import { getDiscoverRaceById, rankKnownRaceMatches, scoreActivityAgainstDiscover } from "@/lib/known-race-match";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
+import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 
-/** Half marathon minimum — Runfolio only surfaces long race-relevant efforts. */
-export const MIN_RACE_CANDIDATE_DISTANCE_KM = 21;
+/** Minimum distance for “race-shaped” auto-matching and overview strips (km). */
+export const MIN_RACE_CANDIDATE_DISTANCE_KM = 12;
 
 /** Trail / ultra emphasis — matching & “major effort” flows. */
 export const MIN_MAJOR_ULTRA_DISTANCE_KM = 50;
 
-const ALLOWED_SPORT_TYPES = new Set(["Run", "Trail Run", "Race"]);
+const ALLOWED_SPORT_TYPES = new Set(["Run", "Trail Run", "Race", "VirtualRun", "Walk"]);
 
 const EXCLUDED_SPORT_OR_TYPE = new Set([
   "Ride",
@@ -87,6 +88,27 @@ export function filterStravaRaceCandidates(activities: StravaFeedActivity[]): St
 
 /** Run / trail / race-type sports allowed in the race-detail manual Strava link picker (broader than auto race-candidate strip). */
 const MANUAL_LINK_RUN_LIKE = new Set(["Run", "Trail Run", "VirtualRun", "Race", "Walk"]);
+
+/** Distance floor for Match hub / overview when `potential_race_activity` is stale false on older sync rows. */
+const MIN_SYNCED_ROW_MATCH_VISIBILITY_KM = 8;
+
+/**
+ * Run/trail-like synced row worth surfacing for match & import without relying on `potential_race_activity`
+ * (older rows may keep that flag false until the activity changes on Strava).
+ */
+export function isSyncedRowRunLikeForMatchVisibility(row: StravaSyncedActivityRow): boolean {
+  const sport = row.sport_type ?? "";
+  const legacy = row.activity_type ?? "";
+  if (EXCLUDED_SPORT_OR_TYPE.has(sport) || EXCLUDED_SPORT_OR_TYPE.has(legacy)) return false;
+  const combined = `${sport} ${legacy}`.toLowerCase();
+  if (combined.includes("ride") || combined.includes("bike")) return false;
+  const dist = row.distance_km ?? 0;
+  if (!Number.isFinite(dist) || dist < MIN_SYNCED_ROW_MATCH_VISIBILITY_KM) return false;
+  if (MANUAL_LINK_RUN_LIKE.has(sport) || MANUAL_LINK_RUN_LIKE.has(legacy)) return true;
+  if (combined.includes("run")) return true;
+  if (legacy.toLowerCase() === "walk" || sport === "Hike" || legacy === "Hike") return true;
+  return false;
+}
 
 function isRunLikeForManualLink(a: StravaFeedActivity): boolean {
   const sport = a.sport_type ?? "";

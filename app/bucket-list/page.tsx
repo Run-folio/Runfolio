@@ -15,6 +15,8 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import { getStravaFeed } from "@/lib/strava-feed";
+import { listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
+import { mergeStravaFeedActivitiesWithSynced } from "@/lib/strava-sync/merge-feed-with-synced";
 import type { Race } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -31,10 +33,12 @@ export default async function BucketListPage() {
   let races: Race[] = [];
   let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];
   let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
+  let authedUserId: string | null = null;
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError) throw new Error(authError);
     if (!user) redirect("/auth/login");
+    authedUserId = user.id;
     const supabase = await createClient();
     const result = await supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false });
     if (result.error) {
@@ -61,6 +65,14 @@ export default async function BucketListPage() {
   );
   const feed = await getStravaFeed();
   const usedStravaIds = [...usedStravaActivityIdsFromRaces(races ?? [])];
+  let stravaActivitiesForUi = feed.ok ? feed.activities : [];
+  let stravaMergedCount = stravaActivitiesForUi.length;
+  if (authedUserId) {
+    const supabase = await createClient();
+    const synced = await listSyncedActivitiesForUser(supabase, authedUserId);
+    stravaActivitiesForUi = mergeStravaFeedActivitiesWithSynced(feed.ok ? feed.activities : [], synced);
+    stravaMergedCount = stravaActivitiesForUi.length;
+  }
 
   return (
     <>
@@ -85,11 +97,12 @@ export default async function BucketListPage() {
           futureGoals={future}
           completedBucketRaces={completed}
           catalogRaces={discoverRaces}
-          stravaActivities={feed.activities}
+          stravaActivities={stravaActivitiesForUi}
           usedStravaIds={usedStravaIds}
           stravaOk={feed.ok}
           stravaOAuthConfigured={stravaOAuthConfigured}
-          stravaSyncedActivityCount={feed.ok ? feed.activities.length : 0}
+          stravaFeedErrorMessage={feed.errorMessage}
+          stravaSyncedActivityCount={stravaMergedCount}
         />
 
         <div className="flex flex-wrap gap-3 border-t border-white/10 pt-8">

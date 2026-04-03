@@ -6,6 +6,7 @@ import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { DevMatchDebugSummary } from "@/components/dev-match-debug-summary";
 import { MatchHubClient } from "@/components/match-hub/match-hub-client";
 import { SyncStravaActivitiesButton } from "@/components/sync-strava-activities-button";
+import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
@@ -41,6 +42,7 @@ export default async function MatchHubPage() {
   }
 
   const supabase = await createClient();
+  await ensurePublicUserRowForAuthedRequest(supabase, user);
   const { data: racesRes } = await supabase.from("races").select("*").eq("user_id", user.id);
   const portfolioRaces = (racesRes ?? []) as Race[];
 

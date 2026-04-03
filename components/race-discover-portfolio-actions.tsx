@@ -20,6 +20,7 @@ type Props = {
   stravaCandidates: DiscoverStravaActivityCandidate[];
   stravaOk: boolean;
   stravaOAuthConfigured: boolean;
+  stravaFeedErrorMessage?: string;
   /** Activities returned from Strava list API (full feed length when sync succeeded). */
   stravaSyncedActivityCount: number;
   /** Run-like activities for this race’s distance window not already linked elsewhere. */
@@ -36,6 +37,7 @@ export function RaceDiscoverPortfolioActions({
   stravaCandidates,
   stravaOk,
   stravaOAuthConfigured,
+  stravaFeedErrorMessage,
   stravaSyncedActivityCount,
   stravaManualEligibleCount
 }: Props) {
@@ -228,6 +230,7 @@ export function RaceDiscoverPortfolioActions({
         stravaCandidates={stravaCandidates}
         stravaOk={stravaOk}
         stravaOAuthConfigured={stravaOAuthConfigured}
+        stravaFeedErrorMessage={stravaFeedErrorMessage}
         stravaSyncedActivityCount={stravaSyncedActivityCount}
         stravaManualEligibleCount={stravaManualEligibleCount}
       />

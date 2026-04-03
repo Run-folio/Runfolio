@@ -51,6 +51,7 @@ type Props = {
   usedStravaIds: string[];
   stravaOk: boolean;
   stravaOAuthConfigured: boolean;
+  stravaFeedErrorMessage?: string;
   stravaSyncedActivityCount?: number;
 };
 
@@ -64,6 +65,7 @@ export function BucketListWorkflow({
   usedStravaIds,
   stravaOk,
   stravaOAuthConfigured,
+  stravaFeedErrorMessage,
   stravaSyncedActivityCount
 }: Props) {
   const router = useRouter();
@@ -558,6 +560,7 @@ export function BucketListWorkflow({
         stravaCandidates={completionCandidates}
         stravaOk={stravaOk}
         stravaOAuthConfigured={stravaOAuthConfigured}
+        stravaFeedErrorMessage={stravaFeedErrorMessage}
         stravaSyncedActivityCount={stravaSyncedActivityCount}
         stravaManualEligibleCount={completionModalStrava.manualEligible}
       />

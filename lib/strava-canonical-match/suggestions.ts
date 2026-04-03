@@ -10,6 +10,12 @@ import { loadCanonicalRacesByNameToken, loadCanonicalRacesInDateWindow } from "@
 import type { CanonicalRace } from "@/lib/races/canonical/types";
 import type { RaceMatchConfidence } from "@/types";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
+import { isSyncedRowRunLikeForMatchVisibility } from "@/lib/strava-race-candidates";
+
+function rowEligibleForCanonicalMatching(row: StravaSyncedActivityRow): boolean {
+  if (row.linked_portfolio_race_id) return false;
+  return row.potential_race_activity || isSyncedRowRunLikeForMatchVisibility(row);
+}
 
 export type CanonicalStravaRaceMatch = {
   canonicalRaceId: string;
@@ -97,7 +103,7 @@ export function suggestionFromRanked(
 export async function rankCanonicalMatchesForSyncedRow(
   row: StravaSyncedActivityRow
 ): Promise<CanonicalStravaRaceMatch[]> {
-  if (!row.potential_race_activity || row.linked_portfolio_race_id) return [];
+  if (!rowEligibleForCanonicalMatching(row)) return [];
   const act = rowToMatchInput(row);
   let races = await loadCanonicalRacesInDateWindow(act.startDateYmd, 14);
   if (races.length < 4) {
@@ -118,7 +124,7 @@ export async function rankCanonicalMatchesForSyncedRow(
 export async function buildCanonicalStravaSuggestionForSyncedRow(
   row: StravaSyncedActivityRow
 ): Promise<CanonicalStravaSuggestion | null> {
-  if (!row.potential_race_activity || row.linked_portfolio_race_id) return null;
+  if (!rowEligibleForCanonicalMatching(row)) return null;
   const ranked = await rankCanonicalMatchesForSyncedRow(row);
   return suggestionFromRanked(row, ranked);
 }
@@ -136,7 +142,7 @@ export async function buildCanonicalStravaSuggestionsForUser(opts: {
 }): Promise<CanonicalStravaSuggestion[]> {
   const out: CanonicalStravaSuggestion[] = [];
   for (const row of opts.rows) {
-    if (!row.potential_race_activity || row.linked_portfolio_race_id) continue;
+    if (!rowEligibleForCanonicalMatching(row)) continue;
     if (hubExcluded(row)) continue;
     if (opts.dismissedStravaIds.has(row.strava_activity_id)) continue;
     if (opts.portfolioStravaIds.has(row.strava_activity_id)) continue;

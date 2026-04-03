@@ -14,6 +14,7 @@ import { RunningProfileSelectedEfforts } from "@/components/running-profile/runn
 import { RunningProfileSpotlight } from "@/components/running-profile/running-profile-spotlight";
 import { RunningProfileRaceIdentitySection } from "@/components/running-profile/running-profile-race-identity";
 import { RunningProfileStatsRow } from "@/components/running-profile/running-profile-stats-row";
+import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
@@ -34,11 +35,7 @@ import {
   listProfileIncludedSyncedActivities,
   listSyncedActivitiesForUser
 } from "@/lib/strava-sync/repository";
-import {
-  fetchProfileBundleByUserId,
-  fetchPublicProfileBundle,
-  publicProfileUrlMatchesAuthUser
-} from "@/lib/supabase/fetch-public-profile";
+import { fetchProfileBundleByUserId, fetchPublicProfileBundle } from "@/lib/supabase/fetch-public-profile";
 import { getStravaFeed } from "@/lib/strava-feed";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
 import type { ProfilePendingRaceCandidate, Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
@@ -89,11 +86,15 @@ export default async function PublicProfilePage({ params }: Props) {
     try {
       const authRes = await getServerAuthUser();
       profileAuthUser = authRes.user ?? null;
+      if (profileAuthUser) {
+        const supabaseForUser = await createClient();
+        await ensurePublicUserRowForAuthedRequest(supabaseForUser, profileAuthUser);
+      }
 
       let bundle = await fetchPublicProfileBundle(username);
       if (!bundle.runner && profileAuthUser) {
         const byId = await fetchProfileBundleByUserId(profileAuthUser.id);
-        if (byId.runner && publicProfileUrlMatchesAuthUser(username, byId.runner, profileAuthUser)) {
+        if (byId.runner?.id === profileAuthUser.id) {
           bundle = byId;
         }
       }

@@ -15,7 +15,13 @@ type Props = {
   matchedMajorDiscoverIds: string[];
   recentlyCompletedCatalog: Race[];
   stravaOAuthConfigured?: boolean;
+  /** True when the user has anything to show: live feed, strip candidates, or stored sync rows. */
   stravaOk: boolean;
+  /** Live Strava list API succeeded this request (distinct from DB-backed strip). */
+  stravaLiveFeedOk?: boolean;
+  stravaFeedErrorMessage?: string;
+  /** User has rows in `strava_synced_activities` (may still have an empty overview strip). */
+  hasSyncedStravaRows?: boolean;
   /** Overview strip is live Strava only until Sync fills the database. */
   usingLiveRacePreviewOnly?: boolean;
   /** Profile page: tighter slice, no full grid of candidates. */
@@ -31,6 +37,9 @@ export function StravaRacePortfolioSection({
   recentlyCompletedCatalog,
   stravaOAuthConfigured = false,
   stravaOk,
+  stravaLiveFeedOk = true,
+  stravaFeedErrorMessage,
+  hasSyncedStravaRows = false,
   usingLiveRacePreviewOnly = false,
   layout = "dashboard",
   profileCurationMode = false
@@ -44,13 +53,16 @@ export function StravaRacePortfolioSection({
           <p className="type-eyebrow">Race portfolio</p>
           <h2 className="type-section mt-2 text-lg md:text-xl">Imported race efforts</h2>
           <p className="type-meta mt-2 max-w-2xl text-sm">
-            Connect Strava to surface long runs and race-like efforts (≥21 km, Run / Trail Run / Race). Shorter training,
-            rides, and gym work stay out of this view.
+            Connect Strava to surface long runs and trail efforts (about <strong className="text-white/90">12 km</strong>{" "}
+            and up, run-like sports). Rides and gym work stay out of this view.
           </p>
         </div>
         <Card className="border-dashed border-white/20 bg-panel/40 p-6 text-center">
           <p className="text-sm text-muted">
-            Strava isn&apos;t connected or the feed couldn&apos;t load. Hook it up from{" "}
+            {stravaFeedErrorMessage
+              ? stravaFeedErrorMessage
+              : "Strava isn’t connected or the feed couldn’t load."}{" "}
+            Hook it up from{" "}
             <Link href="/matches" className="font-semibold text-accent underline-offset-4 hover:underline">
               Match &amp; import hub
             </Link>
@@ -84,15 +96,25 @@ export function StravaRacePortfolioSection({
           <p className="type-eyebrow">Race portfolio</p>
           <h2 className="type-section mt-2 text-lg md:text-xl">Imported race efforts</h2>
           <p className="type-meta mt-2 max-w-2xl text-sm">
-            We only show activities that look like race-worthy running: <strong className="text-white/90">≥21 km</strong>{" "}
-            and <strong className="text-white/90">Run, Trail Run, or Race</strong>. Rides, gym sessions, and short runs
-            are filtered out.
+            We favor race-shaped running: roughly <strong className="text-white/90">12 km+</strong>,{" "}
+            <strong className="text-white/90">run / trail / virtual run</strong>, and related types. Rides and short
+            casual jogs stay out of this strip.
           </p>
         </div>
+        {stravaLiveFeedOk === false ? (
+          <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90" role="status">
+            Live Strava didn&apos;t load this visit
+            {stravaFeedErrorMessage ? ` — ${stravaFeedErrorMessage}` : ""}.{" "}
+            {hasSyncedStravaRows
+              ? "You still have saved activities from sync — open Match & import for the full list."
+              : "Run Sync from Strava after reconnecting, or import one activity by URL."}
+          </p>
+        ) : null}
         <Card className="border border-white/10 bg-panel/50 p-6">
           <p className="text-sm text-muted">
-            No qualifying efforts in your latest Strava import. Keep training — your next marathon or ultra will show
-            up here automatically.
+            {hasSyncedStravaRows
+              ? "No unlinked activities match this overview strip right now — they may already be linked, snoozed, or outside the distance/type slice we show here."
+              : "No qualifying efforts in your latest Strava import yet. Sync from Strava (above), then check back."}
           </p>
           <div className="mt-4 flex flex-wrap gap-4">
             <Link href="/matches" className="text-sm font-semibold uppercase tracking-wider text-accent hover:underline">
@@ -114,7 +136,7 @@ export function StravaRacePortfolioSection({
           <p className="type-eyebrow">Strava import</p>
           <h2 className="type-section mt-2 text-lg md:text-xl">Race-shaped efforts</h2>
           <p className="type-meta mt-2 max-w-2xl text-sm">
-            Long runs and race-type activities from Strava (≥21 km, Run / Trail Run / Race) surface in{" "}
+            Long runs and race-type activities from Strava (about 12 km+, run-like types) surface in{" "}
             <strong className="text-white/90">Pending review</strong> until you approve them for your public portfolio.
             This block is context only — not a second feed.
           </p>
@@ -143,6 +165,13 @@ export function StravaRacePortfolioSection({
           Confirm a match →
         </Link>
       </div>
+
+      {stravaLiveFeedOk === false && layout === "dashboard" ? (
+        <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90" role="status">
+          Live Strava didn&apos;t load this visit
+          {stravaFeedErrorMessage ? ` — ${stravaFeedErrorMessage}` : ""}. Showing saved activities from your last sync.
+        </p>
+      ) : null}
 
       {usingLiveRacePreviewOnly && layout === "dashboard" ? (
         <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90">

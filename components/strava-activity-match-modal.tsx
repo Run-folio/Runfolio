@@ -31,6 +31,8 @@ type Props = {
   stravaCandidates: DiscoverStravaActivityCandidate[];
   stravaOk: boolean;
   stravaOAuthConfigured: boolean;
+  /** From `getStravaFeed().errorMessage` — e.g. not connected vs API failure. */
+  stravaFeedErrorMessage?: string;
   /** When set (e.g. race detail page), empty states distinguish “nothing from Strava” vs “synced but filtered”. */
   stravaSyncedActivityCount?: number;
   stravaManualEligibleCount?: number;
@@ -47,6 +49,7 @@ export function StravaActivityMatchModal({
   stravaCandidates,
   stravaOk,
   stravaOAuthConfigured,
+  stravaFeedErrorMessage,
   stravaSyncedActivityCount,
   stravaManualEligibleCount
 }: Props) {
@@ -71,6 +74,10 @@ export function StravaActivityMatchModal({
   }, [stravaCandidates, search]);
 
   if (!open) return null;
+
+  const syncedCount = stravaSyncedActivityCount ?? 0;
+  const showConnectStravaOnly = !stravaOk && syncedCount === 0;
+  const showOfflineSyncedBanner = !stravaOk && syncedCount > 0;
 
   const runConfirm = (c: DiscoverStravaActivityCandidate) => {
     if (!persistenceAvailable) {
@@ -142,11 +149,20 @@ export function StravaActivityMatchModal({
 
         {!stravaOAuthConfigured ? (
           <p className="mt-6 text-sm text-muted">Strava connection is not configured for this environment.</p>
-        ) : !stravaOk ? (
+        ) : showOfflineSyncedBanner ? (
+          <p className="mt-6 rounded-[12px] border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-[13px] text-amber-100/90" role="status">
+            Live Strava didn&apos;t load this visit
+            {stravaFeedErrorMessage ? ` — ${stravaFeedErrorMessage}` : ""}. Showing{" "}
+            {syncedCount} saved activit{syncedCount === 1 ? "y" : "ies"} from your last sync — pick below if one matches.
+          </p>
+        ) : null}
+
+        {!stravaOAuthConfigured ? null : showConnectStravaOnly ? (
           <div className="mt-6 space-y-3 rounded-[12px] border border-white/10 bg-black/30 p-4">
             <p className="text-sm text-slate-300">
-              Connect Strava to import activities and prove this finish for{" "}
-              <span className="text-white">{raceDisplayTitle}</span>.
+              {stravaFeedErrorMessage?.trim()
+                ? stravaFeedErrorMessage
+                : `Connect Strava to import activities and prove this finish for ${raceDisplayTitle}.`}
             </p>
             <Link
               href="/api/strava/oauth/start"
