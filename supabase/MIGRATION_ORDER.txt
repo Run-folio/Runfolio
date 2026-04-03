@@ -1,0 +1,25 @@
+Run these SQL files in the Supabase SQL editor for your project, in this exact order:
+
+1. schema.sql
+2. migration_race_strava_discover.sql
+3. migration_activity_portfolio.sql
+4. migration_bucket_list_item.sql
+5. migration_profile_public_and_approval.sql
+6. migration_canonical_races.sql
+7. migration_user_bucket_list_goals.sql
+8. migration_strava_synced_activities.sql
+9. migration_match_hub.sql
+10. migration_runner_profile_identity.sql
+11. migration_race_catalog_imports.sql
+12. migration_auth_users_sync.sql
+13. migration_strava_canonical_dismissals_update.sql
+14. migration_public_race_finishers.sql
+
+After running, the public schema must include at least:
+- users, races, activities (optional legacy), activity_race_links (optional)
+- strava_synced_activities, strava_canonical_match_dismissals, strava_profile_dismissals
+- canonical_races, canonical_race_sources, user_bucket_list_goals
+- race_catalog_imports (optional)
+
+If you see PostgREST errors like "Could not find the table 'public.races' in the schema cache",
+the base schema.sql (step 1) has not been applied to this Supabase project.

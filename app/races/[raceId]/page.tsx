@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import { AppNavbar } from "@/components/app-navbar";
+import { RaceCommunityFinishersSection } from "@/components/race-community-finishers";
 import { raceIsBucketListFutureGoal, raceIsBucketListItem } from "@/lib/bucket-list-model";
 import { getDiscoverRaceDetail, isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 import { formatDiscoverDistance } from "@/lib/discover-races";
@@ -15,10 +16,16 @@ import { RaceDiscoverPortfolioActions } from "@/components/race-discover-portfol
 import { usedStravaActivityIdsFromRaces } from "@/lib/catalog-discover-user-state";
 import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
+import { getDiscoverRaceById } from "@/lib/known-race-match";
 import { getStravaFeed } from "@/lib/strava-feed";
-import { rankStravaActivitiesForDiscoverRace } from "@/lib/strava-race-candidates";
+import { isStravaManualLinkPoolActivity, rankStravaActivitiesForDiscoverRace } from "@/lib/strava-race-candidates";
 import { CanonicalRaceDetailView } from "@/components/canonical-race-detail/canonical-race-detail-view";
 import { CanonicalRaceCatalogOffline } from "@/components/canonical-race-detail/catalog-offline";
+import {
+  fetchPublicFinishersForCanonicalRace,
+  fetchPublicFinishersForDiscoverRace,
+  type PublicRaceFinisher
+} from "@/lib/supabase/public-race-finishers";
 import { getCachedCanonicalDetailResult } from "@/lib/races/canonical/detail-cache";
 import { fetchCanonicalRaceViewerState } from "@/lib/races/canonical/detail-user-state";
 import { formatCanonicalLocation } from "@/lib/races/canonical/detail-presentational";
@@ -65,15 +72,24 @@ export default async function RaceIdRouterPage({ params }: Props) {
     let catalogOwner = false;
     let stravaCandidates: DiscoverStravaActivityCandidate[] = [];
     let stravaOk = false;
+    let stravaSyncedActivityCount = 0;
+    let stravaManualEligibleCount = 0;
+    let publicFinishers: PublicRaceFinisher[] = [];
+    let discoverViewerId: string | null = null;
     const stravaOAuthConfigured = Boolean(
       process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
     );
     if (isSupabaseConfigured()) {
       try {
-        const { user } = await getServerAuthUser();
+        const supabase = await createClient();
+        const [{ user }, finishers] = await Promise.all([
+          getServerAuthUser(),
+          fetchPublicFinishersForDiscoverRace(supabase, raceId, 40)
+        ]);
+        publicFinishers = finishers;
+        discoverViewerId = user?.id ?? null;
         catalogOwner = Boolean(user?.id);
         if (user?.id) {
-          const supabase = await createClient();
           const [racesRes, feed] = await Promise.all([
             supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false }),
             getStravaFeed()
@@ -87,7 +103,16 @@ export default async function RaceIdRouterPage({ params }: Props) {
 
           const usedStrava = usedStravaActivityIdsFromRaces(allRaces);
           stravaOk = feed.ok;
-          stravaCandidates = rankStravaActivitiesForDiscoverRace(raceId, feed.raceCandidates, usedStrava);
+          stravaSyncedActivityCount = feed.ok ? feed.activities.length : 0;
+          const discoverRow = getDiscoverRaceById(raceId);
+          if (discoverRow) {
+            stravaManualEligibleCount = feed.activities.filter(
+              (a) => !usedStrava.has(a.strava_id) && isStravaManualLinkPoolActivity(a, discoverRow)
+            ).length;
+          }
+          stravaCandidates = rankStravaActivitiesForDiscoverRace(raceId, feed.activities, usedStrava, {
+            forManualLink: true
+          });
         }
       } catch {
         userMatch = null;
@@ -95,6 +120,10 @@ export default async function RaceIdRouterPage({ params }: Props) {
         catalogOwner = false;
         stravaCandidates = [];
         stravaOk = false;
+        stravaSyncedActivityCount = 0;
+        stravaManualEligibleCount = 0;
+        publicFinishers = [];
+        discoverViewerId = null;
       }
     }
 
@@ -184,6 +213,8 @@ export default async function RaceIdRouterPage({ params }: Props) {
                     stravaCandidates={stravaCandidates}
                     stravaOk={stravaOk}
                     stravaOAuthConfigured={stravaOAuthConfigured}
+                    stravaSyncedActivityCount={stravaSyncedActivityCount}
+                    stravaManualEligibleCount={stravaManualEligibleCount}
                   />
                 </div>
               </div>
@@ -279,6 +310,15 @@ export default async function RaceIdRouterPage({ params }: Props) {
               <RaceCatalogPortfolioControls discoverRaceId={raceId} isOwner={catalogOwner} completedRow={null} />
             </div>
           )}
+
+          <div className="app-shell">
+            <RaceCommunityFinishersSection
+              heading="Runners who finished this"
+              subline={`Public profiles with a published finish linked to ${detail.displayTitle}.`}
+              finishers={publicFinishers}
+              excludeUserId={discoverViewerId}
+            />
+          </div>
         </main>
       </>
     );
@@ -291,21 +331,36 @@ export default async function RaceIdRouterPage({ params }: Props) {
   if (canonRes.data) {
     const race = canonRes.data;
     let viewer: Awaited<ReturnType<typeof fetchCanonicalRaceViewerState>> | null = null;
+    let canonFinishers: PublicRaceFinisher[] = [];
+    let canonViewerId: string | null = null;
     if (isSupabaseConfigured()) {
       try {
-        const { user } = await getServerAuthUser();
+        const supabase = await createClient();
+        const [{ user }, finishers] = await Promise.all([
+          getServerAuthUser(),
+          fetchPublicFinishersForCanonicalRace(supabase, race.id, 40)
+        ]);
+        canonFinishers = finishers;
+        canonViewerId = user?.id ?? null;
         if (user?.id) {
-          const supabase = await createClient();
           viewer = await fetchCanonicalRaceViewerState(supabase, user.id, race.id);
         }
       } catch {
         viewer = null;
+        canonFinishers = [];
+        canonViewerId = null;
       }
     }
     return (
       <>
         <AppNavbar />
-        <CanonicalRaceDetailView race={race} viewer={viewer} urlRef={raceId} />
+        <CanonicalRaceDetailView
+          race={race}
+          viewer={viewer}
+          urlRef={raceId}
+          publicFinishers={canonFinishers}
+          viewerUserId={canonViewerId}
+        />
       </>
     );
   }

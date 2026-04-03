@@ -14,8 +14,8 @@ type Props = {
 
 function confidenceShort(c: CatalogRaceSuggestion["confidence"]): string {
   if (c === "high") return "High match";
-  if (c === "medium") return "Possible match";
-  return "Weak match";
+  if (c === "medium") return "Needs review";
+  return "Check details";
 }
 
 export function StravaActivityCard({

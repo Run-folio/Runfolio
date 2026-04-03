@@ -90,7 +90,12 @@ export async function fetchCanonicalBucketGoalsForUser(
   if (ids.length > 0) {
     const { data: races, error: rErr } = await supabase.from("canonical_races").select(CANON_RACE_SELECT).in("id", ids);
     if (rErr) {
-      runfolioLog.warn("bucketListCanonical.fetchRaceDetails", rErr.message, { userId, idCount: ids.length });
+      runfolioLog.warn("bucketListCanonical.fetchRaceDetails", rErr.message, {
+        userId,
+        idCount: ids.length,
+        code: rErr.code,
+        hint: rErr.hint
+      });
     } else {
       for (const r of (races ?? []) as CanonicalRaceDbRow[]) {
         raceById.set(r.id, r);

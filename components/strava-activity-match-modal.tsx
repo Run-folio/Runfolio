@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   buildManualBucketCompleteFormData,
   buildStravaDiscoverConfirmFormData
@@ -9,13 +9,14 @@ import {
 import { confirmKnownRaceMatchAction, completeBucketGoalWithStravaAction } from "@/lib/actions";
 import { usePersistence } from "@/components/persistence-context";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import type { DiscoverStravaActivityCandidate } from "@/types";
 import { cn } from "@/lib/utils";
 
 function confidenceBadge(c: DiscoverStravaActivityCandidate["confidence"]): string {
-  if (c === "high") return "Strong match";
-  if (c === "medium") return "Likely match";
-  return "Possible match";
+  if (c === "high") return "High match";
+  if (c === "medium") return "Needs review";
+  return "Check details";
 }
 
 type Props = {
@@ -30,6 +31,9 @@ type Props = {
   stravaCandidates: DiscoverStravaActivityCandidate[];
   stravaOk: boolean;
   stravaOAuthConfigured: boolean;
+  /** When set (e.g. race detail page), empty states distinguish “nothing from Strava” vs “synced but filtered”. */
+  stravaSyncedActivityCount?: number;
+  stravaManualEligibleCount?: number;
 };
 
 export function StravaActivityMatchModal({
@@ -42,12 +46,29 @@ export function StravaActivityMatchModal({
   returnTo,
   stravaCandidates,
   stravaOk,
-  stravaOAuthConfigured
+  stravaOAuthConfigured,
+  stravaSyncedActivityCount,
+  stravaManualEligibleCount
 }: Props) {
   const { persistenceAvailable, reason: persistenceReason } = usePersistence();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<DiscoverStravaActivityCandidate | null>(null);
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      setSearch("");
+      setConfirming(null);
+      setError(null);
+    }
+  }, [open]);
+
+  const filteredCandidates = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return stravaCandidates;
+    return stravaCandidates.filter((c) => c.name.toLowerCase().includes(q));
+  }, [stravaCandidates, search]);
 
   if (!open) return null;
 
@@ -90,7 +111,8 @@ export function StravaActivityMatchModal({
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-accent">Link Strava finish</p>
             <h3 className="mt-2 font-display text-lg text-white">Choose your activity</h3>
             <p className="type-meta mt-1 text-sm text-slate-400">
-              Candidates are ranked by match signals when this is a catalog race. Nothing is saved until you confirm.
+              Best-ranked activities appear first (name, date, distance, location). Use search to narrow your synced Strava runs.
+              Nothing is saved until you confirm.
             </p>
           </div>
           <button
@@ -135,18 +157,69 @@ export function StravaActivityMatchModal({
           </div>
         ) : stravaCandidates.length === 0 ? (
           <div className="mt-6 space-y-3 rounded-[12px] border border-white/10 bg-black/30 p-4">
-            <p className="text-sm text-slate-300">
-              No suitable imported activities yet. After your race appears in Strava, refresh this page — we surface long
-              run and race-type efforts only.
-            </p>
-            <p className="text-[11px] text-muted">
-              Tip: open <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link>{" "}
-              to import a single activity by URL anytime.
-            </p>
+            {stravaSyncedActivityCount !== undefined && stravaSyncedActivityCount === 0 ? (
+              <>
+                <p className="text-sm text-slate-200">
+                  We didn&apos;t receive any activities from Strava in this load, so there&apos;s nothing to pick yet.
+                </p>
+                <p className="text-[11px] leading-relaxed text-muted">
+                  Try a refresh or reconnect Strava if you expect data here. We only pull a recent slice of your history
+                  (about the last 1,400 summaries), not your whole archive. To link one specific effort you already see on
+                  Strava, use{" "}
+                  <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link> and
+                  paste the activity link.
+                </p>
+              </>
+            ) : stravaSyncedActivityCount !== undefined &&
+              stravaSyncedActivityCount > 0 &&
+              stravaManualEligibleCount !== undefined &&
+              stravaManualEligibleCount === 0 ? (
+              <>
+                <p className="text-sm text-slate-200">
+                  Strava data is here, but nothing in this list fits the rules for this goal right now.
+                </p>
+                <p className="text-[11px] leading-relaxed text-muted">
+                  That usually means the effort is outside the distance window we use for this race, Strava saved it as a
+                  type we don&apos;t include (we do include typical runs and virtual runs), or it&apos;s already linked to
+                  another finish. It doesn&apos;t mean your race isn&apos;t on Strava. The most reliable option is{" "}
+                  <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link> with
+                  the activity URL.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-slate-200">Nothing to show in the list yet.</p>
+                <p className="text-[11px] leading-relaxed text-muted">
+                  An empty list often means your finish is older than the batch we load from Strava, or filters left nothing
+                  to display—not that you have no run. When rows appear, use the search box to find them by name. You can
+                  also link any activity with{" "}
+                  <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link>.
+                </p>
+              </>
+            )}
           </div>
         ) : (
-          <ul className="mt-6 space-y-3">
-            {stravaCandidates.map((c) => (
+          <>
+            <label className="mt-6 block">
+              <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider text-muted">
+                Search by activity name
+              </span>
+              <Input
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="e.g. London, marathon date…"
+                autoComplete="off"
+              />
+            </label>
+            {filteredCandidates.length === 0 ? (
+              <p className="mt-4 text-sm text-slate-400" role="status">
+                No name matches in this list for “{search.trim()}”. Try another word, clear the search, or check you’re
+                searching within activities we already loaded here—not every Strava activity on your account.
+              </p>
+            ) : (
+          <ul className="mt-4 space-y-3">
+            {filteredCandidates.map((c) => (
               <li
                 key={c.strava_id}
                 className={cn(
@@ -244,6 +317,8 @@ export function StravaActivityMatchModal({
               </li>
             ))}
           </ul>
+            )}
+          </>
         )}
       </div>
     </div>

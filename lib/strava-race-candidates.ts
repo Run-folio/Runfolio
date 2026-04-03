@@ -8,6 +8,7 @@ import type {
   StravaFeedStats,
   StravaRaceCandidate
 } from "@/types";
+import type { DiscoverRace } from "@/lib/discover-race-schema";
 import { getDiscoverRaceById, rankKnownRaceMatches, scoreActivityAgainstDiscover } from "@/lib/known-race-match";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 
@@ -82,6 +83,67 @@ export function isStravaRaceCandidateActivity(a: StravaFeedActivity): boolean {
 
 export function filterStravaRaceCandidates(activities: StravaFeedActivity[]): StravaFeedActivity[] {
   return activities.filter(isStravaRaceCandidateActivity);
+}
+
+/** Run / trail / race-type sports allowed in the race-detail manual Strava link picker (broader than auto race-candidate strip). */
+const MANUAL_LINK_RUN_LIKE = new Set(["Run", "Trail Run", "VirtualRun", "Race", "Walk"]);
+
+function isRunLikeForManualLink(a: StravaFeedActivity): boolean {
+  const sport = a.sport_type ?? "";
+  const legacy = a.type ?? "";
+  const s = `${sport} ${legacy}`.toLowerCase();
+  if (MANUAL_LINK_RUN_LIKE.has(sport) || MANUAL_LINK_RUN_LIKE.has(legacy)) return true;
+  return s.includes("run") || legacy.toLowerCase() === "walk";
+}
+
+/**
+ * Minimum distance for an activity to appear when linking a catalog race manually.
+ * Scales with official distance so half/marathon/ultra pages stay usable without the global 21 km auto-match floor.
+ */
+export function manualDiscoverLinkMinDistanceKm(discover: DiscoverRace): number {
+  const d = discover.distance_km;
+  if (!Number.isFinite(d) || d <= 0) return 5;
+  return Math.max(3, Math.min(16, d * 0.35));
+}
+
+/**
+ * Permissive filter for “Link to Strava activity” from a race page: run-like efforts, race-appropriate distance floor,
+ * VirtualRun included, hikes only for trail/mixed catalog races.
+ */
+export function isStravaManualLinkPoolActivity(a: StravaFeedActivity, discover: DiscoverRace): boolean {
+  const sport = a.sport_type ?? "";
+  const legacy = a.type ?? "";
+  if (EXCLUDED_SPORT_OR_TYPE.has(sport) || EXCLUDED_SPORT_OR_TYPE.has(legacy)) return false;
+
+  const combined = `${sport} ${legacy}`.toLowerCase();
+  if (combined.includes("ride") || combined.includes("bike") || combined.includes("virtualride")) return false;
+
+  const isHikeOnly = sport === "Hike" || legacy === "Hike";
+  if (isHikeOnly) {
+    if (discover.surface !== "trail" && discover.surface !== "mixed") return false;
+  } else if (!isRunLikeForManualLink(a)) {
+    return false;
+  }
+
+  const floor = manualDiscoverLinkMinDistanceKm(discover);
+  return a.distance_km >= floor;
+}
+
+/**
+ * Synthetic catalog row for bucket completion when there is no `discover_race_id` — reuses manual-link distance floor
+ * and run-type rules from `isStravaManualLinkPoolActivity`.
+ */
+export function discoverStubForBucketManualPick(goalDistanceKm?: number | null): DiscoverRace {
+  const dk =
+    goalDistanceKm != null && Number.isFinite(goalDistanceKm) && goalDistanceKm > 0 ? goalDistanceKm : 42;
+  return {
+    id: "__bucket_manual__",
+    name: "",
+    location: "",
+    distance_km: dk,
+    surface: "road",
+    group: "major_marathons"
+  };
 }
 
 export function filterStravaMajorUltraCandidates(activities: StravaFeedActivity[]): StravaFeedActivity[] {
@@ -183,24 +245,38 @@ function locationLabel(a: StravaFeedActivity): string {
 /**
  * Imported Strava activities that might be this catalog race, highest match score first.
  * Skips activities already linked on another portfolio row (`usedStravaIds`).
+ *
+ * - Default (`forManualLink` false): expect `activities` to be pre-filtered race candidates (e.g. ≥21 km strip).
+ *   Applies a minimum match score so hub / bucket flows stay selective.
+ * - `forManualLink` true: pass the **full** synced Strava list from `getStravaFeed().activities`. Uses a broader
+ *   run-type / distance-per-race pool and **no** minimum score so obvious titles (e.g. “London Marathon”) still appear
+ *   even when metadata is thin; results are ranked by `scoreActivityAgainstDiscover` (name, date, distance, location).
  */
 export function rankStravaActivitiesForDiscoverRace(
   discoverRaceId: string,
   activities: StravaFeedActivity[],
   usedStravaIds: Set<string>,
-  opts?: { minScore?: number; limit?: number }
+  opts?: { minScore?: number; limit?: number; forManualLink?: boolean }
 ): DiscoverStravaActivityCandidate[] {
   const discover = getDiscoverRaceById(discoverRaceId);
   if (!discover) return [];
-  const minScore = opts?.minScore ?? 0.26;
-  const limit = opts?.limit ?? 14;
+  const forManualLink = opts?.forManualLink ?? false;
+  const minScore = forManualLink ? (opts?.minScore ?? 0) : (opts?.minScore ?? 0.26);
+  const limit = opts?.limit ?? (forManualLink ? 400 : 14);
+
+  const pool = forManualLink
+    ? activities.filter((a) => !usedStravaIds.has(a.strava_id) && isStravaManualLinkPoolActivity(a, discover))
+    : activities.filter((a) => !usedStravaIds.has(a.strava_id) && isStravaRaceCandidateActivity(a));
+
   const out: DiscoverStravaActivityCandidate[] = [];
-  for (const a of activities) {
-    if (!isStravaRaceCandidateActivity(a)) continue;
-    if (usedStravaIds.has(a.strava_id)) continue;
+  for (const a of pool) {
     const m = stravaFeedActivityToMatchInput(a);
     const { score, reasons, confidence } = scoreActivityAgainstDiscover(discover, m);
     if (score < minScore) continue;
+    const reasonsOut =
+      forManualLink && reasons.length === 0
+        ? ["Synced activity — confirm this was your finish for this race"]
+        : reasons;
     out.push({
       strava_id: a.strava_id,
       name: a.name,
@@ -214,25 +290,37 @@ export function rankStravaActivitiesForDiscoverRace(
       strava_url: a.strava_url,
       score,
       confidence,
-      reasons
+      reasons: reasonsOut
     });
   }
-  return out.sort((x, y) => y.score - x.score).slice(0, limit);
+  out.sort((x, y) => {
+    if (y.score !== x.score) return y.score - x.score;
+    return y.date.localeCompare(x.date);
+  });
+  return out.slice(0, limit);
 }
 
 /**
- * For manual bucket goals (no catalog id): show recent imported race-like activities so the user can pick a real Strava finish.
- * Sorted newest first; optionally filtered to distances near the goal.
+ * For manual bucket goals (no catalog id): show recent run-like activities so the user can pick a real Strava finish.
+ * With `permissive`, uses the same broad pool as the race-page manual link (VirtualRun, distance floor vs goal, etc.).
+ * Sorted newest first; when not permissive, optionally filtered to distances near the goal.
  */
 export function stravaActivitiesToPickListCandidates(
   activities: StravaFeedActivity[],
   usedStravaIds: Set<string>,
-  opts?: { goalDistanceKm?: number | null; limit?: number }
+  opts?: { goalDistanceKm?: number | null; limit?: number; permissive?: boolean }
 ): DiscoverStravaActivityCandidate[] {
-  const limit = opts?.limit ?? 20;
+  const permissive = opts?.permissive ?? false;
+  const limit = opts?.limit ?? (permissive ? 400 : 20);
   const gd = opts?.goalDistanceKm;
-  let list = activities.filter((a) => isStravaRaceCandidateActivity(a) && !usedStravaIds.has(a.strava_id));
-  if (gd != null && gd > 0) {
+  const stub = permissive ? discoverStubForBucketManualPick(gd) : null;
+
+  let list = activities.filter((a) => {
+    if (usedStravaIds.has(a.strava_id)) return false;
+    if (permissive && stub) return isStravaManualLinkPoolActivity(a, stub);
+    return isStravaRaceCandidateActivity(a);
+  });
+  if (!permissive && gd != null && gd > 0) {
     list = list.filter((a) => {
       const ratio = Math.abs(a.distance_km - gd) / gd;
       return ratio <= 0.35 || a.distance_km >= gd * 0.55;

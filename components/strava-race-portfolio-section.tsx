@@ -16,6 +16,8 @@ type Props = {
   recentlyCompletedCatalog: Race[];
   stravaOAuthConfigured?: boolean;
   stravaOk: boolean;
+  /** Overview strip is live Strava only until Sync fills the database. */
+  usingLiveRacePreviewOnly?: boolean;
   /** Profile page: tighter slice, no full grid of candidates. */
   layout?: "dashboard" | "profile";
   /** Profile: only stats + copy — candidates are curated in “Pending review” above. */
@@ -29,6 +31,7 @@ export function StravaRacePortfolioSection({
   recentlyCompletedCatalog,
   stravaOAuthConfigured = false,
   stravaOk,
+  usingLiveRacePreviewOnly = false,
   layout = "dashboard",
   profileCurationMode = false
 }: Props) {
@@ -140,6 +143,14 @@ export function StravaRacePortfolioSection({
           Confirm a match →
         </Link>
       </div>
+
+      {usingLiveRacePreviewOnly && layout === "dashboard" ? (
+        <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90">
+          This strip is a <strong className="text-white">live Strava preview</strong> — nothing is saved in Runfolio yet.
+          Use <strong className="text-white">Sync from Strava</strong> so Overview and Match &amp; Import share the same
+          stored activities.
+        </p>
+      ) : null}
 
       <StravaInsightsStrip stats={raceCandidateStats} context="race_candidates" />
 

@@ -25,11 +25,17 @@ import {
 } from "@/lib/discover-races";
 import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
-import { rankStravaActivitiesForDiscoverRace, stravaActivitiesToPickListCandidates } from "@/lib/strava-race-candidates";
+import { getDiscoverRaceById } from "@/lib/known-race-match";
+import {
+  discoverStubForBucketManualPick,
+  isStravaManualLinkPoolActivity,
+  rankStravaActivitiesForDiscoverRace,
+  stravaActivitiesToPickListCandidates
+} from "@/lib/strava-race-candidates";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import type { Race, StravaFeedActivity } from "@/types";
+import type { DiscoverStravaActivityCandidate, Race, StravaFeedActivity } from "@/types";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -40,10 +46,12 @@ type Props = {
   completedBucketRaces: Race[];
   /** Full merged catalog for search (same source as matchers). */
   catalogRaces: DiscoverRace[];
-  raceCandidates: StravaFeedActivity[];
+  /** Full Strava feed for this session (same source as `getStravaFeed().activities`). */
+  stravaActivities: StravaFeedActivity[];
   usedStravaIds: string[];
   stravaOk: boolean;
   stravaOAuthConfigured: boolean;
+  stravaSyncedActivityCount?: number;
 };
 
 export function BucketListWorkflow({
@@ -52,10 +60,11 @@ export function BucketListWorkflow({
   futureGoals,
   completedBucketRaces,
   catalogRaces,
-  raceCandidates,
+  stravaActivities,
   usedStravaIds,
   stravaOk,
-  stravaOAuthConfigured
+  stravaOAuthConfigured,
+  stravaSyncedActivityCount
 }: Props) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -74,16 +83,37 @@ export function BucketListWorkflow({
       .slice(0, 14);
   }, [catalogRaces, query]);
 
-  const completionCandidates = useMemo(() => {
-    if (!completingGoal) return [];
+  const completionModalStrava = useMemo(() => {
+    if (!completingGoal) {
+      return { candidates: [] as DiscoverStravaActivityCandidate[], manualEligible: undefined as number | undefined };
+    }
     const did = completingGoal.discover_race_id?.trim();
     if (did) {
-      return rankStravaActivitiesForDiscoverRace(did, raceCandidates, usedSet);
+      const discover = getDiscoverRaceById(did);
+      const manualEligible = discover
+        ? stravaActivities.filter(
+            (a) => !usedSet.has(a.strava_id) && isStravaManualLinkPoolActivity(a, discover)
+          ).length
+        : undefined;
+      return {
+        candidates: rankStravaActivitiesForDiscoverRace(did, stravaActivities, usedSet, { forManualLink: true }),
+        manualEligible
+      };
     }
-    return stravaActivitiesToPickListCandidates(raceCandidates, usedSet, {
-      goalDistanceKm: completingGoal.distance_km
-    });
-  }, [completingGoal, raceCandidates, usedSet]);
+    const stub = discoverStubForBucketManualPick(completingGoal.distance_km);
+    const manualEligible = stravaActivities.filter(
+      (a) => !usedSet.has(a.strava_id) && isStravaManualLinkPoolActivity(a, stub)
+    ).length;
+    return {
+      candidates: stravaActivitiesToPickListCandidates(stravaActivities, usedSet, {
+        goalDistanceKm: completingGoal.distance_km,
+        permissive: true
+      }),
+      manualEligible
+    };
+  }, [completingGoal, stravaActivities, usedSet]);
+
+  const completionCandidates = completionModalStrava.candidates;
 
   const runAddFromCatalog = (discoverId: string) => {
     setSearchMsg(null);
@@ -528,6 +558,8 @@ export function BucketListWorkflow({
         stravaCandidates={completionCandidates}
         stravaOk={stravaOk}
         stravaOAuthConfigured={stravaOAuthConfigured}
+        stravaSyncedActivityCount={stravaSyncedActivityCount}
+        stravaManualEligibleCount={completionModalStrava.manualEligible}
       />
     </div>
   );

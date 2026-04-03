@@ -1,6 +1,7 @@
 import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
 import Link from "next/link";
 import { AppNavbar } from "@/components/app-navbar";
+import { DevMatchDebugSummary } from "@/components/dev-match-debug-summary";
 import { ProfileRaceLinkedCelebration } from "@/components/profile-race-linked-celebration";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { ProfileHero } from "@/components/profile-hero";
@@ -11,12 +12,19 @@ import { RunningProfilePublishQueue } from "@/components/running-profile/running
 import { RunningProfileRecentSyncStrip } from "@/components/running-profile/running-profile-recent-sync-strip";
 import { RunningProfileSelectedEfforts } from "@/components/running-profile/running-profile-selected-efforts";
 import { RunningProfileSpotlight } from "@/components/running-profile/running-profile-spotlight";
+import { RunningProfileRaceIdentitySection } from "@/components/running-profile/running-profile-race-identity";
 import { RunningProfileStatsRow } from "@/components/running-profile/running-profile-stats-row";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { fetchCanonicalBucketGoalsForUser } from "@/lib/bucket-list-canonical/queries";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
+import {
+  buildRunnerIdentityPresentation,
+  deriveRunnerAchievements,
+  deriveRunnerRaceIdentity
+} from "@/lib/race-identity/derive";
+import { loadDevMatchDebugSnapshot } from "@/lib/dev-match-debug-snapshot";
 import { buildProfilePendingRaceCandidates } from "@/lib/profile-pending-candidates";
 import { profileApprovedCompletedRaces } from "@/lib/portfolio-race";
 import { resolveProfileHeroPhoto } from "@/lib/profile-hero-asset";
@@ -26,7 +34,11 @@ import {
   listProfileIncludedSyncedActivities,
   listSyncedActivitiesForUser
 } from "@/lib/strava-sync/repository";
-import { fetchPublicProfileBundle } from "@/lib/supabase/fetch-public-profile";
+import {
+  fetchProfileBundleByUserId,
+  fetchPublicProfileBundle,
+  publicProfileUrlMatchesAuthUser
+} from "@/lib/supabase/fetch-public-profile";
 import { getStravaFeed } from "@/lib/strava-feed";
 import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
 import type { ProfilePendingRaceCandidate, Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
@@ -61,6 +73,8 @@ export default async function PublicProfilePage({ params }: Props) {
   let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
   let pinnedSynced: StravaSyncedActivityRow[] = [];
   let recentSynced: StravaSyncedActivityRow[] = [];
+  let profileAuthUser: Awaited<ReturnType<typeof getServerAuthUser>>["user"] = null;
+  let devMatchDebug: Awaited<ReturnType<typeof loadDevMatchDebugSnapshot>> | null = null;
 
   if (!isSupabaseConfigured()) {
     runner = {
@@ -73,19 +87,27 @@ export default async function PublicProfilePage({ params }: Props) {
     allRaces = [];
   } else {
     try {
-      const bundle = await fetchPublicProfileBundle(username);
+      const authRes = await getServerAuthUser();
+      profileAuthUser = authRes.user ?? null;
+
+      let bundle = await fetchPublicProfileBundle(username);
+      if (!bundle.runner && profileAuthUser) {
+        const byId = await fetchProfileBundleByUserId(profileAuthUser.id);
+        if (byId.runner && publicProfileUrlMatchesAuthUser(username, byId.runner, profileAuthUser)) {
+          bundle = byId;
+        }
+      }
       runner = bundle.runner;
       allRaces = bundle.races ?? [];
 
-      const { user } = await getServerAuthUser();
-      isOwnProfile = Boolean(user?.id && runner && user.id === runner.id);
+      isOwnProfile = Boolean(profileAuthUser?.id && runner && profileAuthUser.id === runner.id);
 
-      if (isOwnProfile && user && runner) {
+      if (isOwnProfile && profileAuthUser && runner) {
         const supabase = await createClient();
         const { data: dis, error: disErr } = await supabase
           .from("strava_profile_dismissals")
           .select("strava_activity_id")
-          .eq("user_id", user.id);
+          .eq("user_id", profileAuthUser.id);
         const dismissedIds =
           disErr || !dis ? new Set<string>() : new Set(dis.map((d) => d.strava_activity_id));
 
@@ -100,17 +122,26 @@ export default async function PublicProfilePage({ params }: Props) {
           stravaOk: feed.ok
         };
         pendingCandidates = buildProfilePendingRaceCandidates(stravaEnriched, allRaces, dismissedIds);
-        const canon = await fetchCanonicalBucketGoalsForUser(supabase, user.id);
+        const canon = await fetchCanonicalBucketGoalsForUser(supabase, profileAuthUser.id);
         canonicalFuture = canon.future;
         canonicalCompleted = canon.completed;
 
         try {
-          pinnedSynced = await listProfileIncludedSyncedActivities(supabase, user.id);
-          recentSynced = (await listSyncedActivitiesForUser(supabase, user.id)).slice(0, 12);
+          pinnedSynced = await listProfileIncludedSyncedActivities(supabase, profileAuthUser.id);
+          recentSynced = (await listSyncedActivitiesForUser(supabase, profileAuthUser.id)).slice(0, 12);
         } catch (syncErr) {
           runfolioLog.warn(
             "PublicProfile.syncedActivities",
             syncErr instanceof Error ? syncErr.message : "failed"
+          );
+        }
+        if (process.env.NODE_ENV === "development") {
+          devMatchDebug = await loadDevMatchDebugSnapshot(
+            supabase,
+            profileAuthUser.id,
+            profileAuthUser,
+            { page: "profile", profileSlugFromUrl: username },
+            { portfolioRaces: allRaces }
           );
         }
       }
@@ -128,8 +159,22 @@ export default async function PublicProfilePage({ params }: Props) {
       <>
         <AppNavbar />
         <main className="min-h-screen bg-[#05070c] px-6 py-20 text-center">
-          <h1 className="font-display text-2xl text-white">Runner not found</h1>
-          <p className="type-meta mt-3 text-sm text-white/55">Check the URL or discover races on Runfolio.</p>
+          <h1 className="font-display text-2xl text-white">
+            {profileAuthUser ? "We couldn’t open this profile URL" : "Runner not found"}
+          </h1>
+          <p className="type-meta mx-auto mt-3 max-w-md text-sm text-white/55">
+            {profileAuthUser ? (
+              <>
+                Public lookup uses the name on your Runfolio account. Open{" "}
+                <Link href="/dashboard" className="font-semibold text-accent underline-offset-4 hover:underline">
+                  Overview
+                </Link>{" "}
+                to sync your display name with your profile link, or check the spelling in the address bar.
+              </>
+            ) : (
+              <>Check the URL or discover races on Runfolio.</>
+            )}
+          </p>
         </main>
       </>
     );
@@ -162,6 +207,10 @@ export default async function PublicProfilePage({ params }: Props) {
   const spotlightIds = new Set(spotlightRaces.map((r) => r.id));
   const gridRaces =
     spotlightRaces.length > 0 ? profileApproved.filter((r) => !spotlightIds.has(r.id)) : profileApproved;
+
+  const runnerIdentity = deriveRunnerRaceIdentity(profileApproved);
+  const runnerAchievements = deriveRunnerAchievements(profileApproved, runnerIdentity);
+  const runnerPresentation = buildRunnerIdentityPresentation(runnerIdentity);
 
   return (
     <>
@@ -199,6 +248,13 @@ export default async function PublicProfilePage({ params }: Props) {
           ) : null}
 
           {isOwnProfile ? <RunningProfilePublishQueue allRaces={allRaces ?? []} /> : null}
+
+          <RunningProfileRaceIdentitySection
+            presentation={runnerPresentation}
+            identity={runnerIdentity}
+            achievements={runnerAchievements}
+            showWhenEmpty={isOwnProfile}
+          />
 
           <RunningProfileSpotlight races={profileApproved} isOwner={isOwnProfile} />
 
@@ -241,6 +297,7 @@ export default async function PublicProfilePage({ params }: Props) {
           </div>
         </div>
       </main>
+      {devMatchDebug ? <DevMatchDebugSummary snapshot={devMatchDebug} /> : null}
     </>
   );
 }

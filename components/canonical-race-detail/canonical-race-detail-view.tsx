@@ -9,6 +9,8 @@ import {
 } from "@/lib/races/canonical/detail-presentational";
 import type { CanonicalRace } from "@/lib/races/canonical/types";
 import type { fetchCanonicalRaceViewerState } from "@/lib/races/canonical/detail-user-state";
+import type { PublicRaceFinisher } from "@/lib/supabase/public-race-finishers";
+import { RaceCommunityFinishersSection } from "@/components/race-community-finishers";
 import { cn } from "@/lib/utils";
 
 type Viewer = Awaited<ReturnType<typeof fetchCanonicalRaceViewerState>>;
@@ -61,12 +63,16 @@ function StatCard({ label, value }: { label: string; value: string }) {
 export function CanonicalRaceDetailView({
   race,
   viewer,
-  urlRef
+  urlRef,
+  publicFinishers = [],
+  viewerUserId = null
 }: {
   race: CanonicalRace;
   viewer: Viewer | null;
   /** Raw `[raceId]` param (slug or uuid) for stable URIs. */
   urlRef: string;
+  publicFinishers?: PublicRaceFinisher[];
+  viewerUserId?: string | null;
 }) {
   const locationLine = formatCanonicalLocation(race);
   const dateLine = race.startDate ? formatRaceMonth(race.startDate) : "";
@@ -203,23 +209,22 @@ export function CanonicalRaceDetailView({
               )}
             </section>
 
+            <RaceCommunityFinishersSection
+              heading="Runners who finished this course"
+              subline={`Verified catalog: ${race.name}. Links open public Runfolio profiles.`}
+              finishers={publicFinishers}
+              excludeUserId={viewerUserId}
+            />
+
             <section className="rounded-[20px] border border-white/8 bg-gradient-to-b from-panel/30 to-transparent p-6 md:p-8">
               <h2 className="text-[10px] font-semibold uppercase tracking-[0.22em] text-muted">Community</h2>
               <p className="type-meta mt-2 max-w-xl text-sm text-white/55">
-                Runfolio-wide signals for this race will appear here — think shared bucket-list energy and finish lines
-                linked from Strava.
+                Bucket-list energy across Runfolio — more signals here as the community grows.
               </p>
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-black/25 px-5 py-6">
-                  <p className="font-display text-3xl text-white/90">—</p>
-                  <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.15em] text-muted">On bucket lists</p>
-                  <p className="mt-2 text-xs text-white/40">Aggregates coming soon</p>
-                </div>
-                <div className="rounded-2xl border border-white/10 bg-black/25 px-5 py-6">
-                  <p className="font-display text-3xl text-white/90">—</p>
-                  <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.15em] text-muted">Logged finishes</p>
-                  <p className="mt-2 text-xs text-white/40">Aggregates coming soon</p>
-                </div>
+              <div className="mt-6 rounded-2xl border border-white/10 bg-black/25 px-5 py-6">
+                <p className="font-display text-3xl text-white/90">—</p>
+                <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.15em] text-muted">On bucket lists</p>
+                <p className="mt-2 text-xs text-white/40">Aggregates coming soon</p>
               </div>
             </section>
           </div>

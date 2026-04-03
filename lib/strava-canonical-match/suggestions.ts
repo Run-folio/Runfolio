@@ -64,8 +64,11 @@ function rankMatches(act: ActivityForCanonicalMatch, races: CanonicalRace[]) {
   return scored;
 }
 
-export const CANONICAL_MATCH_MIN_SCORE = 46;
-const MEDIUM_BAND = 48;
+/** Minimum 0–100 score for any surfaced catalog suggestion (Match & Import + overview). */
+export const CANONICAL_MATCH_MIN_SCORE = 60;
+/** Primary “suggested match” band (80–100 on the canonical 0–100 scale). */
+export const CANONICAL_SUGGESTED_HIGH_MIN_SCORE = 80;
+const ALTERNATIVE_MIN_SCORE = 60;
 
 export function suggestionFromRanked(
   row: StravaSyncedActivityRow,
@@ -75,7 +78,7 @@ export function suggestionFromRanked(
   const top = ranked[0]!;
   if (top.score < CANONICAL_MATCH_MIN_SCORE) return null;
 
-  const alternatives = ranked.filter((r) => r !== top && r.score >= MEDIUM_BAND).slice(0, 5);
+  const alternatives = ranked.filter((r) => r !== top && r.score >= ALTERNATIVE_MIN_SCORE).slice(0, 5);
 
   return {
     stravaActivityId: row.strava_activity_id,

@@ -29,6 +29,8 @@ type Props = {
   /** Optional profile URL with celebration query (e.g. after other flows) */
   profileFinishHref: string;
   stravaOAuthConfigured: boolean;
+  /** Live Strava list length when the feed loaded (same session). Used so empty copy isn’t misleading vs Overview. */
+  liveStravaActivityCount?: number | null;
 };
 
 function activityMeta(s: CanonicalStravaSuggestion | StravaSyncedActivityRow) {
@@ -85,7 +87,8 @@ export function MatchHubClient({
   profileHref,
   completedRacesHref,
   profileFinishHref,
-  stravaOAuthConfigured
+  stravaOAuthConfigured,
+  liveStravaActivityCount
 }: Props) {
   const router = useRouter();
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -252,6 +255,17 @@ export function MatchHubClient({
     [filteredHigh.length, filteredReview.length, filteredUnmatched.length, snoozed.length]
   );
 
+  const hasServerReview = needsReview.length > 0;
+  const [hintsExpanded, setHintsExpanded] = useState(
+    () => hasServerReview && suggestedHigh.length === 0
+  );
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#optional-catalog-hints" && hasServerReview) {
+      setHintsExpanded(true);
+    }
+  }, [hasServerReview]);
+
   return (
     <div className="space-y-20">
       {banner ? (
@@ -336,20 +350,32 @@ export function MatchHubClient({
         <Card className="border border-white/12 bg-[#0a1018] p-5 text-sm leading-relaxed text-white/70">
           {totalSyncedCount === 0 ? (
             <>
-              <p className="font-medium text-white/90">No imported activities yet</p>
+              <p className="font-medium text-white/90">
+                {liveStravaActivityCount != null && liveStravaActivityCount > 0
+                  ? "Strava is live, but nothing is saved in Runfolio yet"
+                  : "No Strava activities saved in Runfolio yet"}
+              </p>
               <p className="mt-2">
-                {stravaOAuthConfigured
-                  ? "Run Sync from Strava in the header after your next long run or race. We only surface efforts that look event-sized — it’s normal for this list to stay empty until something new lands in your sync table."
-                  : "On this deployment, Strava sync can’t run without OAuth keys. Use the links in the amber notice above, or try again in an environment where Strava is configured."}
+                {liveStravaActivityCount != null && liveStravaActivityCount > 0 ? (
+                  <>
+                    Overview may show a live Strava preview, but Match &amp; Import only reads what you{" "}
+                    <strong className="text-white/90">sync</strong> into your account. Use{" "}
+                    <strong className="text-white/90">Sync from Strava</strong> in the header to store summaries here.
+                  </>
+                ) : stravaOAuthConfigured ? (
+                  "Run Sync from Strava in the header after your next long run or race. We only surface efforts that look event-sized once they’re stored — not from a preview alone."
+                ) : (
+                  "On this deployment, Strava sync can’t run without OAuth keys. Use the links in the amber notice above, or try again in an environment where Strava is configured."
+                )}
               </p>
             </>
           ) : (
             <>
-              <p className="font-medium text-white/90">Queue is clear</p>
+              <p className="font-medium text-white/90">You&apos;re caught up</p>
               <p className="mt-2">
-                You have <strong className="text-white/85">{totalSyncedCount}</strong> Strava activit
-                {totalSyncedCount === 1 ? "y" : "ies"} on file. None are waiting here — they&apos;re already matched to your
-                portfolio, marked as training, snoozed, or not treated as race-like.
+                <strong className="text-white/85">{totalSyncedCount}</strong> Strava activit
+                {totalSyncedCount === 1 ? "y" : "ies"} saved — nothing is waiting for an 80%+ suggestion, manual link, or
+                optional hint. New race-sized syncs will surface here when they qualify.
               </p>
             </>
           )}
@@ -359,26 +385,37 @@ export function MatchHubClient({
       <section className="space-y-6">
         <header>
           <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-gold/90">Suggested matches</h2>
-          <p className="type-meta mt-2 max-w-2xl text-sm text-white/60">
-            These line up strongly with a verified event. Tap once to log the finish — no extra steps.
+          <p className="type-meta mt-2 max-w-2xl text-sm text-white/55">
+            Only activities with an <strong className="font-medium text-white/75">80% or higher</strong> fit to a verified
+            catalog race appear here. One tap confirms — we don&apos;t use this row for weaker guesses.
           </p>
         </header>
         {counts.hi === 0 ? (
           <HubEmpty
             icon="◇"
-            title="No slam-dunk matches right now"
+            title={totalSyncedCount === 0 ? "Nothing saved to match yet" : "No suggested matches right now"}
             body={
               totalSyncedCount === 0
-                ? "There’s nothing in your Strava import yet — sync first, then high-confidence race matches appear here when the data warrants it."
-                : "No best-guess catalog lock yet for what’s in queue — check Needs review, or open an activity below to pick the verified race yourself."
+                ? "Sync from Strava stores activities in Runfolio first. Suggested matches need real saved rows plus an 80%+ catalog fit."
+                : "You have synced activities, but none reached the 80% confidence bar for this hub — that’s normal when names, dates, or courses don’t align tightly. Use manual linking below to pick the verified race yourself."
             }
+            className={totalSyncedCount > 0 && counts.hi === 0 ? "border-gold/15 bg-gradient-to-b from-gold/[0.04] to-[#06080c]/90" : undefined}
           >
             <Link
-              href="#needs-review"
-              className="rounded-xl border border-white/15 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-white/75 transition hover:border-white/30 hover:text-white"
+              href="#hub-unmatched"
+              className="rounded-xl border border-white/18 bg-white/[0.04] px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-white/85 transition hover:border-white/30 hover:text-white"
             >
-              Jump to needs review
+              Manual linking
             </Link>
+            {counts.review > 0 ? (
+              <Link
+                href="#optional-catalog-hints"
+                onClick={() => setHintsExpanded(true)}
+                className="rounded-xl border border-white/12 px-4 py-2 text-[11px] font-semibold uppercase tracking-wider text-white/55 transition hover:border-white/22 hover:text-white/75"
+              >
+                Softer catalog hints ({counts.review})
+              </Link>
+            ) : null}
             <SyncHint stravaOAuthConfigured={stravaOAuthConfigured} />
           </HubEmpty>
         ) : (
@@ -397,40 +434,12 @@ export function MatchHubClient({
         )}
       </section>
 
-      <section id="needs-review" className="scroll-mt-24 space-y-6">
+      <section id="hub-unmatched" className="scroll-mt-24 space-y-6">
         <header>
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-200/85">Needs review</h2>
-          <p className="type-meta mt-2 max-w-2xl text-sm text-white/60">
-            We have a best guess, but the signals are softer. Walk the three steps below — then confirm, swap the race, or
-            dismiss.
-          </p>
-        </header>
-        {counts.review === 0 ? (
-          <HubEmpty
-            icon="◎"
-            title="Nothing waiting on your judgment"
-            body={
-              totalSyncedCount === 0
-                ? "Imports haven’t run yet, so there’s nothing to review. After a sync, softer suggestions show up here."
-                : "Either strong matches took the work, or remaining efforts didn’t get a tentative catalog mapping — try Unmatched or search the library."
-            }
-          >
-            <SyncHint stravaOAuthConfigured={stravaOAuthConfigured} />
-          </HubEmpty>
-        ) : (
-          <ul className="grid gap-5 md:grid-cols-2">
-            {filteredReview.map((s) => (
-              <NeedsReviewCard key={s.stravaActivityId} s={s} pending={pending} onConfirm={confirmMatch} onDismiss={dismiss} onSnooze={snooze} />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="space-y-6">
-        <header>
-          <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">Unmatched race-like efforts</h2>
-          <p className="type-meta mt-2 max-w-2xl text-sm text-white/60">
-            Big days without a catalog lock — search for the real event, try a weak hint, or say it was just a training run.
+          <h2 className="text-[11px] font-semibold uppercase tracking-[0.22em] text-white/70">Manual linking</h2>
+          <p className="type-meta mt-2 max-w-2xl text-sm text-white/55">
+            Race-sized Strava efforts without an 80%+ automatic match. Search the verified library and link the finish you
+            actually ran — the trustworthy path when we don&apos;t suggest one.
           </p>
         </header>
         {counts.un === 0 ? (
@@ -439,8 +448,8 @@ export function MatchHubClient({
             title="No unmatched race-like efforts"
             body={
               totalSyncedCount === 0
-                ? "We only list big days that are actually stored from Strava — sync first, then long efforts without a catalog hint land here."
-                : "Every imported race-sized effort either has a suggestion above, is linked, excluded, or didn’t cross the race-like threshold."
+                ? "Sync stores race-sized efforts here first — then unmatched long runs show up for manual linking."
+                : "Every saved race-sized row is linked, has a suggestion above, was excluded, or didn’t pass the race-like flag."
             }
           >
             <Link href="/races/find" className="text-[11px] font-semibold uppercase tracking-wider text-accent hover:underline">
@@ -464,6 +473,74 @@ export function MatchHubClient({
           </ul>
         )}
       </section>
+
+      {hasServerReview ? (
+        <section id="optional-catalog-hints" className="scroll-mt-24">
+          {counts.hi > 0 ? (
+            <div className="rounded-2xl border border-white/[0.07] bg-[#05070c]/90">
+              <button
+                type="button"
+                onClick={() => setHintsExpanded((e) => !e)}
+                className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left transition hover:bg-white/[0.02] md:px-6 md:py-5"
+              >
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Optional · Lower priority</p>
+                  <p className="mt-1.5 text-sm font-medium text-white/70">
+                    Softer catalog hints <span className="text-white/45">(60–79% fit)</span>
+                  </p>
+                  <p className="type-meta mt-1 max-w-xl text-xs text-white/45">
+                Not suggested matches — only open if you want a shortcut before searching. Always verify the event.
+                  </p>
+                </div>
+                <span className="shrink-0 text-[11px] font-semibold tabular-nums text-white/40">
+                  {counts.review} · {hintsExpanded ? "Hide" : "Show"}
+                </span>
+              </button>
+              {hintsExpanded ? (
+                <div className="border-t border-white/[0.06] px-5 pb-6 pt-2 md:px-6">
+                  <ul className="grid gap-5 md:grid-cols-2">
+                    {filteredReview.map((s) => (
+                      <NeedsReviewCard
+                        key={s.stravaActivityId}
+                        s={s}
+                        pending={pending}
+                        onConfirm={confirmMatch}
+                        onDismiss={dismiss}
+                        onSnooze={snooze}
+                      />
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-white/[0.07] bg-[#06080c]/80 px-5 py-8 md:px-8">
+              <header className="mb-6">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/40">Optional · Lower priority</p>
+                <h2 className="mt-2 text-[11px] font-semibold uppercase tracking-[0.22em] text-white/55">
+                  Softer catalog hints <span className="font-normal text-white/40">(60–79% fit)</span>
+                </h2>
+                <p className="type-meta mt-2 max-w-2xl text-sm text-white/45">
+                  These did not meet the 80% bar for suggested matches. Use only if the guess looks right — or dismiss and
+                  link manually above.
+                </p>
+              </header>
+              <ul className="grid gap-5 md:grid-cols-2">
+                {filteredReview.map((spr) => (
+                  <NeedsReviewCard
+                    key={spr.stravaActivityId}
+                    s={spr}
+                    pending={pending}
+                    onConfirm={confirmMatch}
+                    onDismiss={dismiss}
+                    onSnooze={snooze}
+                  />
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {counts.snz > 0 ? (
         <section className="space-y-4">
@@ -587,7 +664,12 @@ function HighConfidenceCard({
     <li>
       <Card className="h-full overflow-hidden border border-gold/40 bg-gradient-to-b from-gold/[0.08] via-[#0c0e14] to-[#080a0f] p-0 shadow-lg shadow-black/40">
         <div className="border-b border-gold/20 px-6 py-5">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-gold">Strong match</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.22em] text-gold">Suggested match</p>
+            <span className="rounded-md border border-gold/25 bg-gold/[0.08] px-2 py-0.5 text-[9px] font-semibold tabular-nums uppercase tracking-wider text-gold/90">
+              {Math.round(top.score)}% · 80+ tier
+            </span>
+          </div>
           <p className="mt-2 font-display text-2xl font-normal leading-tight text-white md:text-[1.65rem]">{top.name}</p>
           <p className="type-meta mt-2 text-[13px] text-white/50">{m.title}</p>
           <p className="mt-1 text-[12px] font-medium uppercase tracking-wider text-white/35">{stat}</p>
@@ -613,7 +695,7 @@ function HighConfidenceCard({
               {pending ? "Saving your finish…" : "Confirm this finish"}
             </Button>
           </form>
-          <p className="mt-3 text-center text-[11px] text-white/40">One tap — we&apos;ll update your story right away.</p>
+          <p className="mt-3 text-center text-[11px] text-white/40">One tap when your race day matches this event — we&apos;ll update your story.</p>
           <div className="mt-5 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-white/8 pt-5 text-[11px]">
             <button
               type="button"
@@ -664,34 +746,42 @@ function NeedsReviewCard({
 
   return (
     <li>
-      <Card className="h-full border border-amber-500/28 bg-amber-950/[0.12] p-5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-amber-200/90">Needs your eyes</p>
+      <Card className="h-full border border-white/10 bg-[#0a0c12]/90 p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-white/45">Hint only</p>
+          <span className="rounded-md border border-white/12 bg-white/[0.04] px-2 py-0.5 text-[9px] font-semibold tabular-nums text-white/45">
+            {top.score}% fit
+          </span>
+        </div>
         <p className="mt-3 text-base font-semibold text-white">{m.title}</p>
         <p className="type-meta mt-1 text-xs text-white/45">
           {m.date} · {m.km ? `${m.km} km` : "—"}
           {m.el != null && m.el > 0 ? ` · ${Math.round(m.el)} m` : ""}
         </p>
 
-        <ol className="mt-5 space-y-3 text-[13px] leading-relaxed text-white/70">
+        <p className="type-meta mt-3 text-[11px] leading-relaxed text-white/45">
+          Did not reach the 80%+ suggested threshold. Confirm only if this is really your event.
+        </p>
+        <ol className="mt-5 space-y-3 text-[13px] leading-relaxed text-white/65">
           <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-[11px] font-bold text-amber-100">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/70">
               1
             </span>
             <span>
-              Best catalog guess: <strong className="font-semibold text-white/95">{top.name}</strong>
+              Catalog guess: <strong className="font-semibold text-white/90">{top.name}</strong>
             </span>
           </li>
           <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-[11px] font-bold text-amber-100">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/70">
               2
             </span>
-            <span className="text-white/65">{top.subtitle}</span>
+            <span className="text-white/60">{top.subtitle}</span>
           </li>
           <li className="flex gap-3">
-            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-500/20 text-[11px] font-bold text-amber-100">
+            <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-white/10 text-[11px] font-bold text-white/70">
               3
             </span>
-            <span>If that’s your race, confirm. If not, try another event below or dismiss.</span>
+            <span>If it’s your race, confirm. If not, dismiss or find the right event under Manual linking.</span>
           </li>
         </ol>
 
@@ -803,7 +893,7 @@ function UnmatchedCard({
       </p>
       {weakCandidates.length > 0 ? (
         <div className="mt-3">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Low-confidence hints</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Other catalog ideas — review first</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {weakCandidates.map((a) => (
               <form

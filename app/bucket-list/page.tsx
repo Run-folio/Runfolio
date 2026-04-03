@@ -85,10 +85,11 @@ export default async function BucketListPage() {
           futureGoals={future}
           completedBucketRaces={completed}
           catalogRaces={discoverRaces}
-          raceCandidates={feed.raceCandidates}
+          stravaActivities={feed.activities}
           usedStravaIds={usedStravaIds}
           stravaOk={feed.ok}
           stravaOAuthConfigured={stravaOAuthConfigured}
+          stravaSyncedActivityCount={feed.ok ? feed.activities.length : 0}
         />
 
         <div className="flex flex-wrap gap-3 border-t border-white/10 pt-8">

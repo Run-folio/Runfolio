@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CanonicalStravaRaceMatch, CanonicalStravaSuggestion } from "@/lib/strava-canonical-match/suggestions";
 import {
   CANONICAL_MATCH_MIN_SCORE,
+  CANONICAL_SUGGESTED_HIGH_MIN_SCORE,
   rankCanonicalMatchesForSyncedRow,
   suggestionFromRanked
 } from "@/lib/strava-canonical-match/suggestions";
@@ -54,9 +55,10 @@ export type MatchHubBundle = {
 export async function loadMatchHubBundle(
   supabase: SupabaseClient,
   userId: string,
-  portfolioRaces: Race[]
+  portfolioRaces: Race[],
+  opts?: { syncedRows?: StravaSyncedActivityRow[] }
 ): Promise<MatchHubBundle> {
-  const rows = await listSyncedActivitiesForUser(supabase, userId);
+  const rows = opts?.syncedRows ?? (await listSyncedActivitiesForUser(supabase, userId));
   const dismissed = await listDismissedCanonicalStravaIds(supabase, userId);
   const portfolioStrava = portfolioStravaIdsFromRaces(portfolioRaces);
 
@@ -81,12 +83,14 @@ export async function loadMatchHubBundle(
     if (!s?.topMatch) {
       unmatched.push({
         row,
-        weakCandidates: ranked.slice(0, 5)
+        weakCandidates: ranked
+          .filter((r) => r.score >= CANONICAL_MATCH_MIN_SCORE && r.score < CANONICAL_SUGGESTED_HIGH_MIN_SCORE)
+          .slice(0, 3)
       });
       continue;
     }
 
-    if (s.topMatch.confidence === "high") {
+    if (s.topMatch.score >= CANONICAL_SUGGESTED_HIGH_MIN_SCORE) {
       suggestedHigh.push(s);
     } else {
       needsReview.push(s);
@@ -147,4 +151,7 @@ export async function loadMatchHubBundle(
   };
 }
 
-export { CANONICAL_MATCH_MIN_SCORE };
+export {
+  CANONICAL_MATCH_MIN_SCORE,
+  CANONICAL_SUGGESTED_HIGH_MIN_SCORE
+} from "@/lib/strava-canonical-match/suggestions";

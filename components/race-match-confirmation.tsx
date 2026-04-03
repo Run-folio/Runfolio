@@ -27,9 +27,9 @@ type Props = {
 };
 
 function confidenceLabel(c: RaceMatchCandidate["confidence"]): string {
-  if (c === "high") return "High confidence";
-  if (c === "medium") return "Medium confidence";
-  return "Possible match";
+  if (c === "high") return "High match";
+  if (c === "medium") return "Needs review";
+  return "Check details";
 }
 
 function buildFormData(

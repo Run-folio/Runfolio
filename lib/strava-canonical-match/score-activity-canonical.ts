@@ -166,9 +166,10 @@ function dateScore(actYmd: string, race: CanonicalRace): { pts: number; reasons:
   return { pts: 0, reasons: [] };
 }
 
+/** Match hub + overview: 80+ suggested, 60–79 needs review, &lt;60 not surfaced as catalog suggestions. */
 export function confidenceFromScore100(total: number): RaceMatchConfidence {
-  if (total >= 72) return "high";
-  if (total >= 48) return "medium";
+  if (total >= 80) return "high";
+  if (total >= 60) return "medium";
   return "low";
 }
 

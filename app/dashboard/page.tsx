@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
 import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { CanonicalStravaMatchSuggestions } from "@/components/canonical-strava-match-suggestions";
+import { DevMatchDebugSummary } from "@/components/dev-match-debug-summary";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { RaceJourney } from "@/components/race-journey";
 import { StravaRacePortfolioSection } from "@/components/strava-race-portfolio-section";
@@ -13,19 +14,21 @@ import { Card } from "@/components/ui/card";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
+import { loadDevMatchDebugSnapshot } from "@/lib/dev-match-debug-snapshot";
 import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { runfolioLog } from "@/lib/runfolio-log";
-import { getStravaFeed } from "@/lib/strava-feed";
 import { fetchCanonicalBucketGoalsForUser } from "@/lib/bucket-list-canonical/queries";
 import { buildCanonicalStravaSuggestionsForUser } from "@/lib/strava-canonical-match/suggestions";
-import {
-  listDismissedCanonicalStravaIds,
-  listSyncedActivitiesForUser
-} from "@/lib/strava-sync/repository";
+import { listDismissedCanonicalStravaIds } from "@/lib/strava-sync/repository";
+import { loadUserStravaOverviewState } from "@/lib/strava-user-overview";
 import { raceCountsAsBucketListCompleted, raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
-import { dedupeHighConfidenceDiscoverIds, enrichRaceCandidatesWithCatalogMatches } from "@/lib/strava-race-candidates";
+import {
+  computeStravaFeedStats,
+  dedupeHighConfidenceDiscoverIds,
+  enrichRaceCandidatesWithCatalogMatches
+} from "@/lib/strava-race-candidates";
 import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import type { Race } from "@/types";
@@ -48,7 +51,6 @@ export default async function DashboardPage() {
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
   );
-  const stravaFeed = await getStravaFeed();
 
   let userName = demoUser.name;
   let races: Race[] = [];
@@ -56,11 +58,14 @@ export default async function DashboardPage() {
   let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
   let canonicalStravaSuggestions: Awaited<ReturnType<typeof buildCanonicalStravaSuggestionsForUser>> = [];
   let confirmReturnTo = "/dashboard";
+  let stravaOverview: Awaited<ReturnType<typeof loadUserStravaOverviewState>> | null = null;
+  let devMatchDebug: Awaited<ReturnType<typeof loadDevMatchDebugSnapshot>> | null = null;
   try {
     const { user, authError } = await getServerAuthUser();
     if (authError) throw new Error(authError);
     if (!user) redirect("/auth/login");
     const supabase = await createClient();
+    stravaOverview = await loadUserStravaOverviewState(supabase, user.id);
     userName = user.user_metadata?.name ?? "Your Runfolio";
     const result = await supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false });
     if (result.error) {
@@ -75,8 +80,20 @@ export default async function DashboardPage() {
     const profilePath = await resolveDefaultProfilePathForUser(supabase, user.id);
     confirmReturnTo =
       profilePath === "/dashboard" ? "/dashboard" : `${profilePath}#profile-completed-races`;
+    if (process.env.NODE_ENV === "development") {
+      devMatchDebug = await loadDevMatchDebugSnapshot(
+        supabase,
+        user.id,
+        user,
+        {
+          page: "dashboard",
+          profileSlugFromUrl: profilePath !== "/dashboard" ? profilePath.replace(/^\//, "") : undefined
+        },
+        { portfolioRaces: races, stravaOverview }
+      );
+    }
     try {
-      const synced = await listSyncedActivitiesForUser(supabase, user.id);
+      const synced = stravaOverview!.syncedRows;
       const dismissed = await listDismissedCanonicalStravaIds(supabase, user.id);
       const portfolioStravaIds = new Set(
         (races ?? []).map((r) => r.strava_activity_id).filter((x): x is string => Boolean(x?.trim()))
@@ -100,6 +117,10 @@ export default async function DashboardPage() {
     throw e;
   }
 
+  if (!stravaOverview) {
+    throw new Error("Strava overview failed to load");
+  }
+
   const completedSorted = [...confirmedCompletedPortfolioRaces(races ?? [])].sort((a, b) =>
     String(b.date ?? "").localeCompare(String(a.date ?? ""))
   );
@@ -109,10 +130,14 @@ export default async function DashboardPage() {
   const featured = completedSorted[0];
   const totalKm = completedSorted.reduce((acc, race) => acc + (race.distance_km ?? 0), 0);
 
+  const stravaFeed = stravaOverview.feed;
+  const usingLiveRacePreviewOnly = stravaOverview.usingLiveRacePreviewOnly;
+  const raceStripActivities = stravaOverview.raceActivitiesForDiscoverStrip;
   const stravaRaceEnriched = stravaFeed.ok
-    ? enrichRaceCandidatesWithCatalogMatches(stravaFeed.raceCandidates, races ?? [])
+    ? enrichRaceCandidatesWithCatalogMatches(raceStripActivities, races ?? [])
     : [];
   const matchedMajorDiscoverIds = dedupeHighConfidenceDiscoverIds(stravaRaceEnriched);
+  const raceStripStats = computeStravaFeedStats(raceStripActivities);
   const recentlyCompletedCatalog = completedSorted
     .filter((r) => Boolean(r.discover_race_id))
     .slice(0, 6);
@@ -268,11 +293,12 @@ export default async function DashboardPage() {
 
         <StravaRacePortfolioSection
           candidates={stravaRaceEnriched}
-          raceCandidateStats={stravaFeed.raceCandidateStats}
+          raceCandidateStats={raceStripStats}
           matchedMajorDiscoverIds={matchedMajorDiscoverIds}
           recentlyCompletedCatalog={recentlyCompletedCatalog}
           stravaOAuthConfigured={stravaOAuthConfigured}
           stravaOk={stravaFeed.ok}
+          usingLiveRacePreviewOnly={usingLiveRacePreviewOnly}
         />
 
         <div className="relative left-1/2 w-screen max-w-[100vw] -translate-x-1/2 right-auto border-y border-border bg-[#05070c]">
@@ -402,23 +428,26 @@ export default async function DashboardPage() {
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Race candidate km</p>
                 <p className="mt-2 text-3xl font-bold tabular-nums text-white">
-                  {stravaFeed.raceCandidateStats.totalDistanceKm} km
+                  {raceStripStats.totalDistanceKm} km
                 </p>
-                <p className="type-meta mt-1 text-[10px]">≥21 km runs only</p>
+                <p className="type-meta mt-1 text-[10px]">
+                  Same strip as Match &amp; Import (persisted sync when available)
+                </p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Race candidates</p>
-                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{stravaFeed.raceCandidateStats.activityCount}</p>
-                <p className="type-meta mt-1 text-[10px]">{stravaFeed.stats.activityCount} total loaded</p>
+                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{raceStripStats.activityCount}</p>
+                <p className="type-meta mt-1 text-[10px]">{stravaFeed.stats.activityCount} live Strava activities loaded</p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Candidate elevation</p>
-                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{stravaFeed.raceCandidateStats.totalElevationM} m</p>
+                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{raceStripStats.totalElevationM} m</p>
               </div>
             </>
           ) : null}
         </section>
       </main>
+      {devMatchDebug ? <DevMatchDebugSummary snapshot={devMatchDebug} /> : null}
     </>
   );
 }

@@ -20,6 +20,10 @@ type Props = {
   stravaCandidates: DiscoverStravaActivityCandidate[];
   stravaOk: boolean;
   stravaOAuthConfigured: boolean;
+  /** Activities returned from Strava list API (full feed length when sync succeeded). */
+  stravaSyncedActivityCount: number;
+  /** Run-like activities for this race’s distance window not already linked elsewhere. */
+  stravaManualEligibleCount: number;
 };
 
 export function RaceDiscoverPortfolioActions({
@@ -31,7 +35,9 @@ export function RaceDiscoverPortfolioActions({
   bucketFutureRow,
   stravaCandidates,
   stravaOk,
-  stravaOAuthConfigured
+  stravaOAuthConfigured,
+  stravaSyncedActivityCount,
+  stravaManualEligibleCount
 }: Props) {
   const router = useRouter();
   const { persistenceAvailable, reason: persistenceReason } = usePersistence();
@@ -222,6 +228,8 @@ export function RaceDiscoverPortfolioActions({
         stravaCandidates={stravaCandidates}
         stravaOk={stravaOk}
         stravaOAuthConfigured={stravaOAuthConfigured}
+        stravaSyncedActivityCount={stravaSyncedActivityCount}
+        stravaManualEligibleCount={stravaManualEligibleCount}
       />
     </div>
   );

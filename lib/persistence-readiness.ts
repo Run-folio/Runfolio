@@ -7,6 +7,11 @@ import { getServerAuthUser, getServerAuthUserForWrite } from "@/lib/auth-server"
 import { isOfflineDemoMode, isSupabaseConfigured } from "@/lib/demo-mode";
 import { getSupabaseAnonKey, getSupabaseUrl } from "@/lib/supabase/env";
 import { runfolioLog } from "@/lib/runfolio-log";
+import {
+  clarifySupabaseError,
+  isSupabaseMissingSchemaError,
+  logSupabaseSchemaIssue
+} from "@/lib/supabase-user-error";
 
 export type PersistenceReadinessStatus =
   | "ready"
@@ -119,12 +124,23 @@ export const getServerPersistenceReadiness = cache(async (): Promise<Persistence
     const supabase = await createClient();
     const { data: row, error } = await supabase.from("users").select("id").eq("id", user.id).maybeSingle();
     if (error) {
-      runfolioLog.warn("persistenceReadiness.usersRead", error.message, { code: error.code, userId: user.id });
+      logSupabaseSchemaIssue("persistenceReadiness.usersRead", error);
+      if (!isSupabaseMissingSchemaError(error)) {
+        runfolioLog.warn("persistenceReadiness.usersRead", error.message, {
+          code: error.code,
+          userId: user.id,
+          details: error.details,
+          hint: error.hint
+        });
+      }
+      const message = isSupabaseMissingSchemaError(error)
+        ? clarifySupabaseError(error)
+        : `Runfolio can’t read your profile from the database (${error.message}). Check Supabase status, RLS, and migrations.`;
       return {
         status: "backend_unavailable",
         userId: user.id,
-        message: `Runfolio can’t read your profile from the database (${error.message}). Check Supabase status, RLS, and migrations.`,
-        shortMessage: "Database unreachable.",
+        message,
+        shortMessage: isSupabaseMissingSchemaError(error) ? "Database schema incomplete." : "Database unreachable.",
         ctaHref: "/setup",
         ctaLabel: "Retry setup"
       };
@@ -201,10 +217,20 @@ export async function requireActionPersistence(): Promise<ActionPersistenceOk | 
 
   const { data: row, error } = await supabase.from("users").select("id").eq("id", user.id).maybeSingle();
   if (error) {
-    runfolioLog.warn("actionPersistence.usersRead", error.message, { code: error.code, userId: user.id });
+    logSupabaseSchemaIssue("actionPersistence.usersRead", error);
+    if (!isSupabaseMissingSchemaError(error)) {
+      runfolioLog.warn("actionPersistence.usersRead", error.message, {
+        code: error.code,
+        userId: user.id,
+        details: error.details,
+        hint: error.hint
+      });
+    }
     return {
       ok: false,
-      error: `Couldn’t verify your profile: ${error.message}`,
+      error: isSupabaseMissingSchemaError(error)
+        ? clarifySupabaseError(error)
+        : `Couldn’t verify your profile: ${error.message}`,
       code: "backend_unavailable"
     };
   }

@@ -18,7 +18,8 @@ export type DiscoverPrestigeMeta = {
   category_group: DiscoverGroup | "unmatched";
 };
 
-const WMM_IDS = new Set([
+/** Abbott World Marathon Majors — discover catalog ids (x/6 majors). */
+export const WORLD_MAJOR_MARATHON_DISCOVER_IDS = new Set([
   "disc-london",
   "disc-boston",
   "disc-berlin",
@@ -26,6 +27,8 @@ const WMM_IDS = new Set([
   "disc-nyc",
   "disc-tokyo"
 ]);
+
+const WMM_IDS = WORLD_MAJOR_MARATHON_DISCOVER_IDS;
 
 /** Explicit prestige per catalog id — tune here without touching UI. */
 const PRESTIGE_BY_ID: Record<string, DiscoverPrestigeMeta> = {

@@ -83,7 +83,12 @@ export async function upsertStravaSummariesForUser(
       const { error } = await supabase.from(TABLE).update(row).eq("id", (existing as { id: string }).id);
       if (error) {
         errors += 1;
-        runfolioLog.warn("stravaSync.update", error.message, { stravaId: sid });
+        runfolioLog.warn("stravaSync.update", error.message, {
+          stravaId: sid,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
       } else {
         upserted += 1;
       }
@@ -91,7 +96,12 @@ export async function upsertStravaSummariesForUser(
       const { error } = await supabase.from(TABLE).insert({ ...row, created_at: now });
       if (error) {
         errors += 1;
-        runfolioLog.warn("stravaSync.insert", error.message, { stravaId: sid });
+        runfolioLog.warn("stravaSync.insert", error.message, {
+          stravaId: sid,
+          code: error.code,
+          details: error.details,
+          hint: error.hint
+        });
       } else {
         upserted += 1;
       }
@@ -110,8 +120,12 @@ export async function listSyncedActivitiesForUser(
     .select("*")
     .eq("user_id", userId)
     .order("start_date", { ascending: false });
-  if (error) {
-    runfolioLog.warn("stravaSync.list", error.message);
+   if (error) {
+    runfolioLog.warn("stravaSync.list", error.message, {
+      code: error.code,
+      userId,
+      details: error.details
+    });
     return [];
   }
   return (data ?? []) as StravaSyncedActivityRow[];
@@ -130,7 +144,7 @@ export async function listProfileIncludedSyncedActivities(
     .order("start_date", { ascending: false })
     .limit(limit);
   if (error) {
-    runfolioLog.warn("stravaSync.profileInclude", error.message);
+    runfolioLog.warn("stravaSync.profileInclude", error.message, { code: error.code, userId });
     return [];
   }
   return (data ?? []) as StravaSyncedActivityRow[];

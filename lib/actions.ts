@@ -8,6 +8,8 @@ import { raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { getDiscoverRaceDetail, isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 import { getDiscoverRaceById } from "@/lib/known-race-match";
 import { getRaceByStravaActivityId } from "@/lib/get-race-by-strava-activity";
+import { ensurePublicUserRow } from "@/lib/ensure-public-user-row";
+import { clarifySupabaseError, logSupabaseSchemaIssue } from "@/lib/supabase-user-error";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 import { getEnvPersistenceFailure, requireActionPersistence } from "@/lib/persistence-readiness";
 import { createClient } from "@/lib/supabase/server";
@@ -22,6 +24,11 @@ import type { Race } from "@/types";
 import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
 import { withRaceLinkedCelebration } from "@/lib/profile-race-linked-celebration";
 import { revalidatePortfolioSurfaces } from "@/lib/revalidate-portfolio-paths";
+
+function dbErr(e: { message: string; code?: string; details?: string; hint?: string }): string {
+  logSupabaseSchemaIssue("actions.db", e);
+  return clarifySupabaseError(e);
+}
 
 /** After a Strava↔race confirm, send runners to their profile by default (not a dead-end dashboard). */
 async function resolveConfirmRedirectDestination(
@@ -78,14 +85,23 @@ export async function signUpAction(formData: FormData) {
       password,
       options: { data: { name } }
     });
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
 
     if (data.user) {
-      await supabase.from("users").upsert({
-        id: data.user.id,
-        email: data.user.email,
-        name
-      });
+      const metaUser = { ...data.user, user_metadata: { ...data.user.user_metadata, name } };
+      const ensured = await ensurePublicUserRow(supabase, metaUser);
+      if (!ensured.ok) {
+        runfolioLog.error("actions.signUp.usersRow", ensured.error, {
+          code: ensured.code ?? "",
+          userId: data.user.id,
+          hasSession: Boolean(data.session)
+        });
+        if (data.session) {
+          return {
+            error: `Account created but your profile row could not be saved: ${ensured.error}. Check Supabase RLS and the users table, or try signing in again.`
+          };
+        }
+      }
     }
     redirect(nextPath);
   } catch (e) {
@@ -107,8 +123,17 @@ export async function signInAction(formData: FormData) {
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
     const supabase = await createClient();
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: error.message };
+    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) return { error: dbErr(error) };
+    if (signInData.user) {
+      const ensured = await ensurePublicUserRow(supabase, signInData.user);
+      if (!ensured.ok) {
+        runfolioLog.warn("actions.signIn.usersRow", ensured.error, {
+          code: ensured.code ?? "",
+          userId: signInData.user.id
+        });
+      }
+    }
     runfolioLog.info("actions.signIn", "success", { nextPath });
     redirect(nextPath);
   } catch (e) {
@@ -162,7 +187,7 @@ export async function createRaceAction(formData: FormData) {
     };
 
     const { error } = await supabase.from("races").insert(payload);
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
 
     await revalidatePortfolioSurfaces(supabase, user.id, {});
     revalidatePath("/dashboard");
@@ -314,11 +339,11 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
       if (existingStravaRow && existingStravaRow.id !== targetUserRaceId) {
         updatePayload = mergeRacePortfolioFromOrphan(updatePayload, existingStravaRow as Race);
         const { error: delErr } = await supabase.from("races").delete().eq("id", existingStravaRow.id);
-        if (delErr) return { error: delErr.message };
+        if (delErr) return { error: dbErr(delErr) };
       }
 
       const { error: upErr } = await supabase.from("races").update(updatePayload).eq("id", targetUserRaceId);
-      if (upErr) return { error: upErr.message };
+      if (upErr) return { error: dbErr(upErr) };
     } else if (existingStravaRow) {
       const { error: upErr } = await supabase
         .from("races")
@@ -328,7 +353,7 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
           is_bucket_list_item: false
         })
         .eq("id", existingStravaRow.id);
-      if (upErr) return { error: upErr.message };
+      if (upErr) return { error: dbErr(upErr) };
     } else {
       const { error: insErr } = await supabase.from("races").insert({
         ...coreMatchPayload,
@@ -336,7 +361,7 @@ export async function confirmKnownRaceMatchAction(formData: FormData) {
         user_id: user.id,
         is_bucket_list_item: false
       });
-      if (insErr) return { error: insErr.message };
+      if (insErr) return { error: dbErr(insErr) };
     }
 
     await revalidateRaceMatchSurfaces(supabase, user.id, discoverRaceId, stravaActivityId, returnTo);
@@ -413,13 +438,13 @@ export async function confirmCustomMajorEffortAction(formData: FormData) {
         .update(corePayload)
         .eq("id", existing.id)
         .eq("user_id", user.id);
-      if (upErr) return { error: upErr.message };
+      if (upErr) return { error: dbErr(upErr) };
     } else {
       const { error: insErr } = await supabase.from("races").insert({
         ...corePayload,
         user_id: user.id
       });
-      if (insErr) return { error: insErr.message };
+      if (insErr) return { error: dbErr(insErr) };
     }
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
@@ -494,7 +519,7 @@ export async function upsertActivityPortfolioAction(formData: FormData) {
 
     if (existing) {
       const { error: upErr } = await supabase.from("races").update(payload).eq("id", existing.id);
-      if (upErr) return { error: upErr.message };
+      if (upErr) return { error: dbErr(upErr) };
     } else {
       const insertRow = {
         ...payload,
@@ -504,7 +529,7 @@ export async function upsertActivityPortfolioAction(formData: FormData) {
         is_bucket_list_item: false
       };
       const { error: insErr } = await supabase.from("races").insert(insertRow);
-      if (insErr) return { error: insErr.message };
+      if (insErr) return { error: dbErr(insErr) };
     }
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
@@ -547,7 +572,7 @@ export async function deleteUserRacePortfolioAction(formData: FormData) {
     if (!row) return { error: "Race not found." };
 
     const { error: delErr } = await supabase.from("races").delete().eq("id", raceId).eq("user_id", user.id);
-    if (delErr) return { error: delErr.message };
+    if (delErr) return { error: dbErr(delErr) };
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: row.discover_race_id,
@@ -585,7 +610,7 @@ export async function markRaceNotCompletedPortfolioAction(formData: FormData) {
       })
       .eq("id", raceId)
       .eq("user_id", user.id);
-    if (upErr) return { error: upErr.message };
+    if (upErr) return { error: dbErr(upErr) };
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: row.discover_race_id,
@@ -617,7 +642,7 @@ export async function clearBucketListAffiliationAction(formData: FormData) {
       .update({ is_bucket_list_item: false })
       .eq("id", raceId)
       .eq("user_id", user.id);
-    if (upErr) return { error: upErr.message };
+    if (upErr) return { error: dbErr(upErr) };
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: row.discover_race_id,
@@ -645,7 +670,7 @@ export async function deleteFutureBucketGoalAction(formData: FormData) {
     if (row.is_completed) return { error: "Use other actions for completed races." };
 
     const { error: delErr } = await supabase.from("races").delete().eq("id", raceId).eq("user_id", user.id);
-    if (delErr) return { error: delErr.message };
+    if (delErr) return { error: dbErr(delErr) };
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: row.discover_race_id,
@@ -696,7 +721,7 @@ export async function addCatalogRaceToBucketListAction(formData: FormData) {
       discover_race_id: discoverId,
       include_on_profile: true
     });
-    if (insErr) return { error: insErr.message };
+    if (insErr) return { error: dbErr(insErr) };
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: discoverId,
@@ -788,16 +813,16 @@ export async function completeBucketGoalWithStravaAction(formData: FormData) {
     if (existingStravaRow && existingStravaRow.id !== raceId) {
       const updatePayload = mergeRacePortfolioFromOrphan(coreBucketCompletePayload, existingStravaRow as Race);
       const { error: delErr } = await supabase.from("races").delete().eq("id", existingStravaRow.id);
-      if (delErr) return { error: delErr.message };
+      if (delErr) return { error: dbErr(delErr) };
       const { error: upErr } = await supabase.from("races").update(updatePayload).eq("id", raceId).eq("user_id", user.id);
-      if (upErr) return { error: upErr.message };
+      if (upErr) return { error: dbErr(upErr) };
     } else {
       const { error: upErr } = await supabase
         .from("races")
         .update(coreBucketCompletePayload)
         .eq("id", raceId)
         .eq("user_id", user.id);
-      if (upErr) return { error: upErr.message };
+      if (upErr) return { error: dbErr(upErr) };
     }
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
@@ -830,7 +855,7 @@ export async function dismissStravaProfileCandidateAction(formData: FormData) {
       user_id: user.id,
       strava_activity_id: stravaId
     });
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
 
     await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: [returnTo] });
     return { ok: true as const };
@@ -857,7 +882,7 @@ export async function addCanonicalRaceToBucketListAction(formData: FormData) {
       .select("id, status, slug")
       .eq("id", canonicalRaceId)
       .maybeSingle();
-    if (raceErr) return { error: raceErr.message };
+    if (raceErr) return { error: dbErr(raceErr) };
     if (!race || race.status !== "active") {
       return { error: "That race isn’t available to add right now." };
     }
@@ -876,7 +901,7 @@ export async function addCanonicalRaceToBucketListAction(formData: FormData) {
         return { ok: true as const, already: true as const };
       }
       runfolioLog.warn("bucketList.addCanonical.insertFailed", insErr.message, { code: insErr.code });
-      return { error: insErr.message };
+      return { error: dbErr(insErr) };
     }
 
     const slug = (race as { slug?: string | null } | null)?.slug?.trim();
@@ -909,7 +934,7 @@ export async function removeCanonicalBucketGoalAction(formData: FormData) {
       .delete()
       .eq("id", goalId)
       .eq("user_id", user.id);
-    if (delErr) return { error: delErr.message };
+    if (delErr) return { error: dbErr(delErr) };
     await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/races/find", "/bucket-list"] });
     return { ok: true as const };
   } catch (e) {
@@ -939,7 +964,7 @@ export async function markCanonicalBucketGoalCompletedAction(formData: FormData)
       .eq("user_id", user.id)
       .in("status", ["saved", "planned"])
       .select("id, canonical_race_id");
-    if (upErr) return { error: upErr.message };
+    if (upErr) return { error: dbErr(upErr) };
     if (!updated?.length) {
       return { error: "That goal isn’t active or was already completed." };
     }
@@ -981,7 +1006,7 @@ export async function undoCanonicalBucketCompletionAction(formData: FormData) {
       .eq("user_id", user.id)
       .eq("status", "completed_unlinked")
       .select("id");
-    if (upErr) return { error: upErr.message };
+    if (upErr) return { error: dbErr(upErr) };
     if (!undone?.length) return { error: "Only finishes without a linked activity can move back this way." };
     await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/races/find", "/bucket-list"] });
     return { ok: true as const };
@@ -1036,7 +1061,7 @@ export async function markStravaActivityNotRaceAction(formData: FormData) {
       .eq("user_id", user.id)
       .eq("strava_activity_id", stravaActivityId)
       .is("linked_portfolio_race_id", null);
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
     await revalidatePortfolioSurfaces(supabase, user.id, {});
     return { ok: true as const };
   } catch (e) {
@@ -1062,7 +1087,7 @@ export async function snoozeStravaActivityMatchHubAction(formData: FormData) {
       .eq("user_id", user.id)
       .eq("strava_activity_id", stravaActivityId)
       .is("linked_portfolio_race_id", null);
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
     await revalidatePortfolioSurfaces(supabase, user.id, {});
     return { ok: true as const };
   } catch (e) {
@@ -1088,7 +1113,7 @@ export async function unsnoozeStravaActivityMatchHubAction(formData: FormData) {
       .eq("user_id", user.id)
       .eq("strava_activity_id", stravaActivityId)
       .eq("match_hub_status", "snoozed");
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
     await revalidatePortfolioSurfaces(supabase, user.id, {});
     return { ok: true as const };
   } catch (e) {
@@ -1247,7 +1272,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
         .from("races")
         .update(merged)
         .eq("id", (existingStravaRow as Race).id);
-      if (upErr) return { error: upErr.message };
+      if (upErr) return { error: dbErr(upErr) };
       finalRaceId = (existingStravaRow as Race).id;
     } else {
       const { data: ins, error: insErr } = await supabase
@@ -1258,7 +1283,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
         })
         .select("id")
         .single();
-      if (insErr || !ins) return { error: insErr?.message ?? "Could not save finish." };
+      if (insErr || !ins) return { error: insErr ? dbErr(insErr) : "Could not save finish." };
       finalRaceId = ins.id as string;
     }
 
@@ -1290,7 +1315,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
           code: goalUpErr.code,
           resolvedGoalId
         });
-        return { error: goalUpErr.message };
+        return { error: dbErr(goalUpErr) };
       }
     }
 
@@ -1309,7 +1334,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
         code: syncUpErr.code,
         stravaActivityId
       });
-      return { error: syncUpErr.message };
+      return { error: dbErr(syncUpErr) };
     }
 
     const { error: dismissErr } = await supabase
@@ -1376,7 +1401,7 @@ export async function updateProfileIdentityAction(formData: FormData) {
         profile_public
       })
       .eq("id", user.id);
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
     await revalidatePortfolioSurfaces(supabase, user.id, {});
     return { ok: true as const };
   } catch (e) {
@@ -1407,7 +1432,7 @@ export async function publishRaceToProfileAction(formData: FormData) {
       })
       .eq("id", raceId)
       .eq("user_id", user.id);
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: row.discover_race_id,
       stravaActivityId: row.strava_activity_id
@@ -1438,7 +1463,7 @@ export async function hideRaceFromProfileAction(formData: FormData) {
       })
       .eq("id", raceId)
       .eq("user_id", user.id);
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: row.discover_race_id,
       stravaActivityId: row.strava_activity_id
@@ -1470,7 +1495,7 @@ export async function setRaceProfileFeaturedAction(formData: FormData) {
       .update({ profile_featured: featured })
       .eq("id", raceId)
       .eq("user_id", user.id);
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
     await revalidatePortfolioSurfaces(supabase, user.id, {
       discoverRaceId: row.discover_race_id,
       stravaActivityId: row.strava_activity_id
@@ -1497,7 +1522,7 @@ export async function setSyncedActivityProfileIncludeAction(formData: FormData) 
       .update({ profile_include: include, updated_at: new Date().toISOString() })
       .eq("user_id", user.id)
       .eq("strava_activity_id", stravaActivityId);
-    if (error) return { error: error.message };
+    if (error) return { error: dbErr(error) };
     await revalidatePortfolioSurfaces(supabase, user.id, { stravaActivityId, alsoPaths: ["/dashboard"] });
     return { ok: true as const };
   } catch (e) {

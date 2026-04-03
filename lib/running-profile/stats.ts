@@ -12,7 +12,8 @@ export type RunningProfileStats = {
 
 const ULTRA_KM = 42.195;
 
-function roughCountryFromLocation(location: string | null | undefined): string | null {
+/** Last comma-separated segment treated as country (same heuristic as profile stats). */
+export function roughCountryFromLocation(location: string | null | undefined): string | null {
   if (!location?.trim()) return null;
   const parts = location.split(",").map((p) => p.trim()).filter(Boolean);
   if (parts.length === 0) return null;
