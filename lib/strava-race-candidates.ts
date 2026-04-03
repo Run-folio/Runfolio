@@ -1,13 +1,14 @@
 import type {
   ActivityMatchInput,
   CatalogRaceSuggestion,
+  DiscoverStravaActivityCandidate,
   Race,
   RaceMatchCandidate,
   StravaFeedActivity,
   StravaFeedStats,
   StravaRaceCandidate
 } from "@/types";
-import { rankKnownRaceMatches } from "@/lib/known-race-match";
+import { getDiscoverRaceById, rankKnownRaceMatches, scoreActivityAgainstDiscover } from "@/lib/known-race-match";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 
 /** Half marathon minimum — Runfolio only surfaces long race-relevant efforts. */
@@ -123,7 +124,7 @@ export function computeStravaFeedStats(activities: StravaFeedActivity[]): Strava
   };
 }
 
-function toMatchInput(a: StravaFeedActivity): ActivityMatchInput {
+export function stravaFeedActivityToMatchInput(a: StravaFeedActivity): ActivityMatchInput {
   return {
     strava_id: a.strava_id,
     name: a.name,
@@ -163,9 +164,53 @@ export function enrichRaceCandidatesWithCatalogMatches(
   userRaces: Race[]
 ): StravaRaceCandidate[] {
   return candidates.map((a) => {
-    const ranked = rankKnownRaceMatches(toMatchInput(a), userRaces, 0.28);
+    const ranked = rankKnownRaceMatches(stravaFeedActivityToMatchInput(a), userRaces, 0.28);
     return candidateFromTopMatch(a, ranked[0]);
   });
+}
+
+function locationLabel(a: StravaFeedActivity): string {
+  return [a.location_city, a.location_country].filter(Boolean).join(", ") || "—";
+}
+
+/**
+ * Imported Strava activities that might be this catalog race, highest match score first.
+ * Skips activities already linked on another portfolio row (`usedStravaIds`).
+ */
+export function rankStravaActivitiesForDiscoverRace(
+  discoverRaceId: string,
+  activities: StravaFeedActivity[],
+  usedStravaIds: Set<string>,
+  opts?: { minScore?: number; limit?: number }
+): DiscoverStravaActivityCandidate[] {
+  const discover = getDiscoverRaceById(discoverRaceId);
+  if (!discover) return [];
+  const minScore = opts?.minScore ?? 0.26;
+  const limit = opts?.limit ?? 14;
+  const out: DiscoverStravaActivityCandidate[] = [];
+  for (const a of activities) {
+    if (!isStravaRaceCandidateActivity(a)) continue;
+    if (usedStravaIds.has(a.strava_id)) continue;
+    const m = stravaFeedActivityToMatchInput(a);
+    const { score, reasons, confidence } = scoreActivityAgainstDiscover(discover, m);
+    if (score < minScore) continue;
+    out.push({
+      strava_id: a.strava_id,
+      name: a.name,
+      date: m.date,
+      distance_km: a.distance_km,
+      elevation_m: a.elevation_m,
+      sport_type: a.sport_type,
+      type: a.type,
+      moving_time_label: a.moving_time_label,
+      location_label: locationLabel(a),
+      strava_url: a.strava_url,
+      score,
+      confidence,
+      reasons
+    });
+  }
+  return out.sort((x, y) => y.score - x.score).slice(0, limit);
 }
 
 export function dedupeHighConfidenceDiscoverIds(candidates: StravaRaceCandidate[]): string[] {

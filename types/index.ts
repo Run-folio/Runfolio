@@ -167,6 +167,23 @@ export type StravaRaceCandidate = StravaFeedActivity & {
   catalogSuggestion: CatalogRaceSuggestion | null;
 };
 
+/** Ranked Strava import candidate for linking a specific catalog race (race page / link flow). */
+export type DiscoverStravaActivityCandidate = {
+  strava_id: string;
+  name: string;
+  date: string;
+  distance_km: number;
+  elevation_m: number | null;
+  sport_type: string | null;
+  type: string | null;
+  moving_time_label: string;
+  location_label: string;
+  strava_url: string;
+  score: number;
+  confidence: RaceMatchConfidence;
+  reasons: string[];
+};
+
 export type StravaFeedStats = {
   activityCount: number;
   runCount: number;

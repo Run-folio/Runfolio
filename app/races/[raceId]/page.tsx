@@ -11,9 +11,13 @@ import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { RaceCatalogPortfolioControls } from "@/components/race-catalog-portfolio-controls";
+import { RaceDiscoverPortfolioActions } from "@/components/race-discover-portfolio-actions";
+import { usedStravaActivityIdsFromRaces } from "@/lib/catalog-discover-user-state";
 import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
-import type { Race } from "@/types";
+import { getStravaFeed } from "@/lib/strava-feed";
+import { rankStravaActivitiesForDiscoverRace } from "@/lib/strava-race-candidates";
+import type { DiscoverStravaActivityCandidate, Race } from "@/types";
 
 type Props = {
   params: Promise<{ raceId: string }>;
@@ -42,28 +46,38 @@ export default async function RaceIdRouterPage({ params }: Props) {
     let userMatch: Race | null = null;
     let bucketFuture: Race | null = null;
     let catalogOwner = false;
+    let stravaCandidates: DiscoverStravaActivityCandidate[] = [];
+    let stravaOk = false;
+    const stravaOAuthConfigured = Boolean(
+      process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
+    );
     if (isSupabaseConfigured()) {
       try {
         const { user } = await getServerAuthUser();
         catalogOwner = Boolean(user?.id);
         if (user?.id) {
           const supabase = await createClient();
-          const { data: rows } = await supabase
-            .from("races")
-            .select("*")
-            .eq("user_id", user.id)
-            .eq("discover_race_id", raceId)
-            .order("date", { ascending: false });
-          const portfolioRows = (rows as Race[]) ?? [];
+          const [racesRes, feed] = await Promise.all([
+            supabase.from("races").select("*").eq("user_id", user.id).order("date", { ascending: false }),
+            getStravaFeed()
+          ]);
+          const allRaces = (racesRes.data as Race[]) ?? [];
+          const portfolioRows = allRaces.filter((r) => r.discover_race_id === raceId);
           const confirmed = confirmedCompletedPortfolioRaces(portfolioRows);
           userMatch =
             [...confirmed].sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")))[0] ?? null;
           bucketFuture = portfolioRows.find((r) => !r.is_completed && raceIsBucketListFutureGoal(r)) ?? null;
+
+          const usedStrava = usedStravaActivityIdsFromRaces(allRaces);
+          stravaOk = feed.ok;
+          stravaCandidates = rankStravaActivitiesForDiscoverRace(raceId, feed.raceCandidates, usedStrava);
         }
       } catch {
         userMatch = null;
         bucketFuture = null;
         catalogOwner = false;
+        stravaCandidates = [];
+        stravaOk = false;
       }
     }
 
@@ -138,44 +152,23 @@ export default async function RaceIdRouterPage({ params }: Props) {
               </div>
               <div className="border border-white/10 bg-[#0d0d0d] p-6">
                 <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-muted">Your Runfolio</h2>
-                {userMatch ? (
-                  <>
-                    <p className="mt-3 text-sm text-slate-300">
-                      You&apos;ve logged a confirmed finish for this event. It matches your profile, journey, and bucket
-                      rules (bucket completed only if it was a bucket goal).
-                    </p>
-                    <Link
-                      href={portfolioRaceHref(userMatch)}
-                      className="mt-5 flex w-full items-center justify-center rounded-[12px] border border-gold/40 bg-gold/10 px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-gold transition hover:bg-gold/15"
-                    >
-                      Open your finish
-                    </Link>
-                    <Link
-                      href={`/races/new?discover=${encodeURIComponent(raceId)}`}
-                      className="mt-3 flex w-full items-center justify-center rounded-[12px] border border-white/15 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted transition hover:border-white/25 hover:text-white"
-                    >
-                      Log another year / edition
-                    </Link>
-                  </>
-                ) : (
-                  <>
-                    <p className="mt-3 text-sm text-slate-300">
-                      Add this event to your portfolio or bucket list from Add race — we&apos;ll pre-fill distance and
-                      location.
-                    </p>
-                    {bucketFuture ? (
-                      <p className="mt-3 border border-amber-500/25 bg-amber-500/5 px-3 py-2 text-xs text-amber-100/90">
-                        This race is already on your bucket list as a future goal.
-                      </p>
-                    ) : null}
-                    <Link
-                      href={`/races/new?discover=${encodeURIComponent(raceId)}`}
-                      className="mt-5 flex w-full items-center justify-center rounded-[12px] bg-accent px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
-                    >
-                      Add to portfolio / bucket list
-                    </Link>
-                  </>
-                )}
+                <p className="mt-3 text-sm text-slate-300">
+                  Add this race as a goal, link a Strava finish, or open your portfolio entry — without juggling multiple
+                  flows.
+                </p>
+                <div className="mt-5">
+                  <RaceDiscoverPortfolioActions
+                    discoverRaceId={raceId}
+                    raceDisplayTitle={detail.displayTitle}
+                    discoverLocation={detail.location}
+                    isAuthed={catalogOwner}
+                    completedRow={userMatch}
+                    bucketFutureRow={bucketFuture}
+                    stravaCandidates={stravaCandidates}
+                    stravaOk={stravaOk}
+                    stravaOAuthConfigured={stravaOAuthConfigured}
+                  />
+                </div>
               </div>
             </div>
           </div>
@@ -255,12 +248,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
                   Add reflection / edit
                 </Link>
               </div>
-              <RaceCatalogPortfolioControls
-                discoverRaceId={raceId}
-                isOwner={catalogOwner}
-                completedRow={userMatch}
-                bucketFutureRow={bucketFuture}
-              />
+              <RaceCatalogPortfolioControls discoverRaceId={raceId} isOwner={catalogOwner} completedRow={userMatch} />
             </div>
           ) : (
             <div className="mx-auto max-w-2xl space-y-4 text-center">
@@ -271,12 +259,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
                 </Link>
                 .
               </p>
-              <RaceCatalogPortfolioControls
-                discoverRaceId={raceId}
-                isOwner={catalogOwner}
-                completedRow={null}
-                bucketFutureRow={bucketFuture}
-              />
+              <RaceCatalogPortfolioControls discoverRaceId={raceId} isOwner={catalogOwner} completedRow={null} />
             </div>
           )}
         </main>

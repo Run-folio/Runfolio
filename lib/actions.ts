@@ -549,7 +549,10 @@ export async function addCatalogRaceToBucketListAction(formData: FormData) {
     });
     if (insErr) return { error: insErr.message };
 
-    await revalidatePortfolioSurfaces(supabase, user.id, { discoverRaceId: discoverId });
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      discoverRaceId: discoverId,
+      alsoPaths: ["/races/find"]
+    });
     return { ok: true as const };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;

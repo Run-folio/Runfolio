@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { FindRaceCardActions } from "@/components/find-race-card-actions";
 import {
   DISCOVER_GROUP_LABEL,
   DISCOVER_GROUP_ORDER,
@@ -13,8 +14,10 @@ import {
   type DistanceFilterId,
   type SurfaceFilterId
 } from "@/lib/discover-races";
+import { catalogDiscoverViewerState } from "@/lib/catalog-discover-user-state";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import type { Race } from "@/types";
 
 const DISTANCE_OPTIONS: { id: DistanceFilterId; label: string }[] = [
   { id: "any", label: "Any distance" },
@@ -37,7 +40,12 @@ function surfaceLabel(s: DiscoverRace["surface"]): string {
   return "Mixed";
 }
 
-export function FindRacesExplorer() {
+type ExplorerProps = {
+  viewer: "guest" | "authed";
+  userRaces: Race[] | null;
+};
+
+export function FindRacesExplorer({ viewer, userRaces }: ExplorerProps) {
   const [query, setQuery] = useState("");
   const [distance, setDistance] = useState<DistanceFilterId>("any");
   const [surface, setSurface] = useState<SurfaceFilterId>("any");
@@ -114,11 +122,9 @@ export function FindRacesExplorer() {
         {hasAny ? (
           <>
             Showing <span className="text-white">{filtered.length}</span> races
-            {query.trim() ? ` for “${query.trim()}”` : ""}. Add one to your portfolio from{" "}
-            <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">
-              Add race
-            </Link>
-            .
+            {query.trim() ? ` for “${query.trim()}”` : ""}. Use{" "}
+            <span className="text-white/90">Add to bucket list</span> on a card or open{" "}
+            <span className="text-white/90">Details</span> to link Strava.
           </>
         ) : (
           <>
@@ -148,34 +154,38 @@ export function FindRacesExplorer() {
                 {DISCOVER_GROUP_LABEL[group]}
               </h2>
               <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {races.map((race) => (
-                  <li
-                    key={race.id}
-                    className="flex flex-col border border-white/10 bg-[#0d0d0f] p-4 transition hover:border-white/20"
-                  >
-                    <Link href={`/races/${race.id}`} className="font-semibold text-white hover:text-accent">
-                      {race.name}
-                    </Link>
-                    <p className="type-meta mt-1 text-xs">{race.location}</p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <span
-                        className={cn(
-                          "border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-                          race.surface === "road"
-                            ? "border-sky-500/40 bg-sky-500/10 text-sky-200"
-                            : race.surface === "trail"
-                              ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
-                              : "border-violet-500/40 bg-violet-500/10 text-violet-100"
-                        )}
-                      >
-                        {surfaceLabel(race.surface)}
-                      </span>
-                      <span className="border border-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
-                        {formatDiscoverDistance(race.distance_km, race.multi_day)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
+                {races.map((race) => {
+                  const cardState = catalogDiscoverViewerState(viewer, userRaces, race.id);
+                  return (
+                    <li
+                      key={race.id}
+                      className="flex flex-col border border-white/10 bg-[#0d0d0f] p-4 transition hover:border-white/20"
+                    >
+                      <Link href={`/races/${race.id}`} className="font-semibold text-white hover:text-accent">
+                        {race.name}
+                      </Link>
+                      <p className="type-meta mt-1 text-xs">{race.location}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <span
+                          className={cn(
+                            "border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+                            race.surface === "road"
+                              ? "border-sky-500/40 bg-sky-500/10 text-sky-200"
+                              : race.surface === "trail"
+                                ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
+                                : "border-violet-500/40 bg-violet-500/10 text-violet-100"
+                          )}
+                        >
+                          {surfaceLabel(race.surface)}
+                        </span>
+                        <span className="border border-white/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                          {formatDiscoverDistance(race.distance_km, race.multi_day)}
+                        </span>
+                      </div>
+                      <FindRaceCardActions discoverId={race.id} state={cardState} />
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           );

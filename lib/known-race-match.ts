@@ -208,6 +208,27 @@ function confidenceFromScore(score: number): RaceMatchConfidence {
   return "low";
 }
 
+/** Score one catalog race against a Strava-like activity (symmetric with `rankKnownRaceMatches`). */
+export function scoreActivityAgainstDiscover(
+  discover: DiscoverRace,
+  activity: ActivityMatchInput
+): { score: number; reasons: string[]; confidence: RaceMatchConfidence } {
+  const t = titleScore(discover, activity);
+  const d = distanceScore(discover.distance_km, activity.distance_km);
+  const l = locationScore(discover, activity);
+  const e = elevationBonus(discover, activity);
+  const sp = sportBonus(discover, activity);
+  const dt = dateProximityScore(discover.id, activity.date);
+  const score = Math.min(1, t.score + d.score + l.score + e.score + sp + dt.score);
+  const reasons = [...t.reasons, ...d.reasons, ...l.reasons, ...e.reasons, ...dt.reasons];
+  if (sp > 0) reasons.push("Sport type fits the event");
+  return {
+    score: Math.round(score * 100) / 100,
+    reasons: [...new Set(reasons)].slice(0, 8),
+    confidence: confidenceFromScore(score)
+  };
+}
+
 function findBucketListRace(userRaces: Race[], discover: DiscoverRace): Race | null {
   const future = userRaces.filter((r) => !r.is_completed);
   let best: { r: Race; sc: number } | null = null;
@@ -241,25 +262,17 @@ export function rankKnownRaceMatches(
 ): RaceMatchCandidate[] {
   const out: RaceMatchCandidate[] = [];
   for (const discover of discoverRaces) {
-    const t = titleScore(discover, activity);
-    const d = distanceScore(discover.distance_km, activity.distance_km);
-    const l = locationScore(discover, activity);
-    const e = elevationBonus(discover, activity);
-    const sp = sportBonus(discover, activity);
-    const dt = dateProximityScore(discover.id, activity.date);
-    const score = Math.min(1, t.score + d.score + l.score + e.score + sp + dt.score);
+    const { score, reasons, confidence } = scoreActivityAgainstDiscover(discover, activity);
     if (score < minScore) continue;
-    const reasons = [...t.reasons, ...d.reasons, ...l.reasons, ...e.reasons, ...dt.reasons];
-    if (sp > 0) reasons.push("Sport type fits the event");
     const bucket = findBucketListRace(userRaces, discover);
     out.push({
       discoverRaceId: discover.id,
       title: discover.name,
       location: discover.location,
       distanceKm: discover.distance_km,
-      confidence: confidenceFromScore(score),
-      score: Math.round(score * 100) / 100,
-      reasons: [...new Set(reasons)].slice(0, 6),
+      confidence,
+      score,
+      reasons: reasons.slice(0, 6),
       onUserBucketList: Boolean(bucket),
       userRaceId: bucket?.id ?? null
     });

@@ -4,9 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import {
-  addCatalogRaceToBucketListAction,
   clearBucketListAffiliationAction,
-  deleteFutureBucketGoalAction,
   deleteUserRacePortfolioAction,
   markRaceNotCompletedPortfolioAction
 } from "@/lib/actions";
@@ -18,7 +16,6 @@ type Props = {
   /** Logged-in viewer only; public visitors see no correction UI. */
   isOwner: boolean;
   completedRow: Race | null;
-  bucketFutureRow: Race | null;
 };
 
 function SubmitButton({
@@ -45,13 +42,13 @@ function SubmitButton({
   );
 }
 
-export function RaceCatalogPortfolioControls({ discoverRaceId, isOwner, completedRow, bucketFutureRow }: Props) {
+export function RaceCatalogPortfolioControls({ discoverRaceId, isOwner, completedRow }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
 
   function run(
-    action: (fd: FormData) => Promise<{ ok?: true; already?: true; error?: string } | { error: string }>,
+    action: (fd: FormData) => Promise<{ ok?: true; error?: string } | { error: string }>,
     formData: FormData
   ) {
     setMessage(null);
@@ -59,11 +56,6 @@ export function RaceCatalogPortfolioControls({ discoverRaceId, isOwner, complete
       const res = await action(formData);
       if ("error" in res && res.error) {
         setMessage(res.error);
-        return;
-      }
-      if ("already" in res && res.already) {
-        setMessage("Already on your bucket list.");
-        router.refresh();
         return;
       }
       router.refresh();
@@ -122,43 +114,6 @@ export function RaceCatalogPortfolioControls({ discoverRaceId, isOwner, complete
               Undo finish keeps the catalog link as a future bucket row you can re-match. Delete removes the row and any
               Strava link on it.
             </p>
-          </div>
-        ) : null}
-
-        {bucketFutureRow ? (
-          <div className="space-y-2">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-white/70">Bucket goal</p>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                run(deleteFutureBucketGoalAction, new FormData(e.currentTarget));
-              }}
-            >
-              <input type="hidden" name="race_id" value={bucketFutureRow.id} />
-              <SubmitButton label="Remove from bucket list" pending={pending} variant="muted" />
-            </form>
-          </div>
-        ) : null}
-
-        {!completedRow && !bucketFutureRow ? (
-          <div className="space-y-3">
-            <p className="text-[10px] text-muted">
-              Log a confirmed finish from{" "}
-              <Link href={addUrl} className="text-accent hover:underline">
-                Add race
-              </Link>{" "}
-              (Strava match or manual with this catalog event).
-            </p>
-            <form
-              className="flex flex-wrap items-center gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                run(addCatalogRaceToBucketListAction, new FormData(e.currentTarget));
-              }}
-            >
-              <input type="hidden" name="discover_race_id" value={discoverRaceId} />
-              <SubmitButton label="Add to bucket list" pending={pending} />
-            </form>
           </div>
         ) : null}
 
