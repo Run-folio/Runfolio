@@ -39,8 +39,12 @@ export function SetupSyncActions() {
                 return;
               }
               if ("ok" in res && res.ok) {
+                const rate =
+                  res.stoppedForRateLimit && res.rateLimitUserMessage?.trim()
+                    ? ` ${res.rateLimitUserMessage}`
+                    : "";
                 setMsg(
-                  `Synced ${res.upserted} new activities${res.skippedUnchanged ? ` · ${res.skippedUnchanged} already up to date` : ""}.`
+                  `Synced ${res.upserted} new activities${res.skippedUnchanged ? ` · ${res.skippedUnchanged} already up to date` : ""}.${rate}`
                 );
               }
               router.refresh();

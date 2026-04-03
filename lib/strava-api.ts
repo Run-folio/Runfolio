@@ -112,17 +112,12 @@ export type StravaSummaryActivityJson = {
   description?: string | null;
 };
 
-export async function fetchStravaAthleteActivities(
-  accessToken: string,
-  opts?: {
-    page?: number;
-    perPage?: number;
-    /** Unix seconds — activities after this time */
-    after?: number;
-    /** Unix seconds — activities before this time (walk backward in history) */
-    before?: number;
-  }
-): Promise<StravaSummaryActivityJson[]> {
+export function buildStravaAthleteActivitiesListUrl(opts?: {
+  page?: number;
+  perPage?: number;
+  after?: number;
+  before?: number;
+}): string {
   const page = opts?.page ?? 1;
   const perPage = Math.min(Math.max(opts?.perPage ?? 50, 1), 100);
   const url = new URL("https://www.strava.com/api/v3/athlete/activities");
@@ -134,23 +129,90 @@ export async function fetchStravaAthleteActivities(
   if (opts?.before != null && Number.isFinite(opts.before) && opts.before > 0) {
     url.searchParams.set("before", String(Math.floor(opts.before)));
   }
-  const res = await fetch(url.toString(), {
+  return url.toString();
+}
+
+function parseStravaListErrorBody(text: string): string {
+  try {
+    const j = JSON.parse(text) as { message?: string };
+    return j.message ?? text;
+  } catch {
+    return text;
+  }
+}
+
+/** Parse Strava / CDN `Retry-After` (seconds). */
+export function parseStravaRetryAfterSeconds(res: Response): number | null {
+  const h = res.headers.get("retry-after");
+  if (!h?.trim()) return null;
+  const n = Number(h.trim());
+  if (Number.isFinite(n) && n >= 0) return n;
+  return null;
+}
+
+export type StravaAthleteActivitiesPageResult =
+  | { ok: true; data: StravaSummaryActivityJson[] }
+  | {
+      ok: false;
+      status: number;
+      kind: "rate_limit" | "unauthorized" | "error";
+      message: string;
+      retryAfterSec: number | null;
+    };
+
+export async function tryFetchStravaAthleteActivitiesPage(
+  accessToken: string,
+  opts?: {
+    page?: number;
+    perPage?: number;
+    after?: number;
+    before?: number;
+  }
+): Promise<StravaAthleteActivitiesPageResult> {
+  const res = await fetch(buildStravaAthleteActivitiesListUrl(opts), {
     headers: { Authorization: `Bearer ${accessToken}` },
     next: { revalidate: 0 }
   });
   const text = await res.text();
   if (!res.ok) {
-    let detail = text;
-    try {
-      const j = JSON.parse(text) as { message?: string };
-      detail = j.message ?? text;
-    } catch {
-      /* keep */
-    }
+    const detail = parseStravaListErrorBody(text) || `Strava list error ${res.status}`;
+    const retryAfterSec = parseStravaRetryAfterSeconds(res);
     if (res.status === 429) {
-      throw new Error("Strava rate limit — wait a few minutes and try again.");
+      return { ok: false, status: 429, kind: "rate_limit", message: detail, retryAfterSec };
     }
-    throw new Error(detail || `Strava list error ${res.status}`);
+    if (res.status === 401) {
+      return { ok: false, status: 401, kind: "unauthorized", message: detail, retryAfterSec: null };
+    }
+    return { ok: false, status: res.status, kind: "error", message: detail, retryAfterSec: null };
   }
-  return JSON.parse(text) as StravaSummaryActivityJson[];
+  try {
+    return { ok: true, data: JSON.parse(text) as StravaSummaryActivityJson[] };
+  } catch {
+    return {
+      ok: false,
+      status: res.status,
+      kind: "error",
+      message: "Invalid JSON from Strava activities list.",
+      retryAfterSec: null
+    };
+  }
+}
+
+export async function fetchStravaAthleteActivities(
+  accessToken: string,
+  opts?: {
+    page?: number;
+    perPage?: number;
+    /** Unix seconds — activities after this time */
+    after?: number;
+    /** Unix seconds — activities before this time (walk backward in history) */
+    before?: number;
+  }
+): Promise<StravaSummaryActivityJson[]> {
+  const r = await tryFetchStravaAthleteActivitiesPage(accessToken, opts);
+  if (r.ok) return r.data;
+  if (r.kind === "rate_limit") {
+    throw new Error("Strava rate limit — wait a few minutes and try again.");
+  }
+  throw new Error(r.message || `Strava list error ${r.status}`);
 }

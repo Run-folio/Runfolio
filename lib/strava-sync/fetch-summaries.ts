@@ -1,12 +1,28 @@
 import { fetchStravaAthleteActivities, type StravaSummaryActivityJson } from "@/lib/strava-api";
 
-const PER_PAGE = 50;
+export const PER_PAGE = 50;
 
 /** Incremental “new since last sync” — keep small for rate limits. */
 export const INCREMENTAL_MAX_PAGES = 4;
 
 /** One backfill user action — bounded batch toward older history. */
 export const BACKFILL_DEFAULT_MAX_PAGES = 3;
+
+/**
+ * First-ever backfill run uses a single list page so we minimize Strava calls before the first successful persist.
+ * After that, walk up to {@link BACKFILL_DEFAULT_MAX_PAGES} pages per batch.
+ */
+export const BACKFILL_FIRST_BATCH_MAX_PAGES = 1;
+
+export function backfillMaxPagesForRun(state: {
+  backfill_before_epoch: number | null;
+  backfill_batches_completed: number;
+} | null): number {
+  const batches = state?.backfill_batches_completed ?? 0;
+  const before = state?.backfill_before_epoch;
+  if (before == null && batches === 0) return BACKFILL_FIRST_BATCH_MAX_PAGES;
+  return BACKFILL_DEFAULT_MAX_PAGES;
+}
 
 /** Overlap window (seconds) so boundary activities aren’t missed on incremental. */
 const AFTER_OVERLAP_SEC = 7200;

@@ -18,10 +18,7 @@ import { formatStravaMovingTime } from "@/lib/strava-api";
 import { dismissCanonicalMatchSuggestion } from "@/lib/strava-sync/repository";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { snapshotFromRaceLinkFields, snapshotFromSyncedRow } from "@/lib/linked-activity-snapshot";
-import {
-  backfillStravaHistoryForUserId,
-  syncStravaActivitiesForUserId
-} from "@/lib/strava-sync/sync-service";
+import { backfillStravaHistoryForUserId, syncStravaActivitiesForUserId } from "@/lib/strava-sync/sync-service";
 import { getValidStravaAccessToken } from "@/lib/strava-access-server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isConfirmedPortfolioCompletion } from "@/lib/portfolio-race";
@@ -1127,24 +1124,37 @@ export async function syncStravaActivitiesAction() {
     const { user, supabase } = gate;
     const res = await syncStravaActivitiesForUserId(user.id);
     if (!res.ok) {
+      await revalidatePortfolioSurfaces(supabase, user.id, {
+        alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/import/past-races"]
+      });
       if (res.needBackfill) {
         return { error: res.error, needBackfill: true as const };
       }
-      return { error: res.error };
+      return {
+        error: res.error,
+        retryAfterSec: res.retryAfterSec ?? null,
+        requestsMade: res.requestsMade
+      };
     }
     await revalidatePortfolioSurfaces(supabase, user.id, {
       alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/import/past-races"]
     });
     runfolioLog.info("actions.stravaSync", "incremental_ok", {
       upserted: res.upserted,
-      skipped: res.skippedUnchanged
+      skipped: res.skippedUnchanged,
+      stoppedForRateLimit: res.stoppedForRateLimit,
+      requestsMade: res.requestsMade
     });
     return {
       ok: true as const,
       mode: res.mode,
       upserted: res.upserted,
       skippedUnchanged: res.skippedUnchanged,
-      errors: res.errors
+      errors: res.errors,
+      stoppedForRateLimit: res.stoppedForRateLimit,
+      retryAfterSec: res.retryAfterSec,
+      requestsMade: res.requestsMade,
+      rateLimitUserMessage: res.rateLimitUserMessage
     };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;
@@ -1165,7 +1175,14 @@ export async function backfillStravaHistoryAction() {
     const { user, supabase } = gate;
     const res = await backfillStravaHistoryForUserId(user.id);
     if (!res.ok) {
-      return { error: res.error };
+      await revalidatePortfolioSurfaces(supabase, user.id, {
+        alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/matches", "/import/past-races"]
+      });
+      return {
+        error: res.error,
+        retryAfterSec: res.retryAfterSec ?? null,
+        requestsMade: res.requestsMade
+      };
     }
     await revalidatePortfolioSurfaces(supabase, user.id, {
       alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/matches", "/import/past-races"]
@@ -1175,7 +1192,9 @@ export async function backfillStravaHistoryAction() {
       skipped: res.skippedUnchanged,
       exhausted: res.backfillExhausted,
       rawFetched: res.rawFetched,
-      eligibleInBatch: res.eligibleInBatch
+      eligibleInBatch: res.eligibleInBatch,
+      stoppedForRateLimit: res.stoppedForRateLimit,
+      requestsMade: res.requestsMade
     });
     return {
       ok: true as const,
@@ -1185,7 +1204,12 @@ export async function backfillStravaHistoryAction() {
       errors: res.errors,
       backfillExhausted: res.backfillExhausted,
       rawFetched: res.rawFetched,
-      eligibleInBatch: res.eligibleInBatch
+      eligibleInBatch: res.eligibleInBatch,
+      stoppedForRateLimit: res.stoppedForRateLimit,
+      retryAfterSec: res.retryAfterSec,
+      requestsMade: res.requestsMade,
+      hadPersistBeforeRateLimit: res.hadPersistBeforeRateLimit,
+      rateLimitUserMessage: res.rateLimitUserMessage
     };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;

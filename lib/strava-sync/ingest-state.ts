@@ -195,8 +195,14 @@ export async function recordIngestError(supabase: SupabaseClient, userId: string
   );
 }
 
-export async function recordRateLimitHint(supabase: SupabaseClient, userId: string): Promise<void> {
+export async function recordRateLimitHint(
+  supabase: SupabaseClient,
+  userId: string,
+  detail?: string | null
+): Promise<void> {
   const existing = await getIngestState(supabase, userId);
+  const lastError =
+    detail?.trim() ? detail.trim().slice(0, 2000) : (existing?.last_error ?? null);
   await supabase.from(TABLE).upsert(
     {
       user_id: userId,
@@ -207,7 +213,7 @@ export async function recordRateLimitHint(supabase: SupabaseClient, userId: stri
       backfill_batches_completed: existing?.backfill_batches_completed ?? 0,
       last_backfill_at: existing?.last_backfill_at ?? null,
       last_rate_limit_at: isoNow(),
-      last_error: existing?.last_error ?? null,
+      last_error: lastError,
       updated_at: isoNow()
     },
     { onConflict: "user_id" }

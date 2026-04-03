@@ -55,11 +55,15 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
                   ? ` ${res.errors} row(s) failed to save.`
                   : "";
               const zero =
-                res.upserted === 0 && res.skippedUnchanged === 0 && !res.errors
+                res.upserted === 0 && res.skippedUnchanged === 0 && !res.errors && !res.stoppedForRateLimit
                   ? " Nothing new since last sync."
                   : "";
+              const ratePart =
+                res.stoppedForRateLimit && res.rateLimitUserMessage?.trim()
+                  ? ` ${res.rateLimitUserMessage}`
+                  : "";
               setMsg(
-                `Saved or updated ${res.upserted} activit${res.upserted === 1 ? "y" : "ies"}${res.skippedUnchanged ? ` · ${res.skippedUnchanged} unchanged` : ""}.${errPart}${zero}`
+                `Saved or updated ${res.upserted} activit${res.upserted === 1 ? "y" : "ies"}${res.skippedUnchanged ? ` · ${res.skippedUnchanged} unchanged` : ""}.${errPart}${zero}${ratePart}`
               );
             }
             router.refresh();

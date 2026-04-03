@@ -7,7 +7,11 @@ import { backfillStravaHistoryAction } from "@/lib/actions";
 import type { StravaBackfillProgress, StravaBackfillUxPhase } from "@/lib/strava-backfill-model";
 import { usePersistence } from "@/components/persistence-context";
 import { buildSetupUrl } from "@/lib/setup-url";
-import { BACKFILL_DEFAULT_MAX_PAGES } from "@/lib/strava-sync/fetch-summaries";
+import {
+  BACKFILL_DEFAULT_MAX_PAGES,
+  BACKFILL_FIRST_BATCH_MAX_PAGES,
+  PER_PAGE
+} from "@/lib/strava-sync/fetch-summaries";
 import { HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM } from "@/lib/strava-sync/import-scope";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -43,7 +47,7 @@ const PHASE_UI: Record<
   rate_limited: {
     title: "Paused — Strava rate limit",
     description:
-      "Strava temporarily limited requests. Your cursor is saved—try again in about 15 minutes. No need to start over.",
+      "Strava temporarily limited requests. Progress from the last successful batch stays saved—wait before running another import or sync. If we showed a wait time below, prefer that over a fixed guess.",
     badgeClass: "border-rose-400/35 bg-rose-500/12 text-rose-50"
   },
   needs_attention: {
@@ -126,7 +130,11 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           backfillExhausted: res.backfillExhausted,
           batchHadStravaRowsButNoneEligible
         });
-        setBanner(null);
+        setBanner(
+          res.stoppedForRateLimit && res.rateLimitUserMessage?.trim()
+            ? res.rateLimitUserMessage
+            : null
+        );
       }
       router.refresh();
     });
@@ -245,6 +253,11 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
                 <dd className="font-medium text-white/85">{lastRun ?? "—"}</dd>
               </div>
             </dl>
+            {initialProgress.phase === "rate_limited" && initialProgress.lastError ? (
+              <p className="mt-3 rounded-lg border border-rose-400/25 bg-rose-950/35 px-3 py-2 text-sm text-rose-100/90">
+                {initialProgress.lastError}
+              </p>
+            ) : null}
             {initialProgress.phase === "needs_attention" && initialProgress.lastError ? (
               <p className="mt-3 rounded-lg border border-orange-400/30 bg-orange-950/40 px-3 py-2 text-sm text-orange-100/90">
                 {initialProgress.lastError}
@@ -361,7 +374,12 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             (15km+ floor) or when a strong <strong className="font-medium text-white/80">catalog match</strong> supports
             the effort (10km+ floor).
           </li>
-          <li>Each run loads at most {BACKFILL_DEFAULT_MAX_PAGES} Strava pages (~150 activities max per batch).</li>
+          <li>
+            The <strong className="font-medium text-white/80">first</strong> import batch loads at most{" "}
+            {BACKFILL_FIRST_BATCH_MAX_PAGES} Strava list page (~{PER_PAGE * BACKFILL_FIRST_BATCH_MAX_PAGES} activities) to
+            stay gentle on rate limits; later batches load up to {BACKFILL_DEFAULT_MAX_PAGES} pages (~
+            {PER_PAGE * BACKFILL_DEFAULT_MAX_PAGES} activities) each.
+          </li>
           <li>Rows are deduped locally—re-running won&apos;t create duplicates.</li>
         </ul>
       </section>
