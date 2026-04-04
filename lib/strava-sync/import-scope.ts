@@ -1,5 +1,6 @@
 import type { StravaSummaryActivityJson } from "@/lib/strava-api";
 import { hasStrongCatalogMatchForStravaSummary } from "@/lib/known-race-match";
+import { runfolioLog } from "@/lib/runfolio-log";
 
 /** Primary ingest types: Run, Trail Run / TrailRun, Race. */
 const HIGH_SIGNAL_TYPES = new Set(["Run", "Trail Run", "TrailRun", "Race"]);
@@ -57,6 +58,162 @@ export type StravaImportMode = "incremental" | "historical_backfill";
 
 export type StravaImportTier = "skip" | "high_signal" | "manual_pool";
 
+/** Set `STRAVA_BACKFILL_RELAXED_DEBUG=1` to accept any run/VirtualRun ≥30 km without title or catalog (local debugging only). */
+export function isStravaBackfillRelaxedDebug(): boolean {
+  return process.env.STRAVA_BACKFILL_RELAXED_DEBUG === "1";
+}
+
+/** Per-activity JSON logs + batch summary when `NODE_ENV === "development"` or `STRAVA_BACKFILL_IMPORT_DEBUG=1`. */
+export function shouldLogStravaBackfillImportEval(): boolean {
+  return process.env.NODE_ENV === "development" || process.env.STRAVA_BACKFILL_IMPORT_DEBUG === "1";
+}
+
+export type HistoricalBackfillImportEval = {
+  activity_id: number;
+  name: string;
+  distance_km: number;
+  sport_type: string;
+  activity_type: string;
+  start_date: string | null;
+  relaxed_debug: boolean;
+  passes_minimum_distance: boolean;
+  passes_type_gate: boolean;
+  passes_distance_threshold: boolean;
+  passes_title_signal: boolean;
+  catalog_match_found: boolean;
+  final_decision: "accepted" | "rejected";
+  rejection_reasons: string[];
+};
+
+/**
+ * Explains historical backfill persist gate for one list activity (mirrors {@link classifyStravaSummaryImportHistoricalBackfill}).
+ */
+export function evaluateHistoricalBackfillImport(raw: StravaSummaryActivityJson): HistoricalBackfillImportEval {
+  const relaxed = isStravaBackfillRelaxedDebug();
+  const km = distKm(raw);
+  const name = raw.name ?? "";
+  const highSport = isHighSignalSport(raw);
+  const virtualRun = isVirtualRun(raw);
+  const sportType = (raw.sport_type ?? "").trim();
+  const activityType = (raw.type ?? "").trim();
+
+  const passes_minimum_distance = Number.isFinite(km) && km >= MIN_MANUAL_KM;
+  const passes_type_gate = highSport || virtualRun;
+  const passes_distance_threshold = relaxed ? km >= 30 : km >= MIN_HIGH_KM_BACKFILL;
+  const passes_title_signal = km >= MIN_SUB40_TITLE_EXCEPTION_KM && raceLikeNameBackfillSub40(name);
+
+  const shouldComputeCatalogMatch =
+    !relaxed &&
+    passes_type_gate &&
+    km >= MIN_SUB40_CATALOG_EXCEPTION_KM &&
+    km < MIN_HIGH_KM_BACKFILL;
+  const catalog_match_found = shouldComputeCatalogMatch ? hasStrongCatalogMatchForStravaSummary(raw) : false;
+
+  const rejection_reasons: string[] = [];
+  let final_decision: "accepted" | "rejected" = "rejected";
+
+  if (!passes_minimum_distance) {
+    rejection_reasons.push("distance_below_minimum");
+  } else if (!passes_type_gate) {
+    rejection_reasons.push("type_not_supported");
+  } else if (relaxed && km >= 30) {
+    final_decision = "accepted";
+  } else if (km >= MIN_HIGH_KM_BACKFILL) {
+    final_decision = "accepted";
+  } else if (passes_title_signal) {
+    final_decision = "accepted";
+  } else if (km >= MIN_SUB40_CATALOG_EXCEPTION_KM && catalog_match_found) {
+    final_decision = "accepted";
+  } else {
+    if (relaxed) {
+      rejection_reasons.push("distance_below_relaxed_threshold");
+    } else {
+      if (km < MIN_HIGH_KM_BACKFILL) rejection_reasons.push("distance_below_threshold");
+      if (!passes_title_signal) rejection_reasons.push("no_title_signal");
+      if (!catalog_match_found) rejection_reasons.push("no_catalog_match");
+    }
+  }
+
+  return {
+    activity_id: raw.id,
+    name,
+    distance_km: km,
+    sport_type: sportType,
+    activity_type: activityType,
+    start_date: raw.start_date ?? null,
+    relaxed_debug: relaxed,
+    passes_minimum_distance,
+    passes_type_gate,
+    passes_distance_threshold,
+    passes_title_signal,
+    catalog_match_found,
+    final_decision,
+    rejection_reasons
+  };
+}
+
+export function partitionSummariesForHistoricalBackfill(summaries: StravaSummaryActivityJson[]): {
+  items: Array<{ raw: StravaSummaryActivityJson; manualLinkOnly: boolean }>;
+  evals: HistoricalBackfillImportEval[];
+} {
+  const items: Array<{ raw: StravaSummaryActivityJson; manualLinkOnly: boolean }> = [];
+  const evals: HistoricalBackfillImportEval[] = [];
+  for (const raw of summaries) {
+    const e = evaluateHistoricalBackfillImport(raw);
+    evals.push(e);
+    if (e.final_decision === "accepted") {
+      items.push({ raw, manualLinkOnly: false });
+    }
+  }
+  return { items, evals };
+}
+
+/**
+ * Development / explicit-debug logging for backfill import gates (one JSON line per activity + summary).
+ */
+export function logHistoricalBackfillImportEvalIfEnabled(userId: string, evals: HistoricalBackfillImportEval[]): void {
+  if (!shouldLogStravaBackfillImportEval() || evals.length === 0) return;
+
+  let passedDistanceThreshold = 0;
+  let passedTitleSignal = 0;
+  let catalogMatchFound = 0;
+  let accepted = 0;
+
+  for (const e of evals) {
+    if (e.passes_distance_threshold) passedDistanceThreshold++;
+    if (e.passes_title_signal) passedTitleSignal++;
+    if (e.catalog_match_found) catalogMatchFound++;
+    if (e.final_decision === "accepted") accepted++;
+
+    const payload = {
+      activity_id: e.activity_id,
+      name: e.name,
+      distance_km: e.distance_km,
+      sport_type: e.sport_type,
+      activity_type: e.activity_type,
+      start_date: e.start_date,
+      passes_distance_threshold: e.passes_distance_threshold,
+      passes_title_signal: e.passes_title_signal,
+      catalog_match_found: e.catalog_match_found,
+      final_decision: e.final_decision,
+      rejection_reasons: e.rejection_reasons,
+      relaxed_debug: e.relaxed_debug
+    };
+    console.info(`[Runfolio:debug][strava.backfill.import_eval] ${JSON.stringify(payload)}`);
+  }
+
+  runfolioLog.info("strava.backfill", "import_eval_summary", {
+    userId,
+    processed: evals.length,
+    passedDistanceThreshold,
+    passedTitleSignal,
+    catalogMatchFound,
+    accepted,
+    rejected: evals.length - accepted,
+    relaxedDebug: isStravaBackfillRelaxedDebug()
+  });
+}
+
 /**
  * Incremental sync: ≥30 km run-family high_signal; 10–29 km → manual_pool when run/virtual and named; else skip.
  */
@@ -78,22 +235,10 @@ function classifyStravaSummaryImportIncremental(raw: StravaSummaryActivityJson):
 /**
  * Historical backfill: full-history walk but only **high-signal** rows are persisted (no manual_pool).
  * Default ≥40km (see `HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM`) for run types, or sub-threshold with strong title / catalog match.
+ * With `STRAVA_BACKFILL_RELAXED_DEBUG=1`, any run/VirtualRun ≥30 km is accepted (no title/catalog required).
  */
 function classifyStravaSummaryImportHistoricalBackfill(raw: StravaSummaryActivityJson): StravaImportTier {
-  const km = distKm(raw);
-  if (!Number.isFinite(km) || km < MIN_MANUAL_KM) return "skip";
-
-  const highSport = isHighSignalSport(raw);
-  const virtualRun = isVirtualRun(raw);
-  if (!highSport && !virtualRun) return "skip";
-
-  if (km >= MIN_HIGH_KM_BACKFILL) return "high_signal";
-
-  if (km >= MIN_SUB40_TITLE_EXCEPTION_KM && raceLikeNameBackfillSub40(raw.name)) return "high_signal";
-
-  if (km >= MIN_SUB40_CATALOG_EXCEPTION_KM && hasStrongCatalogMatchForStravaSummary(raw)) return "high_signal";
-
-  return "skip";
+  return evaluateHistoricalBackfillImport(raw).final_decision === "accepted" ? "high_signal" : "skip";
 }
 
 /**
@@ -113,6 +258,9 @@ export function filterSummariesForPersist(
   summaries: StravaSummaryActivityJson[],
   mode: StravaImportMode = "incremental"
 ): Array<{ raw: StravaSummaryActivityJson; manualLinkOnly: boolean }> {
+  if (mode === "historical_backfill") {
+    return partitionSummariesForHistoricalBackfill(summaries).items;
+  }
   const out: Array<{ raw: StravaSummaryActivityJson; manualLinkOnly: boolean }> = [];
   for (const raw of summaries) {
     const tier = classifyStravaSummaryImport(raw, mode);

@@ -6,7 +6,11 @@ import {
   STRAVA_FIRST_BACKFILL_COOLDOWN_SEC,
   syncAfterEpochFromLatestStart
 } from "@/lib/strava-sync/fetch-summaries";
-import { filterSummariesForPersist } from "@/lib/strava-sync/import-scope";
+import {
+  filterSummariesForPersist,
+  logHistoricalBackfillImportEvalIfEnabled,
+  partitionSummariesForHistoricalBackfill
+} from "@/lib/strava-sync/import-scope";
 import {
   firstBackfillCooldownRemainingSec,
   getIngestState,
@@ -520,7 +524,8 @@ async function runBackfillStravaHistory(
 
     allSummaries.push(...batch);
     totalRaw += batch.length;
-    const items = filterSummariesForPersist(batch, "historical_backfill");
+    const { items, evals } = partitionSummariesForHistoricalBackfill(batch);
+    logHistoricalBackfillImportEvalIfEnabled(userId, evals);
     totalEligible += items.length;
     const result = await upsertStravaSummariesForUser(supabase, userId, items);
     totalUpserted += result.upserted;
