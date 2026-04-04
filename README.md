@@ -73,19 +73,13 @@ On **Add race** (`/races/new`), paste a Strava activity URL and click **Import A
 
 ### Option A — Connect Strava (recommended)
 
-1. In [Strava API settings](https://www.strava.com/settings/api), create an app. Set **Authorization Callback Domain** to `localhost` for local dev (or your production domain).
-2. In `.env.local` (see [`.env.example`](./.env.example)):
+1. In [Strava API settings](https://www.strava.com/settings/api), create an app. Set **Authorization Callback Domain** to the host you use (e.g. `localhost` for dev, or your production hostname without `https://`). Add the **exact** callback URL Strava shows (must match what the app sends): `https://<host>/api/strava/oauth/callback`.
+2. In `.env.local` (see [`.env.example`](./.env.example)) set **`STRAVA_REDIRECT_URI`** to that full callback URL (local and production values differ). Also set:
 
    ```env
-   NEXT_PUBLIC_SITE_URL=http://localhost:3000
    STRAVA_CLIENT_ID=your_client_id
    STRAVA_CLIENT_SECRET=your_client_secret
-   ```
-
-   If Strava requires an exact redirect URL, set:
-
-   ```env
-   STRAVA_REDIRECT_URI=http://localhost:3000/api/strava/oauth/callback
+   SUPABASE_SERVICE_ROLE_KEY=...  # required for Strava sign-in + stored tokens
    ```
 
 3. Restart `npm run dev`, open **Add race**, click **Connect Strava**, approve the app. Tokens are stored in **httpOnly cookies**; imports refresh them when they expire.

@@ -25,7 +25,18 @@ export async function upsertStravaUserCredentials(
   athleteId: string,
   tokens: StravaTokenResponse
 ): Promise<void> {
-  const expiresAt = new Date(tokens.expires_at * 1000).toISOString();
+  const rawSec = tokens.expires_at;
+  const sec =
+    rawSec != null && Number.isFinite(Number(rawSec))
+      ? Number(rawSec)
+      : tokens.expires_in != null
+        ? Math.floor(Date.now() / 1000) + tokens.expires_in
+        : Math.floor(Date.now() / 1000) + 3600;
+  const expiresAt = new Date(sec * 1000).toISOString();
+  if (!tokens.refresh_token?.trim()) {
+    runfolioLog.error("strava.credentials.upsert", "missing refresh_token from Strava");
+    throw new Error("Strava OAuth response missing refresh_token");
+  }
   const { error } = await admin.from("strava_user_credentials").upsert(
     {
       user_id: userId,

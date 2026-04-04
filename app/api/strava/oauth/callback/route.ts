@@ -5,8 +5,9 @@ import {
   STRAVA_OAUTH_STATE_COOKIE,
   clearStravaTokenCookiesOnResponse
 } from "@/lib/strava-cookies";
-import { getStravaClientCredentials, getStravaRedirectUri } from "@/lib/strava-env";
+import { getStravaClientCredentials, getStravaOAuthPublicOrigin, getStravaRedirectUri } from "@/lib/strava-env";
 import { exchangeStravaCode } from "@/lib/strava-oauth";
+import { stravaOauthTrace } from "@/lib/strava-oauth-trace";
 import { establishSupabaseSessionForUserId } from "@/lib/strava-oauth-session";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
@@ -30,27 +31,44 @@ export async function GET(request: NextRequest) {
   const err = reqUrl.searchParams.get("error");
   const errDesc = reqUrl.searchParams.get("error_description");
 
+  stravaOauthTrace("oauth_callback_received", {
+    hasErrorParam: Boolean(err),
+    hasCode: Boolean(code),
+    hasStateParam: Boolean(state)
+  });
+
   if (err) {
     runfolioLog.error("strava.oauth.callback.denied", errDesc ?? err);
+    stravaOauthTrace("oauth_strava_denied", { err: err ?? "" });
     return redirectWith(request, "/auth/login?strava_error=strava_access_denied");
   }
   if (!code || !state) {
+    stravaOauthTrace("oauth_missing_code_or_state", {});
     return redirectWith(request, "/auth/login?strava_error=missing_code");
   }
 
   const stateCookie = request.cookies.get(STRAVA_OAUTH_STATE_COOKIE)?.value;
   if (!stateCookie || stateCookie !== state) {
+    stravaOauthTrace("oauth_state_mismatch", {
+      hasStateCookie: Boolean(stateCookie),
+      usingEnvRedirectUri: Boolean(
+        process.env.STRAVA_REDIRECT_URI?.trim() || process.env.STRAVA_OAUTH_REDIRECT_URI?.trim()
+      ),
+      requestOrigin: getStravaOAuthPublicOrigin(request)
+    });
     return redirectWith(request, "/auth/login?strava_error=invalid_state");
   }
 
   const cred = getStravaClientCredentials();
   if (!cred) {
+    stravaOauthTrace("oauth_no_client_credentials", {});
     return redirectWith(request, "/auth/login?strava_error=no_client");
   }
 
   const admin = createServiceRoleClient();
   if (!admin) {
     runfolioLog.error("strava.oauth.callback", "admin_client_unavailable");
+    stravaOauthTrace("supabase_service_role_missing", {});
     return redirectWith(request, "/auth/login?strava_error=server_unavailable");
   }
 
@@ -59,23 +77,45 @@ export async function GET(request: NextRequest) {
   const nextPath = parseSafeRedirectPath(nextRaw) ?? "/dashboard";
   const mode = request.cookies.get(STRAVA_OAUTH_MODE_COOKIE)?.value ?? "login";
 
+  if (process.env.RUNFOLIO_STRAVA_OAUTH_DEBUG === "1") {
+    stravaOauthTrace("oauth_callback_redirect_uri_verbose", { redirectUri, mode, nextPath });
+  }
+
   let tokens;
   try {
     tokens = await exchangeStravaCode(code, cred.clientId, cred.clientSecret, redirectUri);
   } catch (e) {
     runfolioLog.error("strava.oauth.callback.token_exchange", e);
+    stravaOauthTrace("token_exchange_failed", {
+      message: e instanceof Error ? e.message.slice(0, 200) : "unknown"
+    });
     return redirectWith(request, "/auth/login?strava_error=token_exchange_failed");
   }
 
+  if (!tokens?.access_token?.trim()) {
+    runfolioLog.error("strava.oauth.callback.token_exchange", "missing access_token in Strava response");
+    stravaOauthTrace("token_exchange_missing_access_token", {});
+    return redirectWith(request, "/auth/login?strava_error=token_exchange_failed");
+  }
+
+  stravaOauthTrace("token_exchange_ok", {
+    hasRefreshToken: Boolean(tokens.refresh_token?.trim()),
+    expiresAt: tokens.expires_at ?? null
+  });
+
   const athlete = await fetchStravaAthleteForAuth(tokens.access_token);
   if (!athlete) {
+    stravaOauthTrace("athlete_fetch_failed", {});
     return redirectWith(request, "/auth/login?strava_error=athlete_fetch_failed");
   }
+
+  stravaOauthTrace("athlete_fetch_ok", { athleteId: athlete.id });
 
   const email = stravaSyntheticEmail(athlete.id);
 
   try {
     if (mode === "reconnect") {
+      stravaOauthTrace("reconnect_branch_entered", {});
       const redirectRes = NextResponse.redirect(new URL(nextPath, request.url));
       redirectRes.cookies.delete(STRAVA_OAUTH_STATE_COOKIE);
       redirectRes.cookies.delete(STRAVA_OAUTH_NEXT_COOKIE);
@@ -86,6 +126,7 @@ export async function GET(request: NextRequest) {
         data: { session }
       } = await routeSb.auth.getSession();
       if (!session?.user?.id) {
+        stravaOauthTrace("reconnect_failed_no_session", {});
         return redirectWith(request, `/auth/login?next=${encodeURIComponent(nextPath)}&strava_error=reconnect_requires_login`);
       }
       const uid = session.user.id;
@@ -95,6 +136,10 @@ export async function GET(request: NextRequest) {
       const credRow = await getStravaCredentialsForUser(admin, uid);
       const linkedAthlete = expected ?? credRow?.athlete_id;
       if (linkedAthlete && linkedAthlete !== athlete.id) {
+        stravaOauthTrace("reconnect_failed_wrong_athlete", {
+          linkedAthlete: linkedAthlete ?? "",
+          stravaAthlete: athlete.id
+        });
         return redirectWith(request, "/auth/login?strava_error=wrong_strava_account");
       }
 
@@ -109,9 +154,11 @@ export async function GET(request: NextRequest) {
         .eq("id", uid);
 
       clearStravaTokenCookiesOnResponse(redirectRes);
+      stravaOauthTrace("reconnect_ok", { userId: uid, athleteId: athlete.id });
       return redirectRes;
     }
 
+    stravaOauthTrace("login_branch_entered", {});
     /** Login / sign-up: find or create auth user linked to this Strava athlete. */
     const { data: byAthlete } = await admin
       .from("users")
@@ -140,14 +187,18 @@ export async function GET(request: NextRequest) {
         }
         if (!userId) {
           runfolioLog.error("strava.oauth.callback.create_user", cErr ?? "create_user_failed", {});
+          stravaOauthTrace("supabase_create_user_failed", {});
           return redirectWith(request, "/auth/login?strava_error=account_setup_failed");
         }
       }
     }
 
     if (!userId) {
+      stravaOauthTrace("login_failed_no_user_id", {});
       return redirectWith(request, "/auth/login?strava_error=no_user");
     }
+
+    stravaOauthTrace("login_user_resolved", { userId, athleteId: athlete.id });
 
     await admin
       .from("users")
@@ -169,13 +220,18 @@ export async function GET(request: NextRequest) {
     const signedIn = await establishSupabaseSessionForUserId(routeSb, userId, email);
     if (!signedIn.ok) {
       runfolioLog.error("strava.oauth.callback.session", signedIn.logDetail, { userId });
+      stravaOauthTrace("supabase_session_failed", { userId });
       return redirectWith(request, "/auth/login?strava_error=session_failed");
     }
 
+    stravaOauthTrace("supabase_session_ok", { userId });
     clearStravaTokenCookiesOnResponse(redirectRes);
     return redirectRes;
   } catch (e) {
     runfolioLog.error("strava.oauth.callback", e);
+    stravaOauthTrace("oauth_callback_exception", {
+      message: e instanceof Error ? e.message.slice(0, 160) : "unknown"
+    });
     return redirectWith(request, "/auth/login?strava_error=callback_failed");
   }
 }

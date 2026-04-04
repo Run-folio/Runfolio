@@ -6,6 +6,7 @@ export const STRAVA_AUTH_SCOPES = ["read", "activity:read", "activity:read_all"]
 
 export type StravaTokenResponse = {
   token_type: string;
+  /** Unix seconds; may be omitted — derive from `expires_in` if needed. */
   expires_at: number;
   expires_in: number;
   refresh_token: string;
@@ -46,7 +47,11 @@ export async function exchangeStravaCode(
     }
     throw new Error(msg || `Strava token exchange failed (${res.status})`);
   }
-  return JSON.parse(text) as StravaTokenResponse;
+  const parsed = JSON.parse(text) as StravaTokenResponse;
+  if (parsed.expires_at == null && parsed.expires_in != null) {
+    parsed.expires_at = Math.floor(Date.now() / 1000) + parsed.expires_in;
+  }
+  return parsed;
 }
 
 export async function refreshStravaAccessToken(
