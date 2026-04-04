@@ -14,12 +14,27 @@ describe("backfillAfterEpochForChunk", () => {
 });
 
 describe("epochWindowForJumpPreset", () => {
-  it("orders windows: last_12m is newest, then 12_24, then 24_36", () => {
-    const a = epochWindowForJumpPreset("last_12m");
-    const b = epochWindowForJumpPreset("months_12_24");
-    const c = epochWindowForJumpPreset("months_24_36");
-    expect(a.before).toBeGreaterThan(a.after);
-    expect(b.before).toBeLessThanOrEqual(a.after);
-    expect(c.before).toBeLessThanOrEqual(b.after);
+  const PRESETS_NEWEST_TO_OLDEST_BAND = [
+    "last_12m",
+    "months_12_24",
+    "months_24_36",
+    "months_36_60",
+    "months_60_plus"
+  ] as const;
+
+  it("each window has after < before", () => {
+    for (const p of PRESETS_NEWEST_TO_OLDEST_BAND) {
+      const w = epochWindowForJumpPreset(p);
+      expect(w.before).toBeGreaterThan(w.after);
+    }
+  });
+
+  it("bands chain: each older preset ends where the next newer band starts (no gaps at 365d boundaries)", () => {
+    const windows = PRESETS_NEWEST_TO_OLDEST_BAND.map((p) => epochWindowForJumpPreset(p));
+    for (let i = 0; i < windows.length - 1; i++) {
+      const newer = windows[i];
+      const older = windows[i + 1];
+      expect(older.before).toBeLessThanOrEqual(newer.after);
+    }
   });
 });

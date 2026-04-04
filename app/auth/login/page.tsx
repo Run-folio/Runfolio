@@ -8,22 +8,39 @@ type Props = {
 
 function stravaErrorHint(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null;
-  const u = decodeURIComponent(raw);
+  let u = raw.trim();
+  try {
+    u = decodeURIComponent(u);
+  } catch {
+    /* ignore */
+  }
   switch (u) {
     case "wrong_strava_account":
       return "This Strava account does not match your Runfolio login. Use the same Strava you used when you first signed in.";
     case "reconnect_requires_login":
       return "Sign in with Strava first, then try reconnecting.";
     case "server_misconfigured":
-      return "The server is missing SUPABASE_SERVICE_ROLE_KEY. Add it so Strava login can create your session.";
+    case "server_unavailable":
+      return "Sign-in isn’t available right now. Please try again later. If this keeps happening, contact support.";
     case "invalid_state":
     case "missing_code":
       return "Strava login was interrupted. Try again.";
     case "no_client":
-      return "Strava is not configured on this server (missing STRAVA_CLIENT_ID / SECRET).";
+      return "Strava sign-in isn’t set up on this server yet.";
+    case "strava_access_denied":
+      return "Strava didn’t authorize access. Try again and approve the connection if prompted.";
+    case "token_exchange_failed":
+      return "We couldn’t finish connecting to Strava. Try signing in again.";
+    case "account_setup_failed":
+      return "We couldn’t finish setting up your account. Try again, or contact support if this continues.";
+    case "session_failed":
+      return "We couldn’t start your session after Strava. Try again, or contact support if this continues.";
+    case "callback_failed":
+    case "athlete_fetch_failed":
+    case "no_user":
+      return "Something went wrong finishing sign-in. Please try again.";
     default:
-      if (u.length > 180) return `${u.slice(0, 180)}…`;
-      return u;
+      return "Something went wrong. Please try again.";
   }
 }
 
@@ -64,10 +81,7 @@ export default async function LoginPage({ searchParams }: Props) {
             Continue with Strava
           </a>
         ) : (
-          <p className="text-sm text-muted">
-            Strava OAuth is not configured. Set <code className="text-xs">STRAVA_CLIENT_ID</code> and{" "}
-            <code className="text-xs">STRAVA_CLIENT_SECRET</code>.
-          </p>
+          <p className="text-sm text-muted">Strava sign-in is not configured on this server.</p>
         )}
         <p className="mt-6 text-center text-[11px] text-muted leading-relaxed">
           Already connected but sync stopped working?{" "}

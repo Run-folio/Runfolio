@@ -35,7 +35,7 @@ import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-rea
 import { loadStravaBackfillProgress } from "@/lib/strava-backfill-progress";
 import { hasServerRecordedStravaBackfillBatch } from "@/lib/strava-backfill-model";
 import type { Race } from "@/types";
-import { StravaFirstTimeBackfillCta } from "@/components/strava-first-time-backfill-cta";
+import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -178,25 +178,17 @@ export default async function DashboardPage() {
             <div>
               <p className="type-eyebrow">Runner Portfolio</p>
               <h1 className="type-display mt-3 max-w-[18ch] leading-[1.05]">{userName}</h1>
-              <p className="type-tagline mt-3">Ultrarunner. Mountain Lover. Chaser of Big Days.</p>
-              <p className="type-meta mt-4 flex items-center gap-2">
-                <span className="text-accent" aria-hidden>
-                  ◎
-                </span>
-                Colorado, USA
-              </p>
-              <p className="mt-4 max-w-2xl text-sm leading-relaxed text-slate-300">
-                A curated record of the races that shaped you—not every mile, only the ones that mattered.
-              </p>
-              <div className="mt-10 grid max-w-2xl grid-cols-3 gap-6 border-t border-white/10 pt-8">
+              <div className="mt-8 grid max-w-2xl grid-cols-3 gap-6 border-t border-white/10 pt-8">
                 {[
                   { label: "Races", value: String(completedSorted.length) },
-                  { label: "Continents", value: "2" },
+                  { label: "Portfolio km", value: totalKm >= 10 ? `${totalKm.toFixed(0)}` : totalKm.toFixed(1) },
                   { label: "Up next", value: String(future.length) }
                 ].map((s) => (
                   <div key={s.label}>
                     <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">{s.label}</p>
-                    <p className="mt-2 text-3xl font-bold tabular-nums text-white">{s.value}</p>
+                    <p className="mt-2 text-3xl font-bold tabular-nums text-white">
+                      {s.label === "Portfolio km" ? `${s.value} km` : s.value}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -215,19 +207,11 @@ export default async function DashboardPage() {
             >
               Add race
             </Link>
-            <Link
-              href="/races/new"
-              className="text-center text-[11px] font-semibold uppercase tracking-[0.2em] text-muted transition hover:text-white"
-            >
-              Quick Strava import →
-            </Link>
           </div>
         </div>
       </section>
 
       <main className="app-shell space-y-16">
-        {showFirstTimeStravaBackfill ? <StravaFirstTimeBackfillCta /> : null}
-
         <section>
           <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
             <div>
@@ -241,106 +225,99 @@ export default async function DashboardPage() {
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             {completedSorted.length === 0 ? (
               <Card className="col-span-full border-dashed border-white/15 bg-panel/40 p-8 text-center sm:col-span-2 lg:col-span-4">
-                <p className="text-sm font-semibold text-white">No confirmed finishes yet</p>
-                <p className="type-meta mx-auto mt-2 max-w-md text-xs">
-                  Link a Strava activity or add a race with a catalog match so highlights reflect real finishes — not
-                  placeholders.
+                <p className="text-sm font-semibold text-white">No highlights yet</p>
+                <p className="type-meta mx-auto mt-2 max-w-sm text-xs">
+                  Import or add a race — your confirmed finishes show here.
                 </p>
                 <div className="mt-5 flex flex-wrap justify-center gap-4">
                   <Link
                     href="/my-races"
                     className="inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-accent hover:underline"
                   >
-                    Review Strava matches →
+                    My Races →
                   </Link>
                   <Link
                     href="/races/new"
                     className="inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-white/55 hover:underline"
                   >
-                    Quick add race →
+                    Add race →
                   </Link>
                 </div>
               </Card>
             ) : (
-              completedSorted.slice(0, 4).map((race, i) => (
-                <Card
-                  key={race.id}
-                  className={`overflow-hidden p-0 ${i === 0 ? "border-accent ring-1 ring-accent/40" : ""}`}
-                >
-                  <div
-                    className="aspect-[4/3] bg-cover bg-center"
-                    style={{ backgroundImage: `url('${getRaceSceneImagePath(race.name)}')` }}
-                  />
-                  <div className="border-t border-border p-4">
-                    <p className="font-semibold uppercase tracking-[0.04em] text-white">{race.name}</p>
-                    <p className="type-meta mt-1 text-xs">
-                      {race.distance_km} km · {race.elevation_m ?? "—"} m · {race.time ?? "—"}
-                    </p>
-                    <p className="mt-3 text-sm leading-relaxed text-slate-300 line-clamp-2">
-                      {race.description ?? "A day that stayed with you long after the finish."}
-                    </p>
-                  </div>
-                </Card>
-              ))
+              completedSorted.slice(0, 4).map((race, i) => {
+                const href = portfolioRaceHref(race);
+                const isExternal = href.startsWith("http");
+                const lift =
+                  "transition duration-200 group-hover:-translate-y-1 group-hover:shadow-[0_20px_50px_-18px_rgba(232,122,61,0.5)] group-hover:ring-1 group-hover:ring-accent/30";
+                const cardShell = cn("overflow-hidden p-0", lift, i === 0 ? "border-accent ring-1 ring-accent/40" : "");
+                const inner = (
+                  <>
+                    <div
+                      className="aspect-[4/3] bg-cover bg-center transition duration-200 group-hover:brightness-105"
+                      style={{ backgroundImage: `url('${getRaceSceneImagePath(race.name)}')` }}
+                    />
+                    <div className="border-t border-border p-4">
+                      <p className="font-semibold uppercase tracking-[0.04em] text-white">{race.name}</p>
+                      <p className="type-meta mt-1 text-xs">
+                        {race.distance_km} km · {race.elevation_m ?? "—"} m · {race.time ?? "—"}
+                      </p>
+                    </div>
+                  </>
+                );
+                const wrapClass =
+                  "group block h-full min-h-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50";
+                return isExternal ? (
+                  <a key={race.id} href={href} target="_blank" rel="noreferrer" className={wrapClass}>
+                    <Card className={cardShell}>{inner}</Card>
+                  </a>
+                ) : (
+                  <Link key={race.id} href={href} className={wrapClass}>
+                    <Card className={cardShell}>{inner}</Card>
+                  </Link>
+                );
+              })
             )}
           </div>
         </section>
 
         {stravaOAuthConfigured ? (
-          <section className="space-y-5 rounded-[14px] border border-white/10 bg-panel/30 p-5 md:p-6">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="max-w-xl space-y-2">
-                <p className="type-meta text-sm text-muted">
-                  <Link
-                    href="/my-races#import-strava"
-                    className="font-semibold text-accent underline-offset-4 hover:underline"
-                  >
-                    Import past race efforts
-                  </Link>{" "}
-                  pulls likely race history from Strava in safe batches and stores it here for matching—no live Strava
-                  reads after import. <strong className="font-medium text-white/90">Sync new activities</strong> (below)
-                  only fetches what&apos;s new since your last sync. The{" "}
-                  <Link href="/my-races" className="font-medium text-accent hover:underline">
-                    My Races hub
-                  </Link>{" "}
-                  is where you review and confirm linked finishes permanently in Runfolio.
-                </p>
-                {!stravaFeed.ok && stravaOverview.syncedRows.length > 0 ? (
-                  <p className="text-xs text-amber-200/90" role="status">
-                    Live Strava didn&apos;t load this visit, but saved activities from your last sync are still below.
-                    {stravaFeed.errorMessage ? ` (${stravaFeed.errorMessage})` : ""}
-                  </p>
-                ) : null}
-                {!stravaFeed.ok && stravaOverview.syncedRows.length === 0 ? (
-                  <p className="text-xs text-amber-200/90" role="status">
-                    {stravaFeed.errorMessage ?? "Connect Strava or run Sync so activities can load."}
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex flex-col items-stretch gap-3 sm:items-end">
+          <section
+            className={cn(
+              "space-y-5 rounded-[14px] border border-white/10 bg-panel/30 p-5 md:p-6",
+              showFirstTimeStravaBackfill && "border-accent/35 shadow-[0_0_0_1px_rgba(232,122,61,0.2)]"
+            )}
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="type-section text-lg md:text-xl">Import your races</h2>
+              <div className="flex flex-col items-stretch gap-2 sm:items-end">
                 <Link
                   href="/my-races#import-strava"
-                  className="inline-flex min-h-[40px] items-center justify-center rounded-[12px] bg-accent px-5 text-[11px] font-semibold uppercase tracking-wider text-white transition hover:bg-[#f08a4d]"
+                  className="inline-flex min-h-[44px] items-center justify-center rounded-[12px] bg-accent px-6 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-[#f08a4d]"
                 >
-                  Find my race history
+                  Import from Strava
                 </Link>
-                <StravaIncrementalSyncButton className="items-end" />
+                <StravaIncrementalSyncButton subtle className="w-full sm:w-auto" />
               </div>
             </div>
+            {!stravaFeed.ok && stravaOverview.syncedRows.length > 0 ? (
+              <p className="text-xs text-amber-200/90" role="status">
+                Saved sync data is still available below.
+                {stravaFeed.errorMessage ? ` (${stravaFeed.errorMessage})` : ""}
+              </p>
+            ) : null}
+            {!stravaFeed.ok && stravaOverview.syncedRows.length === 0 ? (
+              <p className="text-xs text-amber-200/90" role="status">
+                {stravaFeed.errorMessage ?? "Connect Strava or sync to load activities."}
+              </p>
+            ) : null}
             <CanonicalStravaMatchSuggestions
               suggestions={canonicalStravaSuggestions}
               returnAfterConfirm={confirmReturnTo}
             />
-            <p className="mx-auto max-w-2xl text-center text-[11px] leading-relaxed text-white/45">
-              Under 80% confidence we don&apos;t auto-suggest — use{" "}
-              <Link href="/my-races#my-races-unmatched" className="font-semibold text-accent underline-offset-4 hover:underline">
-                manual linking
-              </Link>{" "}
-              to search the verified catalog (names, aliases, places) and attach your finish without re-syncing Strava.
-            </p>
             <p className="text-center text-[11px] text-muted">
-              <Link href="/my-races" className="font-semibold uppercase tracking-[0.12em] text-accent hover:underline">
-                Open full My Races hub →
+              <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
+                My Races
               </Link>
             </p>
           </section>
@@ -403,11 +380,11 @@ export default async function DashboardPage() {
                     </div>
                   ))}
                 </div>
-                <div className="mt-8 border-t border-border pt-6">
-                  <p className="type-tagline text-base">&ldquo;One step at a time.&rdquo;</p>
-                  <p className="mt-4 text-sm leading-relaxed text-slate-300">{featured.description ?? "The story of this race belongs here."}</p>
-                  <p className="type-meta mt-6 text-xs">Highlight — the moment you knew you would finish.</p>
-                </div>
+                {featured.description?.trim() ? (
+                  <div className="mt-8 border-t border-border pt-6">
+                    <p className="text-sm leading-relaxed text-slate-300">{featured.description}</p>
+                  </div>
+                ) : null}
               </div>
               <div className="border-t border-border p-6 lg:border-l lg:border-t-0 md:p-8">
                 <p className="type-section text-sm">Linked finish</p>
@@ -416,9 +393,7 @@ export default async function DashboardPage() {
                   style={{ backgroundImage: `url('${getRaceSceneImagePath(featured.name)}')` }}
                 />
                 <p className="type-meta mt-4 text-xs">
-                  {featured.strava_activity_id
-                    ? "Strava-linked — open your full race portfolio for photos and story."
-                    : "Add a Strava match on Add race to unlock the activity portfolio page."}
+                  {featured.strava_activity_id ? "Strava-linked finish." : "Link Strava on Add race for the activity page."}
                 </p>
                 {featured.strava_activity_id ? (
                   <Link
@@ -463,11 +438,6 @@ export default async function DashboardPage() {
           </section>
         ) : null}
 
-        <p className="type-tagline text-center text-lg">
-          &ldquo;The mountain doesn&apos;t care who you are. It only reveals who you become.&rdquo;
-        </p>
-        <p className="type-meta text-center text-xs">— After the line</p>
-
         <section className="grid gap-4 border border-border bg-panel/50 p-6 md:grid-cols-3 md:p-8 lg:grid-cols-6">
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Portfolio distance</p>
@@ -488,14 +458,10 @@ export default async function DashboardPage() {
                 <p className="mt-2 text-3xl font-bold tabular-nums text-white">
                   {raceStripStats.totalDistanceKm} km
                 </p>
-                <p className="type-meta mt-1 text-[10px]">
-                  Same strip as My Races (persisted sync when available)
-                </p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Race candidates</p>
                 <p className="mt-2 text-3xl font-bold tabular-nums text-white">{raceStripStats.activityCount}</p>
-                <p className="type-meta mt-1 text-[10px]">{stravaFeed.stats.activityCount} live Strava activities loaded</p>
               </div>
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Candidate elevation</p>

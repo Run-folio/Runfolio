@@ -31,8 +31,8 @@ export async function GET(request: NextRequest) {
   const errDesc = reqUrl.searchParams.get("error_description");
 
   if (err) {
-    const q = new URLSearchParams({ strava_error: errDesc ?? err });
-    return redirectWith(request, `/auth/login?${q.toString()}`);
+    runfolioLog.error("strava.oauth.callback.denied", errDesc ?? err);
+    return redirectWith(request, "/auth/login?strava_error=strava_access_denied");
   }
   if (!code || !state) {
     return redirectWith(request, "/auth/login?strava_error=missing_code");
@@ -50,7 +50,8 @@ export async function GET(request: NextRequest) {
 
   const admin = createServiceRoleClient();
   if (!admin) {
-    return redirectWith(request, "/auth/login?strava_error=server_misconfigured");
+    runfolioLog.error("strava.oauth.callback", "admin_client_unavailable");
+    return redirectWith(request, "/auth/login?strava_error=server_unavailable");
   }
 
   const redirectUri = getStravaRedirectUri(request);
@@ -62,9 +63,8 @@ export async function GET(request: NextRequest) {
   try {
     tokens = await exchangeStravaCode(code, cred.clientId, cred.clientSecret, redirectUri);
   } catch (e) {
-    const message = e instanceof Error ? e.message : "token_exchange_failed";
-    const q = new URLSearchParams({ strava_error: message });
-    return redirectWith(request, `/auth/login?${q.toString()}`);
+    runfolioLog.error("strava.oauth.callback.token_exchange", e);
+    return redirectWith(request, "/auth/login?strava_error=token_exchange_failed");
   }
 
   const athlete = await fetchStravaAthleteForAuth(tokens.access_token);
@@ -139,11 +139,8 @@ export async function GET(request: NextRequest) {
           userId = (byEmail as { id?: string } | null)?.id ?? null;
         }
         if (!userId) {
-          runfolioLog.error("strava.oauth.callback", cErr?.message ?? "create_user_failed", {});
-          return redirectWith(
-            request,
-            `/auth/login?strava_error=${encodeURIComponent(cErr?.message ?? "create_user_failed")}`
-          );
+          runfolioLog.error("strava.oauth.callback.create_user", cErr ?? "create_user_failed", {});
+          return redirectWith(request, "/auth/login?strava_error=account_setup_failed");
         }
       }
     }
@@ -171,9 +168,8 @@ export async function GET(request: NextRequest) {
     const routeSb = createSupabaseRouteHandlerClient(request, redirectRes);
     const signedIn = await establishSupabaseSessionForUserId(routeSb, userId, email);
     if (!signedIn.ok) {
-      runfolioLog.error("strava.oauth.callback.session", signedIn.message, { userId });
-      const q = new URLSearchParams({ strava_error: signedIn.message });
-      return redirectWith(request, `/auth/login?${q.toString()}`);
+      runfolioLog.error("strava.oauth.callback.session", signedIn.logDetail, { userId });
+      return redirectWith(request, "/auth/login?strava_error=session_failed");
     }
 
     clearStravaTokenCookiesOnResponse(redirectRes);

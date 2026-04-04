@@ -12,6 +12,8 @@ import { cn } from "@/lib/utils";
 type Props = {
   /** Compact label for tight headers (e.g. Match hub). */
   compact?: boolean;
+  /** Lighter control for secondary actions (e.g. Overview import row). */
+  subtle?: boolean;
   className?: string;
 };
 
@@ -19,7 +21,7 @@ type Props = {
  * **Incremental sync only** — new Strava activities after the last successful sync.
  * Historical import lives on `/my-races` (Import from Strava).
  */
-export function StravaIncrementalSyncButton({ compact, className }: Props) {
+export function StravaIncrementalSyncButton({ compact, subtle, className }: Props) {
   const router = useRouter();
   const pathname = usePathname() ?? "/dashboard";
   const { persistenceAvailable, reason } = usePersistence();
@@ -28,17 +30,19 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
   const [showReconnect, setShowReconnect] = useState(false);
 
   return (
-    <div className={cn("flex flex-col items-start gap-2", className)}>
+    <div className={cn("flex flex-col items-start gap-2", subtle ? "items-center sm:items-end" : null, className)}>
       <Button
         type="button"
-        variant="secondary"
+        variant={subtle ? "ghost" : "secondary"}
         disabled={pending || !persistenceAvailable}
         aria-busy={pending}
         title={!persistenceAvailable ? reason ?? "Saving unavailable" : undefined}
         className={
-          compact
-            ? "text-[10px] font-semibold uppercase tracking-wider md:text-[11px]"
-            : "text-[11px] font-semibold uppercase tracking-wider"
+          subtle
+            ? "h-9 px-3 text-[12px] font-medium normal-case tracking-normal text-white/55 hover:bg-white/[0.06] hover:text-white/80"
+            : compact
+              ? "text-[10px] font-semibold uppercase tracking-wider md:text-[11px]"
+              : "text-[11px] font-semibold uppercase tracking-wider"
         }
         onClick={() => {
           if (pending) return;
@@ -94,7 +98,13 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
           });
         }}
       >
-        {pending ? "Syncing…" : compact ? "Sync new only" : "Sync new activities from Strava"}
+        {pending
+          ? "Syncing…"
+          : subtle
+            ? "Sync new activities"
+            : compact
+              ? "Sync new only"
+              : "Sync new activities from Strava"}
       </Button>
       {msg ? (
         <div className="max-w-md space-y-2 text-xs text-muted" role="status">

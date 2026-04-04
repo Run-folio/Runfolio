@@ -146,23 +146,27 @@ export function StravaRacePortfolioSection({
     );
   }
 
+  const dashOverview = layout === "dashboard";
+
   return (
     <section className="space-y-10">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
         <div>
           <p className="type-eyebrow">Race portfolio</p>
           <h2 className="type-section mt-2 text-lg md:text-xl">Imported race efforts</h2>
-          <p className="type-meta mt-2 max-w-2xl text-sm">
-            Long runs and race-type activities from Strava — matched against the Runfolio major-race catalog. Confirm
-            matches on{" "}
-            <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">
-              Add race
-            </Link>{" "}
-            to log the story and complete bucket list goals.
-          </p>
+          {dashOverview ? null : (
+            <p className="type-meta mt-2 max-w-2xl text-sm">
+              Long runs and race-type activities from Strava — matched against the Runfolio major-race catalog. Confirm
+              matches on{" "}
+              <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">
+                Add race
+              </Link>{" "}
+              to log the story and complete bucket list goals.
+            </p>
+          )}
         </div>
         <Link href="/races/new" className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent hover:underline">
-          Confirm a match →
+          {dashOverview ? "Add or confirm race →" : "Confirm a match →"}
         </Link>
       </div>
 
@@ -175,9 +179,7 @@ export function StravaRacePortfolioSection({
 
       {usingLiveRacePreviewOnly && layout === "dashboard" ? (
         <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90">
-          This strip is a <strong className="text-white">live Strava preview</strong> — nothing is saved in Runfolio yet.
-          Use <strong className="text-white">Sync from Strava</strong> so Overview and My Races share the same
-          stored activities.
+          Preview only — run <strong className="text-white">Sync new activities</strong> above to save these to Runfolio.
         </p>
       ) : null}
 
@@ -186,17 +188,23 @@ export function StravaRacePortfolioSection({
       {matchedMajorDiscoverIds.length > 0 ? (
         <div>
           <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold">Matched major races</p>
-          <p className="type-meta mb-3 text-xs">
-            Strong catalog matches from your recent efforts (tap through to the race library).
-          </p>
-          <div className="flex flex-wrap gap-2">
+          {dashOverview ? null : (
+            <p className="type-meta mb-3 text-xs">
+              Strong catalog matches from your recent efforts (tap through to the race library).
+            </p>
+          )}
+          <div className="flex flex-wrap gap-1.5">
             {matchedMajorDiscoverIds.map((id) => (
               <Link
                 key={id}
                 href={`/races/${id}`}
-                className="border border-accent/40 bg-accent/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-accent transition hover:bg-accent/20"
+                className={
+                  dashOverview
+                    ? "inline-flex max-w-full items-center rounded-full border border-white/12 bg-white/[0.06] px-2.5 py-0.5 text-[10px] font-medium leading-normal tracking-normal text-white/75 transition hover:border-white/20 hover:bg-white/[0.1] hover:text-white/90"
+                    : "border border-accent/40 bg-accent/10 px-3 py-2 text-[11px] font-semibold uppercase tracking-wider text-accent transition hover:bg-accent/20"
+                }
               >
-                {getCatalogDisplayTitle(id)}
+                <span className="truncate">{getCatalogDisplayTitle(id)}</span>
               </Link>
             ))}
           </div>
