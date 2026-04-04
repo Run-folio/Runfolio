@@ -14,6 +14,8 @@ type Props = {
   compact?: boolean;
   /** Lighter control for secondary actions (e.g. Overview import row). */
   subtle?: boolean;
+  /** Override idle label (still shows “Syncing…” while pending). */
+  syncLabel?: string;
   className?: string;
 };
 
@@ -21,7 +23,7 @@ type Props = {
  * **Incremental sync only** — new Strava activities after the last successful sync.
  * Historical import lives on `/my-races` (Import from Strava).
  */
-export function StravaIncrementalSyncButton({ compact, subtle, className }: Props) {
+export function StravaIncrementalSyncButton({ compact, subtle, syncLabel, className }: Props) {
   const router = useRouter();
   const pathname = usePathname() ?? "/dashboard";
   const { persistenceAvailable, reason } = usePersistence();
@@ -100,11 +102,13 @@ export function StravaIncrementalSyncButton({ compact, subtle, className }: Prop
       >
         {pending
           ? "Syncing…"
-          : subtle
-            ? "Sync new activities"
-            : compact
-              ? "Sync new only"
-              : "Sync new activities from Strava"}
+          : syncLabel?.trim()
+            ? syncLabel.trim()
+            : subtle
+              ? "Sync new activities"
+              : compact
+                ? "Sync new only"
+                : "Sync new activities from Strava"}
       </Button>
       {msg ? (
         <div className="max-w-md space-y-2 text-xs text-muted" role="status">

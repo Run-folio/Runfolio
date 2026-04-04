@@ -251,7 +251,7 @@ export function ManualRaceLinkPanel({
                     <input type="hidden" name="distance_km" value={String(ctx.distanceKm)} />
                     <input type="hidden" name="elevation_m" value={ctx.elevationM != null ? String(ctx.elevationM) : ""} />
                     <Button type="submit" disabled={pending} className="text-[10px]">
-                      Use this race
+                      Match race
                     </Button>
                   </form>
                 </div>
@@ -316,7 +316,7 @@ export function ManualRaceLinkPanel({
                       <input type="hidden" name="distance_km" value={String(ctx.distanceKm)} />
                       <input type="hidden" name="elevation_m" value={ctx.elevationM != null ? String(ctx.elevationM) : ""} />
                       <Button type="submit" disabled={pending} className="text-[10px]">
-                        Link finish
+                        Match race
                       </Button>
                     </form>
                   </div>

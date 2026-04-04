@@ -11,6 +11,42 @@ body {
   background-image: radial-gradient(circle at 20% -10%, rgba(201, 160, 107, 0.06), transparent 45%);
 }
 
+/* Scalable base text (Settings → Display) — scales rem-based UI */
+html[data-text-size="large"] {
+  font-size: 106.25%;
+}
+
+/* Accessibility: reduced motion (system or Settings toggle) */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+html[data-reduce-motion="on"] *,
+html[data-reduce-motion="on"] *::before,
+html[data-reduce-motion="on"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Strong default focus visibility for keyboard users */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid rgb(232 122 61);
+  outline-offset: 2px;
+}
+
 .app-shell {
   @apply mx-auto w-full max-w-[1400px] px-6 py-10 md:px-8;
 }

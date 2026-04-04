@@ -237,7 +237,7 @@ async function runIncrementalSync(userId: string, supabaseClient?: SupabaseClien
     return {
       ok: false,
       error:
-        "Import past race efforts first (Past races in the nav), then sync only picks up new activities.",
+        "Import past race efforts from My Races first, then sync only picks up new activities.",
       needBackfill: true
     };
   }

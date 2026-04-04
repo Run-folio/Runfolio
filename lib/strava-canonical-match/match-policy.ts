@@ -5,7 +5,7 @@
 export const CANONICAL_MATCH_MIN_SCORE = 60;
 export const CANONICAL_SUGGESTED_HIGH_MIN_SCORE = 80;
 
-/** Max teaser cards on Overview / dashboard (full Match & Import hub lists every ≥80% row). */
+/** Max teaser cards on Overview / dashboard (full My Races hub lists every ≥80% row). */
 export const CANONICAL_SUGGESTED_UI_MAX_COUNT = 3;
 
 /**

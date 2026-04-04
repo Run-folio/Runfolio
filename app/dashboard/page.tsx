@@ -167,26 +167,28 @@ export default async function DashboardPage() {
       <section className="hero-full min-h-[420px] md:min-h-[480px]">
         <div className="hero-bg" style={{ backgroundImage: "url('/photos/placeholders/9.png')" }} />
         <div className="hero-overlay" />
-        <div className="hero-inner flex flex-col gap-10 pb-4 md:flex-row md:items-end md:justify-between md:pb-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-end md:gap-10">
+        <div className="hero-inner flex flex-col gap-8 pb-4 md:flex-row md:items-end md:justify-between md:gap-10 md:pb-8">
+          <div className="flex flex-col gap-5 md:flex-row md:items-end md:gap-10">
             <div
-              className="h-28 w-28 shrink-0 rounded-full border-2 border-accent bg-cover bg-center shadow-[0_0_0_1px_rgba(232,122,61,0.35)]"
+              className="h-24 w-24 shrink-0 rounded-full border-2 border-accent bg-cover bg-center shadow-[0_0_0_1px_rgba(232,122,61,0.35)] sm:h-28 sm:w-28"
               style={{ backgroundImage: "url('/photos/placeholders/8.png')" }}
               role="img"
               aria-label="Profile"
             />
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="type-eyebrow">Runner Portfolio</p>
               <h1 className="type-display mt-3 max-w-[18ch] leading-[1.05]">{userName}</h1>
-              <div className="mt-8 grid max-w-2xl grid-cols-3 gap-6 border-t border-white/10 pt-8">
+              <div className="mt-6 grid max-w-2xl grid-cols-3 gap-x-3 gap-y-5 border-t border-white/10 pt-6 sm:gap-x-6">
                 {[
                   { label: "Races", value: String(completedSorted.length) },
                   { label: "Portfolio km", value: totalKm >= 10 ? `${totalKm.toFixed(0)}` : totalKm.toFixed(1) },
                   { label: "Up next", value: String(future.length) }
                 ].map((s) => (
-                  <div key={s.label}>
-                    <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">{s.label}</p>
-                    <p className="mt-2 text-3xl font-bold tabular-nums text-white">
+                  <div key={s.label} className="min-w-0">
+                    <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
+                      {s.label}
+                    </p>
+                    <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
                       {s.label === "Portfolio km" ? `${s.value} km` : s.value}
                     </p>
                   </div>
@@ -194,18 +196,18 @@ export default async function DashboardPage() {
               </div>
             </div>
           </div>
-          <div className="flex shrink-0 flex-col gap-3 md:items-end">
+          <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap md:w-auto md:flex-col md:items-end">
             <Link
               href="/my-races"
-              className="rounded-[12px] bg-accent px-4 py-2 text-center text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[12px] bg-accent px-4 py-2 text-center text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d] sm:flex-1 md:w-full md:min-w-[12rem]"
             >
               My Races
             </Link>
             <Link
               href="/races/new"
-              className="rounded-[12px] border border-border bg-panelAlt px-4 py-2 text-center text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-slate-800"
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[12px] border border-border bg-panelAlt px-4 py-2 text-center text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-slate-800 sm:flex-1 md:w-full md:min-w-[12rem]"
             >
-              Add race
+              Add Race
             </Link>
           </div>
         </div>
@@ -213,16 +215,19 @@ export default async function DashboardPage() {
 
       <main className="app-shell space-y-16">
         <section>
-          <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
+          <div className="mb-5 flex flex-col justify-between gap-3 sm:mb-6 sm:flex-row sm:items-end">
             <div>
               <p className="type-eyebrow">Highlights</p>
-              <h2 className="type-section mt-2 text-lg md:text-xl">Race Highlights</h2>
+              <h2 className="type-section mt-1 text-lg md:mt-2 md:text-xl">Race Highlights</h2>
             </div>
-            <Link href="/races/new" className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
-              View all races
+            <Link
+              href="/races/new"
+              className="min-h-[44px] shrink-0 content-center text-[11px] font-semibold uppercase tracking-[0.2em] text-accent sm:min-h-0"
+            >
+              View all →
             </Link>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 lg:grid-cols-4">
             {completedSorted.length === 0 ? (
               <Card className="col-span-full border-dashed border-white/15 bg-panel/40 p-8 text-center sm:col-span-2 lg:col-span-4">
                 <p className="text-sm font-semibold text-white">No highlights yet</p>
@@ -266,7 +271,7 @@ export default async function DashboardPage() {
                   </>
                 );
                 const wrapClass =
-                  "group block h-full min-h-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50";
+                  "group block h-full min-h-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 cursor-pointer active:opacity-95";
                 return isExternal ? (
                   <a key={race.id} href={href} target="_blank" rel="noreferrer" className={wrapClass}>
                     <Card className={cardShell}>{inner}</Card>
@@ -284,42 +289,42 @@ export default async function DashboardPage() {
         {stravaOAuthConfigured ? (
           <section
             className={cn(
-              "space-y-5 rounded-[14px] border border-white/10 bg-panel/30 p-5 md:p-6",
+              "rounded-[14px] border border-white/10 bg-panel/30 p-4 md:p-5",
               showFirstTimeStravaBackfill && "border-accent/35 shadow-[0_0_0_1px_rgba(232,122,61,0.2)]"
             )}
           >
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <h2 className="type-section text-lg md:text-xl">Import your races</h2>
-              <div className="flex flex-col items-stretch gap-2 sm:items-end">
-                <Link
-                  href="/my-races#import-strava"
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-[12px] bg-accent px-6 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-[#f08a4d]"
-                >
-                  Import from Strava
-                </Link>
-                <StravaIncrementalSyncButton subtle className="w-full sm:w-auto" />
-              </div>
+            <h2 className="sr-only">Strava import and sync</h2>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <Link
+                href="/my-races#import-strava"
+                className="inline-flex min-h-[48px] w-full flex-1 items-center justify-center rounded-[12px] bg-accent px-4 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-[#f08a4d] sm:max-w-xs"
+              >
+                Import from Strava
+              </Link>
+              <StravaIncrementalSyncButton
+                subtle
+                syncLabel="Sync new activities"
+                className="w-full flex-1 sm:w-auto sm:min-w-[11rem] [&_button]:min-h-[48px] [&_button]:w-full [&_button]:justify-center sm:[&_button]:w-auto"
+              />
             </div>
             {!stravaFeed.ok && stravaOverview.syncedRows.length > 0 ? (
-              <p className="text-xs text-amber-200/90" role="status">
-                Saved sync data is still available below.
+              <p className="mt-3 text-xs text-amber-200/90" role="status">
+                Live feed unavailable — saved activities still show below.
                 {stravaFeed.errorMessage ? ` (${stravaFeed.errorMessage})` : ""}
               </p>
             ) : null}
             {!stravaFeed.ok && stravaOverview.syncedRows.length === 0 ? (
-              <p className="text-xs text-amber-200/90" role="status">
+              <p className="mt-3 text-xs text-amber-200/90" role="status">
                 {stravaFeed.errorMessage ?? "Connect Strava or sync to load activities."}
               </p>
             ) : null}
-            <CanonicalStravaMatchSuggestions
-              suggestions={canonicalStravaSuggestions}
-              returnAfterConfirm={confirmReturnTo}
-            />
-            <p className="text-center text-[11px] text-muted">
-              <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
-                My Races
-              </Link>
-            </p>
+            <div className="mt-5">
+              <CanonicalStravaMatchSuggestions
+                suggestions={canonicalStravaSuggestions}
+                returnAfterConfirm={confirmReturnTo}
+                compact
+              />
+            </div>
           </section>
         ) : null}
 
@@ -358,16 +363,16 @@ export default async function DashboardPage() {
                 style={{ backgroundImage: `url('${getRaceSceneImagePath(featured.name)}')` }}
               />
               <div className="border-border p-6 md:p-8 lg:border-l">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h3 className="text-2xl font-bold uppercase tracking-[0.04em] md:text-3xl">{featured.name}</h3>
-                  <span className="border border-green/50 bg-green/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-green">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-xl font-bold uppercase tracking-[0.04em] md:text-2xl lg:text-3xl">{featured.name}</h3>
+                  <span className="rounded-full border border-green/45 bg-green/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-green">
                     Completed
                   </span>
                 </div>
                 <p className="type-meta mt-2 uppercase tracking-wide">
                   {featured.location ?? "—"} · {featured.date ?? "—"}
                 </p>
-                <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+                <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4">
                   {[
                     { k: "Distance", v: `${featured.distance_km} km` },
                     { k: "Elevation", v: `${featured.elevation_m ?? "—"} m` },
@@ -426,46 +431,77 @@ export default async function DashboardPage() {
                 </div>
               </div>
             </div>
-            <div className="flex gap-2 overflow-x-auto border-t border-border px-4 py-4">
-              {completedSorted.slice(0, 6).map((race) => (
-                <div
-                  key={race.id}
-                  className="h-16 w-28 shrink-0 bg-cover bg-center"
-                  style={{ backgroundImage: `url('${getRaceSceneImagePath(race.name)}')` }}
-                />
-              ))}
+            <div className="flex gap-2 overflow-x-auto border-t border-border px-4 py-4 [-webkit-overflow-scrolling:touch]">
+              {completedSorted.slice(0, 6).map((race) => {
+                const thumbHref = portfolioRaceHref(race);
+                const thumbExternal = thumbHref.startsWith("http");
+                const thumbStyle = { backgroundImage: `url('${getRaceSceneImagePath(race.name)}')` };
+                const thumbClass =
+                  "block h-16 w-28 shrink-0 overflow-hidden rounded-md bg-cover bg-center ring-1 ring-white/10 transition hover:ring-accent/50 focus-visible:outline focus-visible:ring-2 focus-visible:ring-accent";
+                return thumbExternal ? (
+                  <a
+                    key={race.id}
+                    href={thumbHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={thumbClass}
+                    style={thumbStyle}
+                    aria-label={`Open ${race.name}`}
+                  />
+                ) : (
+                  <Link
+                    key={race.id}
+                    href={thumbHref}
+                    className={thumbClass}
+                    style={thumbStyle}
+                    aria-label={`View ${race.name}`}
+                  />
+                );
+              })}
             </div>
           </section>
         ) : null}
 
-        <section className="grid gap-4 border border-border bg-panel/50 p-6 md:grid-cols-3 md:p-8 lg:grid-cols-6">
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Portfolio distance</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums">{totalKm.toFixed(1)} km</p>
+        <section className="grid grid-cols-2 gap-x-3 gap-y-5 border border-border bg-panel/50 p-5 sm:grid-cols-3 sm:gap-4 md:p-6 lg:grid-cols-6">
+          <div className="min-w-0">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">
+              Portfolio km
+            </p>
+            <p className="mt-1.5 truncate text-2xl font-bold tabular-nums sm:mt-2 sm:text-3xl">{totalKm.toFixed(1)} km</p>
           </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Races logged</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums">{completedSorted.length}</p>
+          <div className="min-w-0">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">Races</p>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums sm:mt-2 sm:text-3xl">{completedSorted.length}</p>
           </div>
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Goals ahead</p>
-            <p className="mt-2 text-3xl font-bold tabular-nums">{futureGoalCount}</p>
+          <div className="min-w-0">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">Goals</p>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums sm:mt-2 sm:text-3xl">{futureGoalCount}</p>
           </div>
           {stravaFeed.ok ? (
             <>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Race candidate km</p>
-                <p className="mt-2 text-3xl font-bold tabular-nums text-white">
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase leading-snug tracking-[0.14em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
+                  Race candidate km
+                </p>
+                <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
                   {raceStripStats.totalDistanceKm} km
                 </p>
               </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Race candidates</p>
-                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{raceStripStats.activityCount}</p>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase leading-snug tracking-[0.14em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
+                  Race candidates
+                </p>
+                <p className="mt-1.5 text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
+                  {raceStripStats.activityCount}
+                </p>
               </div>
-              <div>
-                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Candidate elevation</p>
-                <p className="mt-2 text-3xl font-bold tabular-nums text-white">{raceStripStats.totalElevationM} m</p>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase leading-snug tracking-[0.14em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
+                  Candidate elev.
+                </p>
+                <p className="mt-1.5 text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
+                  {raceStripStats.totalElevationM} m
+                </p>
               </div>
             </>
           ) : null}

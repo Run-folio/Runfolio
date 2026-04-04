@@ -1,8 +1,6 @@
 /**
  * Browser-facing origin for this request (Vercel forwards proto/host).
- * Avoid using NEXT_PUBLIC_SITE_URL here by default — if it disagrees with the host the user
- * actually hit (www vs apex, preview vs prod), Strava gets a different redirect_uri on authorize
- * than on token exchange → `invalid_grant` / state cookies not sent to the callback host.
+ * Used only when redirect URI is derived from the request (see {@link resolveStravaRedirectUri}).
  */
 export function getStravaOAuthPublicOrigin(request: Request): string {
   const forwardedHost = request.headers.get("x-forwarded-host");
@@ -12,34 +10,86 @@ export function getStravaOAuthPublicOrigin(request: Request): string {
     const proto = (forwardedProto?.split(",")[0].trim() || "https").replace(/:+$/, "");
     if (host) return `${proto}://${host}`.replace(/\/$/, "");
   }
+  /** Vercel sets VERCEL_URL (no scheme) when invoked without forwarded headers in rare cases. */
+  const vercelUrl = process.env.VERCEL_URL?.trim().replace(/\/$/, "");
+  if (vercelUrl && !vercelUrl.includes("://")) {
+    return `https://${vercelUrl}`;
+  }
   return new URL(request.url).origin.replace(/\/$/, "");
 }
 
-const CALLBACK_PATH = "/api/strava/oauth/callback";
+/** Path Strava must redirect to — single callback for login and reconnect. */
+export const STRAVA_OAUTH_CALLBACK_PATH = "/api/strava/oauth/callback" as const;
+
+export type StravaRedirectUriSource = "env_full" | "env_origin" | "dynamic";
+
+export type ResolveStravaRedirectUriResult =
+  | { ok: true; redirectUri: string; source: StravaRedirectUriSource; requestOrigin: string }
+  | { ok: false; message: string };
 
 /**
- * Exact OAuth callback URL Strava will redirect to — must be **identical** on:
- * - GET /api/strava/oauth/start (authorize)
- * - POST https://www.strava.com/oauth/token (code exchange)
- * - Strava app “Authorization Callback Domain” / allowed redirect list
+ * Canonical OAuth `redirect_uri`: must be **byte-identical** for:
+ * - GET /api/strava/oauth/authorize (query param)
+ * - POST https://www.strava.com/oauth/token (form field)
  *
- * Resolution order:
- * 1. `STRAVA_REDIRECT_URI` or `STRAVA_OAUTH_REDIRECT_URI` — full URL (recommended in docs/.env.example)
- * 2. `STRAVA_OAUTH_REDIRECT_ORIGIN` — origin only; path `/api/strava/oauth/callback` is appended
- * 3. Request public origin (forwarded headers or `request.url`) + callback path
+ * Resolution (strict in production):
+ * 1. `STRAVA_REDIRECT_URI` or `STRAVA_OAUTH_REDIRECT_URI` — full URL (recommended).
+ * 2. `STRAVA_OAUTH_REDIRECT_ORIGIN` — origin only; {@link STRAVA_OAUTH_CALLBACK_PATH} is appended.
+ * 3. Request-derived origin + callback path **only** if:
+ *    - `STRAVA_REDIRECT_URI_ALLOW_DYNAMIC` is `1` or `true`, **or**
+ *    - `NODE_ENV !== "production"` (local DX).
+ *
+ * Production: set `STRAVA_REDIRECT_URI` to your public HTTPS callback (see Strava app settings).
  */
-export function getStravaRedirectUri(request: Request): string {
+export function resolveStravaRedirectUri(request: Request): ResolveStravaRedirectUriResult {
+  const requestOrigin = getStravaOAuthPublicOrigin(request);
   const full =
     process.env.STRAVA_REDIRECT_URI?.trim() ||
     process.env.STRAVA_OAUTH_REDIRECT_URI?.trim();
   if (full) {
-    return full.replace(/\/$/, "");
+    return {
+      ok: true,
+      redirectUri: full.replace(/\/$/, ""),
+      source: "env_full",
+      requestOrigin
+    };
   }
   const originOnly = process.env.STRAVA_OAUTH_REDIRECT_ORIGIN?.trim().replace(/\/$/, "");
   if (originOnly) {
-    return `${originOnly}${CALLBACK_PATH}`;
+    return {
+      ok: true,
+      redirectUri: `${originOnly}${STRAVA_OAUTH_CALLBACK_PATH}`,
+      source: "env_origin",
+      requestOrigin
+    };
   }
-  return `${getStravaOAuthPublicOrigin(request)}${CALLBACK_PATH}`;
+  const allowDynamic =
+    process.env.STRAVA_REDIRECT_URI_ALLOW_DYNAMIC === "1" ||
+    process.env.STRAVA_REDIRECT_URI_ALLOW_DYNAMIC === "true" ||
+    process.env.NODE_ENV !== "production";
+  if (!allowDynamic) {
+    return {
+      ok: false,
+      message:
+        "Strava OAuth: set STRAVA_REDIRECT_URI to the exact callback URL registered in Strava, or set STRAVA_OAUTH_REDIRECT_ORIGIN. Request-derived redirect_uri is disabled in production unless STRAVA_REDIRECT_URI_ALLOW_DYNAMIC=true."
+    };
+  }
+  return {
+    ok: true,
+    redirectUri: `${requestOrigin}${STRAVA_OAUTH_CALLBACK_PATH}`,
+    source: "dynamic",
+    requestOrigin
+  };
+}
+
+/**
+ * Same URI string as {@link resolveStravaRedirectUri}; throws if redirect cannot be resolved.
+ * Login and reconnect both use this so authorize + token exchange always match.
+ */
+export function getStravaRedirectUri(request: Request): string {
+  const r = resolveStravaRedirectUri(request);
+  if (!r.ok) throw new Error(r.message);
+  return r.redirectUri;
 }
 
 export function getStravaClientCredentials(): { clientId: string; clientSecret: string } | null {

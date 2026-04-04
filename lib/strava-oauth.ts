@@ -9,7 +9,8 @@ export type StravaTokenResponse = {
   /** Unix seconds; may be omitted — derive from `expires_in` if needed. */
   expires_at: number;
   expires_in: number;
-  refresh_token: string;
+  /** Omitted on some re-authorizations — reuse stored refresh in DB. */
+  refresh_token?: string;
   access_token: string;
   /** Present on authorization_code exchange; includes avatar URLs. */
   athlete?: {

@@ -62,7 +62,7 @@ export function SuggestedRaceCard({ suggestion: s, pending, onConfirm, onChange 
           <input type="hidden" name="distance_km" value={String(s.distanceKm)} />
           <input type="hidden" name="elevation_m" value={s.elevationM != null ? String(s.elevationM) : ""} />
           <Button type="submit" disabled={pending} className="min-h-[48px] w-full text-[13px] font-semibold uppercase tracking-[0.1em]">
-            {pending ? "Saving…" : "Confirm"}
+            {pending ? "Saving…" : "Match race"}
           </Button>
         </form>
         <Button
@@ -72,7 +72,7 @@ export function SuggestedRaceCard({ suggestion: s, pending, onConfirm, onChange 
           className="min-h-[48px] w-full border-white/20 bg-white/[0.06] text-[13px] font-semibold uppercase tracking-[0.1em] text-white/90"
           onClick={() => onChange(s.stravaActivityId)}
         >
-          Change
+          Not this match
         </Button>
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[11px] text-white/40">
           {stravaUrl ? (
@@ -110,7 +110,7 @@ export function MatchedRaceCard({ finish, className }: MatchedProps) {
           href={portfolioPath}
           className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-white/[0.08] text-[13px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-white/[0.12]"
         >
-          View / Edit
+          View linked race
         </Link>
       </div>
       {stravaUrl ? (
@@ -120,7 +120,7 @@ export function MatchedRaceCard({ finish, className }: MatchedProps) {
           rel="noreferrer"
           className="mt-2 block text-center text-[11px] text-white/45 underline-offset-2 hover:text-white/70 hover:underline"
         >
-          Open on Strava
+          Strava activity
         </a>
       ) : null}
     </Card>

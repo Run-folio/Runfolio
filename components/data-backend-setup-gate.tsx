@@ -5,7 +5,7 @@ import { buildSetupUrl } from "@/lib/setup-url";
 
 type Props = {
   title: string;
-  /** Short label for the feature (e.g. "Match & Import"). */
+  /** Short label for the feature (e.g. "My Races"). */
   featureLabel: string;
   /** Where the user wanted to go — used for guided setup `next` param */
   returnTo?: string;

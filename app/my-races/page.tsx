@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { AppNavbar } from "@/components/app-navbar";
 import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { DevMatchDebugSummary } from "@/components/dev-match-debug-summary";
+import { MyRacesActionStrip } from "@/components/my-races/my-races-action-strip";
 import { MyRacesClient } from "@/components/my-races/my-races-client";
 import { StravaBackfillExperience } from "@/components/strava-backfill-experience";
 import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
@@ -24,7 +25,7 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "My Races · Runfolio",
-  description: "Import from Strava, confirm suggested matches, and link race finishes."
+  description: "Import runs from Strava, match finishes to the catalog, and manage linked races."
 };
 
 export default async function MyRacesPage() {
@@ -81,26 +82,22 @@ export default async function MyRacesPage() {
     <>
       <AppNavbar />
       <main className="min-h-screen bg-[#05070c] pb-24">
-        <div className="app-shell mx-auto max-w-[560px] px-4 pt-6 pb-4 md:px-6 md:pt-10">
-          <header className="mb-8 space-y-2">
+        <div className="app-shell mx-auto w-full max-w-[560px] px-4 pt-6 pb-4 md:px-6 md:pt-10">
+          <header className="mb-2 space-y-1 md:mb-4">
             <h1 className="font-display text-2xl font-normal tracking-tight text-white md:text-3xl">My Races</h1>
-            {stravaOAuthConfigured ? (
-              <Link
-                href="#import-strava"
-                className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-accent px-4 text-[12px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-[#f08a4d] md:w-auto md:px-6"
-              >
-                Import from Strava
-              </Link>
-            ) : null}
-            {!stravaOAuthConfigured && bundle.totalSyncedCount === 0 ? (
-              <p className="text-sm text-white/55">
-                <Link href={buildSetupUrl("/my-races")} className="font-semibold text-accent underline-offset-4 hover:underline">
-                  Setup
-                </Link>{" "}
-                or add races manually.
-              </p>
-            ) : null}
+            <p className="text-sm text-white/50">Import, then match each activity to a race or dismiss it.</p>
           </header>
+
+          <MyRacesActionStrip stravaOAuthConfigured={stravaOAuthConfigured} />
+
+          {!stravaOAuthConfigured && bundle.totalSyncedCount === 0 ? (
+            <p className="mb-6 text-sm text-white/55">
+              <Link href={buildSetupUrl("/my-races")} className="font-semibold text-accent underline-offset-4 hover:underline">
+                Setup
+              </Link>{" "}
+              Strava, or add races from Find / Add race.
+            </p>
+          ) : null}
 
           <section id="import-strava" className="scroll-mt-24">
             <StravaBackfillExperience

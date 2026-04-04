@@ -17,9 +17,15 @@ type Props = {
   suggestions: CanonicalStravaSuggestion[];
   /** Post-confirm redirect (profile path + optional hash), e.g. `/Runner%20Name#profile-completed-races` */
   returnAfterConfirm?: string;
+  /** Overview: list only, no long intro/footer. */
+  compact?: boolean;
 };
 
-export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfirm = "/dashboard" }: Props) {
+export function CanonicalStravaMatchSuggestions({
+  suggestions,
+  returnAfterConfirm = "/dashboard",
+  compact = false
+}: Props) {
   const router = useRouter();
   const { persistenceAvailable, reason: persistenceReason } = usePersistence();
   const [dismissPending, startDismiss] = useTransition();
@@ -42,10 +48,10 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
             We think this was <span className="text-accent">{top.name}</span>
           </p>
           <p className="type-meta mt-1 text-xs text-muted">
-            {Math.round(top.score)}% confidence · {s.activityTitle} · {s.distanceKm ? `${s.distanceKm} km` : "—"}
+            {Math.round(top.score)}% · {s.activityTitle} · {s.distanceKm ? `${s.distanceKm} km` : "—"}
             {s.startDateYmd ? ` · ${s.startDateYmd}` : ""}
           </p>
-          <p className="type-meta mt-3 text-xs leading-relaxed text-slate-300">{top.subtitle}</p>
+          {compact ? null : <p className="type-meta mt-3 text-xs leading-relaxed text-slate-300">{top.subtitle}</p>}
           {confirmErr?.id === s.stravaActivityId ? (
             <p className="mt-2 text-xs text-amber-200/90" role="alert">
               {confirmErr.message}
@@ -157,6 +163,20 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
       </li>
     );
   };
+
+  if (compact) {
+    return (
+      <div className="space-y-3">
+        <h2 className="sr-only">Suggested matches</h2>
+        {!persistenceAvailable ? (
+          <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
+            {persistenceReason ?? "Saving isn’t available — matches are view-only."}
+          </p>
+        ) : null}
+        <ul className="grid gap-3 sm:grid-cols-2">{strongOnly.map(renderCard)}</ul>
+      </div>
+    );
+  }
 
   return (
     <section className="space-y-8">

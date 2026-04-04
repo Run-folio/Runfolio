@@ -33,8 +33,13 @@ export async function upsertStravaUserCredentials(
         ? Math.floor(Date.now() / 1000) + tokens.expires_in
         : Math.floor(Date.now() / 1000) + 3600;
   const expiresAt = new Date(sec * 1000).toISOString();
-  if (!tokens.refresh_token?.trim()) {
-    runfolioLog.error("strava.credentials.upsert", "missing refresh_token from Strava");
+  let refresh = tokens.refresh_token?.trim() ?? "";
+  if (!refresh) {
+    const existing = await getStravaCredentialsForUser(admin, userId);
+    refresh = existing?.refresh_token?.trim() ?? "";
+  }
+  if (!refresh) {
+    runfolioLog.error("strava.credentials.upsert", "missing refresh_token from Strava and no row to reuse");
     throw new Error("Strava OAuth response missing refresh_token");
   }
   const { error } = await admin.from("strava_user_credentials").upsert(
@@ -42,7 +47,7 @@ export async function upsertStravaUserCredentials(
       user_id: userId,
       athlete_id: athleteId,
       access_token: tokens.access_token,
-      refresh_token: tokens.refresh_token,
+      refresh_token: refresh,
       expires_at: expiresAt
     },
     { onConflict: "user_id" }

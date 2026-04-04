@@ -4,7 +4,7 @@ import {
   STRAVA_OAUTH_NEXT_COOKIE,
   STRAVA_OAUTH_STATE_COOKIE
 } from "@/lib/strava-cookies";
-import { getStravaClientCredentials, getStravaOAuthPublicOrigin, getStravaRedirectUri } from "@/lib/strava-env";
+import { getStravaClientCredentials, resolveStravaRedirectUri } from "@/lib/strava-env";
 import { stravaAuthorizeUrl } from "@/lib/strava-oauth";
 import { stravaOauthTrace } from "@/lib/strava-oauth-trace";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
@@ -26,25 +26,31 @@ export async function GET(request: Request) {
     );
   }
 
+  const uriRes = resolveStravaRedirectUri(request);
+  if (!uriRes.ok) {
+    return NextResponse.json({ error: uriRes.message }, { status: 500 });
+  }
+
   const reqUrl = new URL(request.url);
   const nextParam = reqUrl.searchParams.get("next") ?? "/dashboard";
   const nextPath = parseSafeRedirectPath(nextParam) ?? "/dashboard";
   const mode = reqUrl.searchParams.get("mode") === "reconnect" ? "reconnect" : "login";
 
   const state = crypto.randomUUID();
-  const redirectUri = getStravaRedirectUri(request);
-  const authorize = stravaAuthorizeUrl({ clientId: cred.clientId, redirectUri, state });
-  stravaOauthTrace("oauth_redirect_started", {
-    mode,
-    nextPath,
-    requestOrigin: getStravaOAuthPublicOrigin(request),
-    usingEnvRedirectUri: Boolean(
-      process.env.STRAVA_REDIRECT_URI?.trim() || process.env.STRAVA_OAUTH_REDIRECT_URI?.trim()
-    )
+  const authorize = stravaAuthorizeUrl({
+    clientId: cred.clientId,
+    redirectUri: uriRes.redirectUri,
+    state
   });
-  if (process.env.RUNFOLIO_STRAVA_OAUTH_DEBUG === "1") {
-    stravaOauthTrace("oauth_redirect_uri_verbose", { redirectUri });
-  }
+
+  stravaOauthTrace("oauth_authorize_url_built", {
+    redirect_uri: uriRes.redirectUri,
+    redirect_source: uriRes.source,
+    request_origin: uriRes.requestOrigin,
+    mode,
+    nextPath
+  });
+
   const res = NextResponse.redirect(authorize);
   res.cookies.set(STRAVA_OAUTH_STATE_COOKIE, state, cookieBase);
   res.cookies.set(STRAVA_OAUTH_NEXT_COOKIE, nextPath, cookieBase);

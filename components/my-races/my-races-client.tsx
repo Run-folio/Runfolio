@@ -3,7 +3,6 @@
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ReactNode } from "react";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import {
   confirmCanonicalStravaMatchAction,
@@ -16,7 +15,6 @@ import type { MatchHubBundle } from "@/lib/match-hub/service";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { ManualRaceLinkPanel } from "@/components/manual-race-link-panel";
 import { MatchedRaceCard, SuggestedRaceCard } from "@/components/my-races/race-card";
-import { StravaIncrementalSyncButton } from "@/components/strava-incremental-sync-button";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { buildSetupUrl } from "@/lib/setup-url";
@@ -61,7 +59,9 @@ function QuietState({
           {liveStravaActivityCount != null && liveStravaActivityCount > 0 ? "Nothing saved yet" : "No activities in Runfolio"}
         </p>
         <p className="mt-2 text-sm text-white/50">
-          {stravaOAuthConfigured ? "Use Import from Strava above, then sync new activities from the header." : "Add a race from Find or Add race — Strava isn’t configured here."}
+          {stravaOAuthConfigured
+            ? "Use Import from Strava, then Sync new activities above."
+            : "Add a race from Find or Add race — Strava isn’t configured here."}
         </p>
         <div className="mt-6 flex flex-col gap-2 sm:mx-auto sm:max-w-xs">
           <Link
@@ -77,20 +77,13 @@ function QuietState({
   return (
     <Card className="border border-white/10 bg-panel/25 px-4 py-6 text-center">
       <p className="font-medium text-white/90">You&apos;re caught up</p>
-      <p className="mt-1 text-sm text-white/50">{totalSyncedCount} activit{totalSyncedCount === 1 ? "y" : "ies"} saved — nothing needs action.</p>
-      <Link href={completedRacesHref} className="mt-4 inline-block text-[12px] font-semibold text-accent hover:underline">
-        Completed races →
+      <p className="mt-1 text-sm text-white/50">
+        {totalSyncedCount} activit{totalSyncedCount === 1 ? "y" : "ies"} saved — nothing to review.
+      </p>
+      <Link href={completedRacesHref} className="mt-4 inline-block min-h-[44px] text-[12px] font-semibold text-accent hover:underline">
+        View completed races
       </Link>
     </Card>
-  );
-}
-
-function EmptyBlock({ title, children }: { title: string; children?: ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-dashed border-white/10 bg-[#0a0d14]/80 px-4 py-8 text-center">
-      <p className="text-sm font-medium text-white/75">{title}</p>
-      {children ? <div className="mt-4 flex flex-col gap-2">{children}</div> : null}
-    </div>
   );
 }
 
@@ -157,7 +150,7 @@ export function MyRacesClient({
         unhideId(stravaActivityId);
         setBanner({ kind: "err", text: String(r.error) });
       } else {
-        setBanner({ kind: "ok", text: "Suggestion cleared — you can still match this activity manually." });
+        setBanner({ kind: "ok", text: "Suggestion cleared — match manually if you want." });
         router.refresh();
       }
     });
@@ -240,8 +233,10 @@ export function MyRacesClient({
     [unmatched, hiddenIds]
   );
 
+  const queueCount = filteredHigh.length + filteredUnmatched.length + snoozed.length;
+
   return (
-    <div className="space-y-10">
+    <div className="space-y-8">
       {banner ? (
         <div
           role="status"
@@ -256,22 +251,25 @@ export function MyRacesClient({
               <>
                 <Link
                   href={profileHref}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl bg-emerald-500/85 px-4 text-[11px] font-semibold uppercase tracking-wider text-[#0a1210]"
+                  className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-emerald-500/85 px-4 text-[12px] font-semibold uppercase tracking-wider text-[#0a1210]"
                 >
                   Profile
                 </Link>
                 <Link
                   href={completedRacesHref}
-                  className="inline-flex min-h-[44px] items-center justify-center rounded-xl border border-emerald-400/35 px-4 text-[11px] font-semibold uppercase tracking-wider text-emerald-50"
+                  className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-emerald-400/35 px-4 text-[12px] font-semibold uppercase tracking-wider text-emerald-50"
                 >
                   Completed races
                 </Link>
-                <Link href={profileFinishHref} className="inline-flex min-h-[44px] items-center text-[11px] text-emerald-200/80 underline-offset-4 hover:underline sm:items-center">
-                  Highlight finish →
+                <Link
+                  href={profileFinishHref}
+                  className="inline-flex min-h-[48px] items-center text-[12px] text-emerald-200/80 underline-offset-4 hover:underline sm:items-center"
+                >
+                  Highlight finish
                 </Link>
               </>
             ) : null}
-            <button type="button" className="text-left text-[11px] text-white/45 hover:text-white/65" onClick={() => setBanner(null)}>
+            <button type="button" className="min-h-[44px] text-left text-[12px] text-white/45 hover:text-white/65" onClick={() => setBanner(null)}>
               Dismiss
             </button>
           </div>
@@ -279,26 +277,20 @@ export function MyRacesClient({
       ) : null}
 
       {!stravaOAuthConfigured ? (
-        <Card className="border-amber-500/25 bg-amber-950/15 p-4 text-sm text-amber-100/85">
-          Strava OAuth isn&apos;t configured here. Add finishes via{" "}
+        <p className="rounded-xl border border-amber-500/25 bg-amber-950/15 px-4 py-3 text-sm text-amber-100/85">
+          Strava isn&apos;t enabled here — link finishes from{" "}
           <Link href="/races/find" className="font-medium text-amber-200 underline-offset-4 hover:underline">
-            Find a race
+            Find
           </Link>{" "}
           or{" "}
           <Link href="/races/new" className="font-medium text-amber-200 underline-offset-4 hover:underline">
             Add race
           </Link>
           .
-        </Card>
+        </p>
       ) : null}
 
-      {stravaOAuthConfigured ? (
-        <div className="flex flex-col gap-2 sm:max-w-md">
-          <StravaIncrementalSyncButton className="min-h-[48px] w-full" />
-        </div>
-      ) : null}
-
-      <section id="my-races-queue" className="scroll-mt-24 space-y-6">
+      <section id="my-races-queue" className="scroll-mt-24 space-y-4" aria-label="Activities to review">
         {showQuiet ? (
           <QuietState
             totalSyncedCount={totalSyncedCount}
@@ -308,111 +300,76 @@ export function MyRacesClient({
           />
         ) : null}
 
-        {filteredHigh.length > 0 ? (
-          <div className="space-y-3">
-            <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60">Suggested</h2>
-            <ul className="flex flex-col gap-4">
-              {filteredHigh.map((s) => (
-                <li key={s.stravaActivityId}>
-                  <SuggestedRaceCard suggestion={s} pending={pending} onConfirm={confirmMatch} onChange={dismiss} />
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : !showQuiet && totalSyncedCount > 0 && (filteredUnmatched.length > 0 || snoozed.length > 0) ? (
-          <EmptyBlock title="No auto-suggestions">
-            <Link
-              href="#my-races-unmatched"
-              className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-white/15 px-4 text-[12px] font-semibold uppercase tracking-wider text-white/85"
-            >
-              Manual match →
-            </Link>
-          </EmptyBlock>
-        ) : null}
-
-        {filteredUnmatched.length > 0 ? (
-          <div id="my-races-unmatched" className="scroll-mt-24 space-y-3">
-            <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-white/60">Needs a race</h2>
-            <ul className="flex flex-col gap-4">
-              {filteredUnmatched.map(({ row, softSuggestions }) => (
+        {!showQuiet && queueCount > 0 ? (
+          <ul className="flex flex-col gap-4">
+            {filteredHigh.map((s) => (
+              <li key={s.stravaActivityId}>
+                <SuggestedRaceCard suggestion={s} pending={pending} onConfirm={confirmMatch} onChange={dismiss} />
+              </li>
+            ))}
+            {filteredUnmatched.map(({ row, softSuggestions }, idx) => (
+              <li key={row.strava_activity_id} id={idx === 0 ? "my-races-unmatched" : undefined} className={idx === 0 ? "scroll-mt-24" : undefined}>
+                <ManualRaceLinkPanel
+                  ctx={{
+                    stravaActivityId: row.strava_activity_id,
+                    activityTitle: row.name,
+                    startDateYmd: row.start_date.slice(0, 10),
+                    distanceKm: row.distance_km ?? 0,
+                    elevationM: row.elevation_gain_m ?? null
+                  }}
+                  softSuggestions={softSuggestions}
+                  pending={pending}
+                  onConfirm={confirmMatch}
+                  responseMode="hub"
+                  returnTo={RETURN_TO}
+                  onNotRace={() => notRace(row.strava_activity_id)}
+                  onSnooze={() => snooze(row.strava_activity_id)}
+                  compact
+                />
+              </li>
+            ))}
+            {snoozed.map(({ row }) => {
+              const m = activityMeta(row);
+              return (
                 <li key={row.strava_activity_id}>
-                  <ManualRaceLinkPanel
-                    ctx={{
-                      stravaActivityId: row.strava_activity_id,
-                      activityTitle: row.name,
-                      startDateYmd: row.start_date.slice(0, 10),
-                      distanceKm: row.distance_km ?? 0,
-                      elevationM: row.elevation_gain_m ?? null
-                    }}
-                    softSuggestions={softSuggestions}
-                    pending={pending}
-                    onConfirm={confirmMatch}
-                    responseMode="hub"
-                    returnTo={RETURN_TO}
-                    onNotRace={() => notRace(row.strava_activity_id)}
-                    onSnooze={() => snooze(row.strava_activity_id)}
-                    compact
-                  />
+                  <Card className="flex flex-col gap-3 border border-white/10 bg-panel/30 p-4">
+                    <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Later</p>
+                    <div>
+                      <p className="font-medium text-white">{m.title}</p>
+                      <p className="mt-1 text-sm text-white/55">
+                        {m.date} · {m.km ? `${m.km} km` : "—"}
+                        {m.el != null && m.el > 0 ? ` · ${Math.round(m.el)} m` : ""}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      disabled={pending}
+                      className="min-h-[48px] w-full"
+                      onClick={() => unsnooze(row.strava_activity_id)}
+                    >
+                      Back to queue
+                    </Button>
+                  </Card>
                 </li>
-              ))}
-            </ul>
-          </div>
-        ) : !showQuiet && totalSyncedCount > 0 && (filteredHigh.length > 0 || snoozed.length > 0) ? (
-          <EmptyBlock title="Nothing needs manual match" />
-        ) : null}
-
-        {snoozed.length > 0 ? (
-          <div className="space-y-3">
-            <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Saved for later</h2>
-            <ul className="flex flex-col gap-3">
-              {snoozed.map(({ row }) => {
-                const m = activityMeta(row);
-                return (
-                  <li key={row.strava_activity_id}>
-                    <Card className="flex flex-col gap-3 border border-white/10 bg-panel/30 p-4">
-                      <div>
-                        <p className="font-medium text-white">{m.title}</p>
-                        <p className="mt-1 text-sm text-white/55">
-                          {m.date} · {m.km ? `${m.km} km` : "—"}
-                          {m.el != null && m.el > 0 ? ` · ${Math.round(m.el)} m` : ""}
-                        </p>
-                      </div>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        disabled={pending}
-                        className="min-h-[48px] w-full"
-                        onClick={() => unsnooze(row.strava_activity_id)}
-                      >
-                        Back to queue
-                      </Button>
-                    </Card>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
+              );
+            })}
+          </ul>
         ) : null}
       </section>
 
-      <section className="space-y-3">
-        <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-200/75">Recently linked</h2>
-        {recentlyConfirmed.length === 0 ? (
-          <EmptyBlock title="No recent links from this page">
-            <Link href={completedRacesHref} className="text-[12px] font-semibold text-emerald-300/90 hover:underline">
-              View completed races →
-            </Link>
-          </EmptyBlock>
-        ) : (
-          <ul className="flex flex-col gap-3">
+      {recentlyConfirmed.length > 0 ? (
+        <section className="space-y-3" aria-label="Recently linked races">
+          <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-emerald-200/75">Linked</h2>
+          <ul className="flex flex-col gap-4">
             {recentlyConfirmed.map((r) => (
               <li key={r.id}>
                 <MatchedRaceCard finish={r} />
               </li>
             ))}
           </ul>
-        )}
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }

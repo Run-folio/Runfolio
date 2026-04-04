@@ -80,12 +80,11 @@ export default async function BucketListPage() {
       <section className="hero-full min-h-[280px]">
         <div className="hero-bg" style={{ backgroundImage: "url('/reference/hero-1.png')" }} />
         <div className="hero-overlay" />
-        <div className="hero-inner flex min-h-[280px] flex-col justify-end pb-12">
+        <div className="hero-inner flex min-h-[220px] flex-col justify-end pb-8 md:min-h-[280px] md:pb-12">
           <p className="type-eyebrow">Bucket List</p>
-          <h1 className="type-display mt-3 max-w-3xl">Goals you choose. Finishes you prove.</h1>
-          <p className="type-meta mt-4 max-w-2xl">
-            Search the library, save future goals, then link a real Strava activity to move each goal into your completed
-            collection.
+          <h1 className="type-display mt-3 max-w-3xl text-3xl md:text-4xl">Goals &amp; finishes</h1>
+          <p className="type-meta mt-3 hidden max-w-2xl md:mt-4 md:block">
+            Save goals from the catalog, then link a Strava finish when you complete one.
           </p>
         </div>
       </section>

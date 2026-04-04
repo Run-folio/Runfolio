@@ -53,7 +53,7 @@ export async function persistImportedFileActivity(opts: {
     return {
       ok: false,
       code: "duplicate",
-      message: "This exact file was already imported. Open Match & Import or your activity list to find it."
+      message: "This exact file was already imported. Open My Races or your activity list to find it."
     };
   }
 

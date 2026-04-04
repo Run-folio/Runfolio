@@ -72,10 +72,10 @@ export default async function NewRacePage({ searchParams }: PageProps) {
       <section className="hero-full min-h-[240px]">
         <div className="hero-bg" style={{ backgroundImage: "url('/reference/hero-1.png')" }} />
         <div className="hero-overlay" />
-        <div className="hero-inner flex min-h-[240px] flex-col justify-end pb-10">
-          <h1 className="type-display max-w-4xl">Create / Edit Race</h1>
-          <p className="type-tagline mt-4 max-w-2xl">
-            Every race tells a story. We&apos;ll handle the details—you focus on what matters.
+        <div className="hero-inner flex min-h-[200px] flex-col justify-end pb-8 md:min-h-[240px] md:pb-10">
+          <h1 className="type-display max-w-4xl text-3xl md:text-4xl">Add Race</h1>
+          <p className="type-tagline mt-3 hidden max-w-2xl md:mt-4 md:block">
+            Every race tells a story—we&apos;ll handle the details.
           </p>
         </div>
       </section>

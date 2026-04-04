@@ -33,7 +33,9 @@ export async function getStravaTokensFromCookies(): Promise<{
 export function applyStravaTokensToResponse(res: NextResponse, tokens: StravaTokenResponse): void {
   const maxAge = Math.max(60, tokens.expires_in);
   res.cookies.set(ACCESS, tokens.access_token, { ...cookieBase, maxAge });
-  res.cookies.set(REFRESH, tokens.refresh_token, { ...cookieBase, maxAge: 60 * 60 * 24 * 180 });
+  if (tokens.refresh_token?.trim()) {
+    res.cookies.set(REFRESH, tokens.refresh_token.trim(), { ...cookieBase, maxAge: 60 * 60 * 24 * 180 });
+  }
   res.cookies.set(EXPIRES, String(tokens.expires_at), { ...cookieBase, maxAge });
 }
 
@@ -42,7 +44,9 @@ export async function persistStravaTokensToCookies(tokens: StravaTokenResponse):
   const jar = await cookies();
   const maxAge = Math.max(60, tokens.expires_in);
   jar.set(ACCESS, tokens.access_token, { ...cookieBase, maxAge });
-  jar.set(REFRESH, tokens.refresh_token, { ...cookieBase, maxAge: 60 * 60 * 24 * 180 });
+  if (tokens.refresh_token?.trim()) {
+    jar.set(REFRESH, tokens.refresh_token.trim(), { ...cookieBase, maxAge: 60 * 60 * 24 * 180 });
+  }
   jar.set(EXPIRES, String(tokens.expires_at), { ...cookieBase, maxAge });
 }
 

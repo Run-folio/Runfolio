@@ -12,10 +12,16 @@ type Props = {
   linkToPortfolio?: boolean;
 };
 
+function confidencePillClass(c: CatalogRaceSuggestion["confidence"]): string {
+  if (c === "high") return "border-emerald-400/35 bg-emerald-500/10 text-emerald-100";
+  if (c === "medium") return "border-amber-400/35 bg-amber-500/10 text-amber-100";
+  return "border-white/15 bg-white/[0.06] text-white/70";
+}
+
 function confidenceShort(c: CatalogRaceSuggestion["confidence"]): string {
-  if (c === "high") return "High match";
-  if (c === "medium") return "Needs review";
-  return "Check details";
+  if (c === "high") return "Strong";
+  if (c === "medium") return "Review";
+  return "Low";
 }
 
 export function StravaActivityCard({
@@ -40,18 +46,34 @@ export function StravaActivityCard({
         />
       ) : null}
       {catalogSuggestion ? (
-        <div className="mb-3 border border-accent/35 bg-accent/10 px-2.5 py-2">
-          <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-accent">Likely major race</p>
-          <p className="mt-1 text-sm font-semibold leading-snug text-white">{catalogSuggestion.displayTitle}</p>
-          <p className="type-meta mt-1 text-[10px]">
-            {confidenceShort(catalogSuggestion.confidence)} · {Math.round(catalogSuggestion.score * 100)}% ·{" "}
-            {catalogSuggestion.onUserBucketList ? "On your bucket list" : "Not on bucket list"}
-          </p>
+        <div className="mb-3 space-y-2">
+          <div className="flex flex-wrap gap-1.5">
+            <span className="rounded-full border border-accent/35 bg-accent/10 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent">
+              Catalog
+            </span>
+            <span
+              className={cn(
+                "rounded-full border px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
+                confidencePillClass(catalogSuggestion.confidence)
+              )}
+            >
+              {confidenceShort(catalogSuggestion.confidence)}
+            </span>
+            <span className="rounded-full border border-white/12 bg-white/[0.06] px-2.5 py-0.5 text-[9px] font-semibold tabular-nums text-white/75">
+              {Math.round(catalogSuggestion.score * 100)}%
+            </span>
+            {catalogSuggestion.onUserBucketList ? (
+              <span className="rounded-full border border-gold/35 bg-gold/10 px-2.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-gold">
+                Bucket
+              </span>
+            ) : null}
+          </div>
+          <p className="text-sm font-semibold leading-snug text-white">{catalogSuggestion.displayTitle}</p>
         </div>
       ) : null}
       <div className="flex items-start justify-between gap-2">
-        <p className="font-semibold leading-snug text-white line-clamp-2">{activity.name}</p>
-        <span className="shrink-0 border border-white/15 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted">
+        <p className="min-w-0 font-semibold leading-snug text-white line-clamp-2">{activity.name}</p>
+        <span className="shrink-0 rounded-full border border-white/15 bg-white/[0.04] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wider text-muted">
           {sport}
         </span>
       </div>
@@ -74,17 +96,6 @@ export function StravaActivityCard({
           </p>
         </div>
       </div>
-      <div className="mt-2 text-[10px] text-muted">
-        <span>
-          {activity.kudos_count} kudos · {activity.achievement_count} achievements
-        </span>
-      </div>
-      {activity.summary_polyline ? (
-        <div
-          className="mt-3 h-14 w-full rounded-md border border-white/10 bg-gradient-to-br from-accent/10 via-black/40 to-black/60"
-          aria-hidden
-        />
-      ) : null}
     </>
   );
 
@@ -115,24 +126,24 @@ export function StravaActivityCard({
         <Link
           href={`/activities/${encodeURIComponent(activity.strava_id)}`}
           className="block p-4 pb-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          aria-label={`${activity.name}, view activity`}
         >
           {inner}
-          <p className="mt-3 text-[10px] font-semibold uppercase tracking-wider text-white/90">
-            Race portfolio page →
-          </p>
         </Link>
-        <div className="border-t border-white/10 px-4 pb-3 pt-2">
+        <div className="border-t border-white/10 px-4 py-2">
           {isStrava && activity.strava_url.startsWith("http") ? (
             <a
               href={activity.strava_url}
               target="_blank"
               rel="noreferrer"
-              className="text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
+              className="inline-flex min-h-[40px] items-center text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
             >
-              Open in Strava
+              Strava
             </a>
           ) : (
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/45">Imported file</span>
+            <span className="inline-flex min-h-[40px] items-center text-[10px] font-semibold uppercase tracking-wider text-white/45">
+              File import
+            </span>
           )}
         </div>
       </div>

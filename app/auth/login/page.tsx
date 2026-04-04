@@ -27,6 +27,10 @@ function stravaFailureDetail(raw: string | null | undefined): string | null {
     case "invalid_state":
     case "missing_code":
       return "The Strava login flow was interrupted. You can retry Strava above or use email.";
+    case "oauth_config":
+      return "Server OAuth isn’t configured correctly (redirect URI). Set STRAVA_REDIRECT_URI to match Strava’s callback URL.";
+    case "credentials_save_failed":
+      return "Strava authorized, but saving tokens failed. Check server logs and SUPABASE_SERVICE_ROLE_KEY.";
     default:
       return null;
   }

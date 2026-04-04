@@ -8,6 +8,7 @@ import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { buildSetupUrl } from "@/lib/setup-url";
+import { cn } from "@/lib/utils";
 
 type Props = {
   candidates: StravaRaceCandidate[];
@@ -48,38 +49,40 @@ export function StravaRacePortfolioSection({
   const list = isProfile ? candidates.slice(0, 3) : candidates;
   if (!stravaOk) {
     return (
-      <section className="space-y-6">
+      <section className="space-y-4">
         <div>
-          <p className="type-eyebrow">Race portfolio</p>
-          <h2 className="type-section mt-2 text-lg md:text-xl">Imported race efforts</h2>
-          <p className="type-meta mt-2 max-w-2xl text-sm">
-            Connect Strava to surface long runs and trail efforts (about <strong className="text-white/90">12 km</strong>{" "}
-            and up, run-like sports). Rides and gym work stay out of this view.
-          </p>
+          {isProfile ? <p className="type-eyebrow">Race portfolio</p> : null}
+          <h2 className={cn("type-section text-lg md:text-xl", isProfile && "mt-2")}>Imported race efforts</h2>
+          {!isProfile ? null : (
+            <p className="type-meta mt-2 max-w-2xl text-sm">
+              Connect Strava to surface long runs and trail efforts (about <strong className="text-white/90">12 km</strong>{" "}
+              and up, run-like sports). Rides and gym work stay out of this view.
+            </p>
+          )}
         </div>
-        <Card className="border-dashed border-white/20 bg-panel/40 p-6 text-center">
+        <Card className="border-dashed border-white/20 bg-panel/40 p-5 text-center md:p-6">
           <p className="text-sm text-muted">
-            {stravaFeedErrorMessage
-              ? stravaFeedErrorMessage
-              : "Strava isn’t connected or the feed couldn’t load."}{" "}
-            Hook it up from{" "}
+            {stravaFeedErrorMessage ? stravaFeedErrorMessage : "Strava isn’t connected or the feed couldn’t load."}{" "}
             <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
               My Races
             </Link>
-            , the{" "}
-            <Link href={buildSetupUrl("/dashboard")} className="font-semibold text-white/85 underline-offset-4 hover:underline">
-              setup guide
-            </Link>
-            , or{" "}
-            <Link href="/races/new" className="font-semibold text-white/70 underline-offset-4 hover:underline">
-              Add race
-            </Link>{" "}
-            for a quick single import.
+            {!isProfile ? null : (
+              <>
+                {" · "}
+                <Link href={buildSetupUrl("/dashboard")} className="font-semibold text-white/85 underline-offset-4 hover:underline">
+                  Setup
+                </Link>
+                {" · "}
+                <Link href="/races/new" className="font-semibold text-white/70 underline-offset-4 hover:underline">
+                  Add race
+                </Link>
+              </>
+            )}
           </p>
           {stravaOAuthConfigured ? (
             <Link
               href="/api/strava/oauth/start"
-              className="mt-4 inline-block text-sm font-semibold uppercase tracking-wider text-accent hover:underline"
+              className="mt-4 inline-flex min-h-[44px] items-center justify-center text-sm font-semibold uppercase tracking-wider text-accent hover:underline"
             >
               Connect Strava
             </Link>
@@ -90,38 +93,38 @@ export function StravaRacePortfolioSection({
   }
 
   if (candidates.length === 0) {
+    const overviewLayout = layout === "dashboard";
     return (
-      <section className="space-y-6">
+      <section className="space-y-4">
         <div>
-          <p className="type-eyebrow">Race portfolio</p>
-          <h2 className="type-section mt-2 text-lg md:text-xl">Imported race efforts</h2>
-          <p className="type-meta mt-2 max-w-2xl text-sm">
-            We favor race-shaped running: roughly <strong className="text-white/90">12 km+</strong>,{" "}
-            <strong className="text-white/90">run / trail / virtual run</strong>, and related types. Rides and short
-            casual jogs stay out of this strip.
-          </p>
+          {overviewLayout ? null : <p className="type-eyebrow">Race portfolio</p>}
+          <h2 className={cn("type-section text-lg md:text-xl", !overviewLayout && "mt-2")}>Imported race efforts</h2>
+          {!overviewLayout ? (
+            <p className="type-meta mt-2 max-w-2xl text-sm">
+              We favor race-shaped running: roughly <strong className="text-white/90">12 km+</strong>,{" "}
+              <strong className="text-white/90">run / trail / virtual run</strong>, and related types. Rides and short
+              casual jogs stay out of this strip.
+            </p>
+          ) : null}
         </div>
         {stravaLiveFeedOk === false ? (
-          <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90" role="status">
-            Live Strava didn&apos;t load this visit
-            {stravaFeedErrorMessage ? ` — ${stravaFeedErrorMessage}` : ""}.{" "}
-            {hasSyncedStravaRows
-              ? "You still have saved activities from sync — open My Races for the full list."
-              : "Run Sync from Strava after reconnecting, or import one activity by URL."}
+          <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-100/90 sm:text-sm" role="status">
+            Live feed didn&apos;t load{stravaFeedErrorMessage ? ` — ${stravaFeedErrorMessage}` : ""}.
+            {hasSyncedStravaRows ? " Saved activities still available — open My Races." : " Reconnect and sync, or add by URL."}
           </p>
         ) : null}
-        <Card className="border border-white/10 bg-panel/50 p-6">
+        <Card className="border border-white/10 bg-panel/50 p-4 md:p-5">
           <p className="text-sm text-muted">
             {hasSyncedStravaRows
-              ? "No unlinked activities match this overview strip right now — they may already be linked, snoozed, or outside the distance/type slice we show here."
-              : "No qualifying efforts in your latest Strava import yet. Sync from Strava (above), then check back."}
+              ? "Nothing new to show in this strip — linked, snoozed, or outside the distance window."
+              : "No qualifying efforts yet — sync Strava or use My Races."}
           </p>
-          <div className="mt-4 flex flex-wrap gap-4">
-            <Link href="/my-races" className="text-sm font-semibold uppercase tracking-wider text-accent hover:underline">
-              My Races →
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
+            <Link href="/my-races" className="min-h-[44px] content-center text-sm font-semibold uppercase tracking-wider text-accent hover:underline">
+              My Races
             </Link>
-            <Link href="/races/new" className="text-sm font-semibold text-muted hover:text-white">
-              One activity by URL →
+            <Link href="/races/new" className="min-h-[44px] content-center text-sm font-semibold text-muted hover:text-white">
+              Add by URL
             </Link>
           </div>
         </Card>
@@ -149,12 +152,12 @@ export function StravaRacePortfolioSection({
   const dashOverview = layout === "dashboard";
 
   return (
-    <section className="space-y-10">
+    <section className="space-y-6 md:space-y-8">
       <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
-        <div>
-          <p className="type-eyebrow">Race portfolio</p>
-          <h2 className="type-section mt-2 text-lg md:text-xl">Imported race efforts</h2>
-          {dashOverview ? null : (
+        <div className="min-w-0">
+          {dashOverview ? null : <p className="type-eyebrow">Race portfolio</p>}
+          <h2 className={cn("type-section text-lg md:text-xl", !dashOverview && "mt-2")}>Imported race efforts</h2>
+          {!dashOverview ? (
             <p className="type-meta mt-2 max-w-2xl text-sm">
               Long runs and race-type activities from Strava — matched against the Runfolio major-race catalog. Confirm
               matches on{" "}
@@ -163,23 +166,25 @@ export function StravaRacePortfolioSection({
               </Link>{" "}
               to log the story and complete bucket list goals.
             </p>
-          )}
+          ) : null}
         </div>
-        <Link href="/races/new" className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent hover:underline">
-          {dashOverview ? "Add or confirm race →" : "Confirm a match →"}
+        <Link
+          href="/races/new"
+          className="min-h-[44px] shrink-0 content-center text-[11px] font-semibold uppercase tracking-[0.2em] text-accent hover:underline sm:min-h-0"
+        >
+          {dashOverview ? "Add race →" : "Confirm a match →"}
         </Link>
       </div>
 
       {stravaLiveFeedOk === false && layout === "dashboard" ? (
-        <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90" role="status">
-          Live Strava didn&apos;t load this visit
-          {stravaFeedErrorMessage ? ` — ${stravaFeedErrorMessage}` : ""}. Showing saved activities from your last sync.
+        <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-100/90 sm:text-sm" role="status">
+          Live feed offline{stravaFeedErrorMessage ? ` — ${stravaFeedErrorMessage}` : ""}. Showing last sync.
         </p>
       ) : null}
 
       {usingLiveRacePreviewOnly && layout === "dashboard" ? (
-        <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90">
-          Preview only — run <strong className="text-white">Sync new activities</strong> above to save these to Runfolio.
+        <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2.5 text-xs text-amber-100/90 sm:text-sm">
+          Preview — <span className="font-medium text-white">Sync new activities</span> on Overview to save to Runfolio.
         </p>
       ) : null}
 
@@ -187,12 +192,12 @@ export function StravaRacePortfolioSection({
 
       {matchedMajorDiscoverIds.length > 0 ? (
         <div>
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold">Matched major races</p>
-          {dashOverview ? null : (
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold md:mb-3">Matched major races</p>
+          {!dashOverview ? (
             <p className="type-meta mb-3 text-xs">
               Strong catalog matches from your recent efforts (tap through to the race library).
             </p>
-          )}
+          ) : null}
           <div className="flex flex-wrap gap-1.5">
             {matchedMajorDiscoverIds.map((id) => (
               <Link
@@ -216,7 +221,7 @@ export function StravaRacePortfolioSection({
           <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-green-400">
             Recently completed · catalog-linked
           </p>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             {recentlyCompletedCatalog.map((race) => {
               const label = getPortfolioRaceLabel(race);
               return (
@@ -233,7 +238,9 @@ export function StravaRacePortfolioSection({
                   <p className="truncate text-sm font-semibold text-white">{label}</p>
                   <p className="type-meta truncate text-[11px]">{race.date ?? "—"}</p>
                   {race.strava_activity_id ? (
-                    <p className="mt-1 text-[9px] font-semibold uppercase tracking-wider text-accent">Strava linked</p>
+                    <span className="mt-1.5 inline-flex w-fit rounded-full border border-accent/35 bg-accent/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-accent">
+                      Strava
+                    </span>
                   ) : null}
                 </div>
               </Link>
@@ -244,9 +251,9 @@ export function StravaRacePortfolioSection({
       ) : null}
 
       {!isProfile && raceCandidateStats.topByDistance.length > 0 ? (
-        <div>
-          <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold">Longest race candidates</p>
-          <div className="grid gap-3 md:grid-cols-3">
+      <div>
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold md:mb-3">Longest race candidates</p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
             {raceCandidateStats.topByDistance.map((a) => {
               const full = candidates.find((c) => c.strava_id === a.strava_id);
               return (
@@ -263,10 +270,10 @@ export function StravaRacePortfolioSection({
       ) : null}
 
       <div>
-        <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">
+        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted md:mb-3">
           {isProfile ? "Top race efforts" : "All race candidates"}
         </p>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {(isProfile ? list : list.slice(0, 12)).map((a) => (
             <StravaActivityCard
               key={a.strava_id}

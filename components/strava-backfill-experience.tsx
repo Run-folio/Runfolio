@@ -254,7 +254,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
   return (
     <div className={cn("space-y-10", compact && "space-y-6")}>
       {compact ? (
-        <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Import from Strava</h2>
+        <h2 className="sr-only">Import from Strava</h2>
       ) : (
         <header className="space-y-4">
           <p className="type-eyebrow text-accent">Strava · Race history</p>
@@ -568,7 +568,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
                 <strong className="text-white/85">{HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km</strong> and up. Shorter
                 efforts only join when they have strong <strong className="text-white/85">race-like titles</strong> (with a
                 minimum distance to cut noise) or line up with our <strong className="text-white/85">verified race catalog</strong>{" "}
-                (fast name + distance + location-style signals)—same idea as Match & Import, not a guess at your whole
+                (fast name + distance + location-style signals)—same idea as My Races matching, not a guess at your whole
                 archive.
               </p>
             ) : null}
