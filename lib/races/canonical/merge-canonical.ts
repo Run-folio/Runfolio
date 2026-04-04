@@ -212,6 +212,7 @@ export function canonicalFromNormalizedSeed(
     lastEnrichedAt: null,
     enrichmentMeta: {},
     curationLocked: {},
+    curationMeta: {},
     createdAt: now,
     updatedAt: now
   };

@@ -33,6 +33,7 @@ import {
 import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import { loadStravaBackfillProgress } from "@/lib/strava-backfill-progress";
+import { hasServerRecordedStravaBackfillBatch } from "@/lib/strava-backfill-model";
 import type { Race } from "@/types";
 import { StravaFirstTimeBackfillCta } from "@/components/strava-first-time-backfill-cta";
 
@@ -156,7 +157,9 @@ export default async function DashboardPage() {
     stravaBackfillProgress != null &&
     stravaBackfillProgress.ingestStateTableAvailable &&
     stravaBackfillProgress.syncedActivityCount === 0 &&
-    stravaBackfillProgress.phase === "ready";
+    !hasServerRecordedStravaBackfillBatch(stravaBackfillProgress) &&
+    stravaBackfillProgress.phase !== "complete" &&
+    stravaBackfillProgress.phase !== "no_matches";
 
   return (
     <>

@@ -2,6 +2,7 @@
  * Canonical race knowledge layer (app-owned IDs).
  * Distinct from portfolio `Race` in `@/types` (user-owned rows).
  */
+import type { CanonicalCurationMeta } from "@/lib/races/canonical/curation-meta";
 import type { RaceIngestSource } from "@/lib/races/types/normalized";
 
 export type CanonicalRaceStatus =
@@ -76,6 +77,8 @@ export type CanonicalRace = {
   enrichmentMeta: Record<string, unknown>;
   /** Field names locked against automated overwrites (future manual curation). */
   curationLocked: Record<string, boolean>;
+  /** Internal ops metadata (verified fields, weak enrichment flags, notes). */
+  curationMeta: CanonicalCurationMeta;
   createdAt: string;
   updatedAt: string;
 };

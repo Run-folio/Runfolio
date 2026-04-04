@@ -21,6 +21,7 @@ Run these SQL files in the Supabase SQL editor for your project, in this exact o
 19. migration_strava_first_backfill_throttle.sql — first-batch click throttle (`first_backfill_last_attempt_at` on `user_strava_ingest_state`)
 20. migration_activity_file_source.sql — `activity_source` on `strava_synced_activities` (strava | garmin_file | manual_file)
 21. migration_canonical_enrichment_pipeline.sql — enrichment columns on `canonical_races` + `canonical_enrichment_jobs` queue
+22. migration_canonical_curation_meta.sql — `curation_meta` jsonb on `canonical_races` for internal race-ops tooling
 
 Optional / follow-on (not every project):
 - migration_strava_ingest_v2.sql — `manual_link_only` on synced activities and race snapshots (run after base Strava migrations if you use that flow)

@@ -1,5 +1,9 @@
+import type { StravaBackfillJumpPreset } from "@/lib/strava-sync/backfill-jump-windows";
+import { epochWindowForJumpPreset } from "@/lib/strava-sync/backfill-jump-windows";
 import {
   BACKFILL_FIRST_BATCH_MAX_PAGES,
+  BACKFILL_MAX_PAGES_CAP,
+  backfillAfterEpochForChunk,
   backfillMaxPagesForRun,
   INCREMENTAL_MAX_PAGES,
   PER_PAGE,
@@ -367,6 +371,8 @@ export type BackfillSyncResult =
       hadPersistBeforeRateLimit: boolean;
       /** Shown after a batch that hit rate limits (especially mid-batch). */
       rateLimitUserMessage?: string;
+      /** One-shot date-window scan — did not move `backfill_before_epoch`. */
+      jumpScan?: boolean;
     })
   | {
       ok: false;
@@ -383,20 +389,166 @@ export type BackfillSyncResult =
  */
 export async function backfillStravaHistoryForUserId(
   userId: string,
-  opts?: { maxPages?: number }
+  opts?: { maxPages?: number; jumpPreset?: StravaBackfillJumpPreset }
 ): Promise<BackfillSyncResult> {
   return enterStravaListOp(userId, "backfill", () => runBackfillStravaHistory(userId, opts));
 }
 
-async function runBackfillStravaHistory(
+/**
+ * Paginate Strava inside a fixed [after, before] window, upsert matches, **without** advancing ingest cursors.
+ */
+async function runBackfillJumpScan(
   userId: string,
-  opts?: { maxPages?: number }
+  window: { after: number; before: number }
 ): Promise<BackfillSyncResult> {
   const supabase = await createClient();
   const ingestTable = await getStravaIngestStateTableStatus(supabase);
   if (!ingestTable.ok) {
     return { ok: false, error: ingestTable.message };
   }
+
+  let totalUpserted = 0;
+  let totalSkipped = 0;
+  let totalErrors = 0;
+  let totalRaw = 0;
+  let totalEligible = 0;
+  const allSummaries: StravaSummaryActivityJson[] = [];
+  let requestsMade = 0;
+  let stravaOauthRefreshCalls = 0;
+  let stoppedForRateLimit = false;
+  let retryAfterSec: number | null = null;
+  let rateLimitSnap: { headers: Record<string, string>; retryAfterSec: number | null } | null = null;
+  const maxPages = BACKFILL_MAX_PAGES_CAP;
+  const { after: afterEpoch, before: beforeEpoch } = window;
+
+  for (let page = 1; page <= maxPages; page++) {
+    let token: string | null = null;
+    let oauthBeforeList = 0;
+    if (page === 1) {
+      const t = await getStravaAccessTokenWithoutProactiveRefresh();
+      token = t.token;
+      oauthBeforeList = t.oauthRefreshCount;
+    } else {
+      token = await getValidStravaAccessToken();
+    }
+    stravaOauthRefreshCalls += oauthBeforeList;
+
+    if (!token) {
+      await recordIngestError(supabase, userId, "Connect Strava first.");
+      return { ok: false, error: "Connect Strava first.", stravaOauthRefreshCalls };
+    }
+
+    const { result: r, athleteActivitiesListHttpCalls, oauthTokenRefreshCalls } =
+      await fetchAthleteActivitiesPageWithRefresh(token, {
+        page,
+        perPage: PER_PAGE,
+        before: beforeEpoch,
+        after: afterEpoch
+      });
+    requestsMade += athleteActivitiesListHttpCalls;
+    stravaOauthRefreshCalls += oauthTokenRefreshCalls;
+
+    if (!r.ok && r.kind === "rate_limit") {
+      stoppedForRateLimit = true;
+      retryAfterSec = r.retryAfterSec;
+      rateLimitSnap = await recordClassifiedStrava429(supabase, userId, r as unknown as StravaRateLimitPageResult, {
+        scope: "strava.backfill.jump",
+        firstEndpoint: "GET /api/v3/athlete/activities"
+      });
+      break;
+    }
+
+    if (!r.ok) {
+      const msg = r.message || `Strava list error ${r.httpStatus}`;
+      await recordIngestError(supabase, userId, msg);
+      return {
+        ok: false,
+        error: msg,
+        requestsMade,
+        stravaOauthRefreshCalls,
+        hadPersistBeforeRateLimit: allSummaries.length > 0
+      };
+    }
+
+    const batch = r.data;
+    if (batch.length === 0) break;
+
+    allSummaries.push(...batch);
+    totalRaw += batch.length;
+    const { items, evals } = partitionSummariesForHistoricalBackfill(batch);
+    logHistoricalBackfillImportEvalIfEnabled(userId, evals);
+    totalEligible += items.length;
+    const result = await upsertStravaSummariesForUser(supabase, userId, items);
+    totalUpserted += result.upserted;
+    totalSkipped += result.skippedUnchanged;
+    totalErrors += result.errors;
+
+    if (batch.length < PER_PAGE) break;
+  }
+
+  const hadPersistBeforeRateLimit = allSummaries.length > 0;
+
+  if (stoppedForRateLimit && !hadPersistBeforeRateLimit) {
+    return {
+      ok: false,
+      error: formatStravaRateLimitUserMessage(
+        0,
+        rateLimitSnap?.headers ?? {},
+        rateLimitSnap?.retryAfterSec ?? retryAfterSec
+      ),
+      requestsMade,
+      stravaOauthRefreshCalls,
+      retryAfterSec,
+      hadPersistBeforeRateLimit: false
+    };
+  }
+
+  const rateLimitUserMessage = stoppedForRateLimit
+    ? formatStravaRateLimitUserMessage(totalUpserted, rateLimitSnap?.headers ?? {}, retryAfterSec)
+    : undefined;
+
+  runfolioLog.info("strava.backfill", "jump_scan_done", {
+    userId,
+    rawFetched: totalRaw,
+    upserted: totalUpserted,
+    after: afterEpoch,
+    before: beforeEpoch,
+    stoppedForRateLimit
+  });
+
+  return {
+    ok: true,
+    mode: "backfill",
+    jumpScan: true,
+    backfillExhausted: false,
+    rawFetched: totalRaw,
+    eligibleInBatch: totalEligible,
+    upserted: totalUpserted,
+    skippedUnchanged: totalSkipped,
+    errors: totalErrors,
+    requestsMade,
+    stravaOauthRefreshCalls,
+    stoppedForRateLimit,
+    retryAfterSec,
+    hadPersistBeforeRateLimit,
+    rateLimitUserMessage
+  };
+}
+
+async function runBackfillStravaHistory(
+  userId: string,
+  opts?: { maxPages?: number; jumpPreset?: StravaBackfillJumpPreset }
+): Promise<BackfillSyncResult> {
+  const supabase = await createClient();
+  const ingestTable = await getStravaIngestStateTableStatus(supabase);
+  if (!ingestTable.ok) {
+    return { ok: false, error: ingestTable.message };
+  }
+
+  if (opts?.jumpPreset) {
+    return runBackfillJumpScan(userId, epochWindowForJumpPreset(opts.jumpPreset));
+  }
+
   const state = await getIngestState(supabase, userId);
   if (state?.backfill_exhausted) {
     return {
@@ -411,10 +563,12 @@ async function runBackfillStravaHistory(
   const maxPages =
     defaultMax === BACKFILL_FIRST_BATCH_MAX_PAGES
       ? BACKFILL_FIRST_BATCH_MAX_PAGES
-      : Math.min(Math.max(opts?.maxPages ?? defaultMax, 1), 12);
+      : Math.min(Math.max(opts?.maxPages ?? defaultMax, 1), BACKFILL_MAX_PAGES_CAP);
   const beforeEpoch = state?.backfill_before_epoch ?? undefined;
   const before = beforeEpoch != null && beforeEpoch > 0 ? beforeEpoch : undefined;
   const isFirstEverBackfillBatch = defaultMax === BACKFILL_FIRST_BATCH_MAX_PAGES;
+  const afterEpoch =
+    !isFirstEverBackfillBatch && before != null ? backfillAfterEpochForChunk(before) : undefined;
 
   if (isFirstEverBackfillBatch) {
     const waitSec = firstBackfillCooldownRemainingSec(state, STRAVA_FIRST_BACKFILL_COOLDOWN_SEC);
@@ -460,7 +614,8 @@ async function runBackfillStravaHistory(
       await fetchAthleteActivitiesPageWithRefresh(token, {
         page,
         perPage: PER_PAGE,
-        ...(before != null ? { before } : {})
+        ...(before != null ? { before } : {}),
+        ...(afterEpoch != null ? { after: afterEpoch } : {})
       });
     requestsMade += athleteActivitiesListHttpCalls;
     stravaOauthRefreshCalls += oauthTokenRefreshCalls;
@@ -573,6 +728,28 @@ async function runBackfillStravaHistory(
   }
 
   if (allSummaries.length === 0 && !stoppedForRateLimit) {
+    if (afterEpoch != null) {
+      await upsertIngestStateBackfill(supabase, userId, {
+        nextBeforeEpoch: afterEpoch,
+        exhausted: false,
+        alsoBumpIncrementalEpoch: null
+      });
+      return {
+        ok: true,
+        mode: "backfill",
+        upserted: 0,
+        skippedUnchanged: 0,
+        errors: 0,
+        backfillExhausted: false,
+        rawFetched: 0,
+        eligibleInBatch: 0,
+        requestsMade,
+        stravaOauthRefreshCalls,
+        stoppedForRateLimit: false,
+        retryAfterSec: null,
+        hadPersistBeforeRateLimit: false
+      };
+    }
     await upsertIngestStateBackfill(supabase, userId, {
       nextBeforeEpoch: beforeEpoch ?? null,
       exhausted: true,

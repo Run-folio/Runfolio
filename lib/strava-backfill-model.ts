@@ -16,6 +16,10 @@ export type StravaBackfillUxPhase =
 export type StravaIngestStateForBackfill = {
   backfill_batches_completed: number;
   backfill_exhausted: boolean;
+  /** Set after a batch finishes and the backfill cursor advances (or exhausted path completes). */
+  last_backfill_at?: string | null;
+  /** Non-null after at least one successful backfill batch moved the `before` cursor. */
+  backfill_before_epoch?: number | null;
   last_rate_limit_at: string | null;
   last_error: string | null;
   strava_rate_limit_kind?: string | null;
@@ -27,6 +31,8 @@ export type StravaBackfillProgress = {
   phase: StravaBackfillUxPhase;
   syncedActivityCount: number;
   backfillBatchesCompleted: number;
+  /** Strava list cursor for older pages; non-null after a batch advanced history. */
+  backfillBeforeEpoch: number | null;
   backfillExhausted: boolean;
   moreHistoryAvailable: boolean;
   lastBackfillAt: string | null;
@@ -42,6 +48,16 @@ export type StravaBackfillProgress = {
    */
   ingestStateTableAvailable: boolean;
 };
+
+/** True when ingest state shows any completed backfill batch (independent of rows saved). */
+export function hasServerRecordedStravaBackfillBatch(progress: StravaBackfillProgress): boolean {
+  if (!progress.ingestStateTableAvailable) return false;
+  return (
+    progress.backfillBatchesCompleted > 0 ||
+    Boolean(progress.lastBackfillAt?.trim()) ||
+    progress.backfillBeforeEpoch != null
+  );
+}
 
 function isRecent(ts: string | null, windowMs: number): boolean {
   if (!ts?.trim()) return false;
@@ -81,7 +97,10 @@ export function deriveBackfillUxPhase(
     return "complete";
   }
 
-  if ((state?.backfill_batches_completed ?? 0) > 0) return "partial";
+  const batches = state?.backfill_batches_completed ?? 0;
+  const lastBackfill = Boolean(state?.last_backfill_at?.trim());
+  const cursorSet = state?.backfill_before_epoch != null;
+  if (batches > 0 || lastBackfill || cursorSet) return "partial";
 
   return "ready";
 }

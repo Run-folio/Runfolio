@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const catalogMock = vi.hoisted(() => vi.fn(() => false));
+const catalogMock = vi.hoisted(() => vi.fn((_raw: unknown) => false));
 
 vi.mock("@/lib/known-race-match", () => ({
-  hasStrongCatalogMatchForStravaSummary: (...args: unknown[]) => catalogMock(...args)
+  hasStrongCatalogMatchForStravaSummary: (raw: unknown) => catalogMock(raw)
 }));
 
 import {

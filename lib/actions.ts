@@ -18,6 +18,7 @@ import { formatStravaMovingTime } from "@/lib/strava-api";
 import { dismissCanonicalMatchSuggestion } from "@/lib/strava-sync/repository";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { snapshotFromRaceLinkFields, snapshotFromSyncedRow } from "@/lib/linked-activity-snapshot";
+import { parseStravaBackfillJumpPreset } from "@/lib/strava-sync/backfill-jump-windows";
 import { backfillStravaHistoryForUserId, syncStravaActivitiesForUserId } from "@/lib/strava-sync/sync-service";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isConfirmedPortfolioCompletion } from "@/lib/portfolio-race";
@@ -1170,12 +1171,16 @@ export async function syncStravaActivitiesAction() {
  * Bounded batch of **older** Strava list pages (high-signal race-like efforts only after filtering).
  * Resumable via `user_strava_ingest_state.backfill_before_epoch`. Safe to call repeatedly (“Import older efforts”).
  */
-export async function backfillStravaHistoryAction() {
+export async function backfillStravaHistoryAction(formData?: FormData) {
   try {
     const gate = await requireActionPersistence();
     if (!gate.ok) return { error: gate.error };
     const { user, supabase } = gate;
-    const res = await backfillStravaHistoryForUserId(user.id);
+    const jumpRaw = formData?.get("jump_preset");
+    const jumpPreset = parseStravaBackfillJumpPreset(typeof jumpRaw === "string" ? jumpRaw : null);
+    const res = await backfillStravaHistoryForUserId(user.id, {
+      jumpPreset: jumpPreset ?? undefined
+    });
     if (!res.ok) {
       await revalidatePortfolioSurfaces(supabase, user.id, {
         alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/matches", "/import/past-races"]
@@ -1214,7 +1219,8 @@ export async function backfillStravaHistoryAction() {
       requestsMade: res.requestsMade,
       stravaOauthRefreshCalls: res.stravaOauthRefreshCalls,
       hadPersistBeforeRateLimit: res.hadPersistBeforeRateLimit,
-      rateLimitUserMessage: res.rateLimitUserMessage
+      rateLimitUserMessage: res.rateLimitUserMessage,
+      jumpScan: res.jumpScan === true
     };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;

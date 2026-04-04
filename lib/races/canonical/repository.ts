@@ -1,3 +1,6 @@
+import { parseCanonicalCurationMeta } from "@/lib/races/canonical/curation-meta";
+import type { CanonicalCurationMeta } from "@/lib/races/canonical/curation-meta";
+import { recomputeCanonicalScores } from "@/lib/races/canonical/scoring";
 import { normalizeRaceName } from "@/lib/races/dedupe";
 import { sourceTrustRank } from "@/lib/races/canonical/source-trust";
 import type {
@@ -57,6 +60,7 @@ export type CanonicalRaceRow = {
   last_enriched_at: string | null;
   enrichment_meta: Record<string, unknown> | null;
   curation_locked: Record<string, boolean> | null;
+  curation_meta?: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -119,9 +123,19 @@ export function raceRowToDomain(row: CanonicalRaceRow): CanonicalRace {
     lastEnrichedAt: row.last_enriched_at ?? null,
     enrichmentMeta: row.enrichment_meta ?? {},
     curationLocked: row.curation_locked ?? {},
+    curationMeta: parseCanonicalCurationMeta(row.curation_meta ?? {}),
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
+}
+
+function curationMetaToRow(m: CanonicalCurationMeta): Record<string, unknown> {
+  const o: Record<string, unknown> = {};
+  if (m.verifiedFields?.length) o.verifiedFields = m.verifiedFields;
+  if (m.weakEnrichmentFields?.length) o.weakEnrichmentFields = m.weakEnrichmentFields;
+  if (m.lastOpsEditAt) o.lastOpsEditAt = m.lastOpsEditAt;
+  if (m.notes?.trim()) o.notes = m.notes.trim();
+  return o;
 }
 
 export function sourceRowToDomain(row: CanonicalRaceSourceRow): CanonicalRaceSource {
@@ -183,6 +197,7 @@ function domainToRaceRowPatch(r: CanonicalRace): Record<string, unknown> {
     last_enriched_at: r.lastEnrichedAt,
     enrichment_meta: r.enrichmentMeta,
     curation_locked: r.curationLocked,
+    curation_meta: curationMetaToRow(r.curationMeta),
     updated_at: r.updatedAt
   };
 }
@@ -624,4 +639,258 @@ export async function searchCanonicalRacesActive(
   }
   const rows = (data as CanonicalRaceRow[]).map(raceRowToDomain);
   return { ok: true, data: rows };
+}
+
+const ALIAS_TABLE = "canonical_race_alias";
+
+export type CanonicalRaceAliasRow = {
+  id: string;
+  race_id: string | null;
+  series_id: string | null;
+  alias_text: string;
+  alias_normalized: string;
+  kind: string;
+};
+
+/** Internal ops search — any status, broader than public search. */
+export async function searchCanonicalRacesForOps(args: {
+  query?: string;
+  status?: CanonicalRaceStatus;
+  limit?: number;
+}): Promise<RepositoryResult<CanonicalRace[]>> {
+  const supabase = createServiceRoleClient();
+  if (!supabase) return noClient();
+  const lim = Math.min(args.limit ?? 40, 100);
+  let q = supabase.from(RACES).select("*").order("updated_at", { ascending: false }).limit(lim);
+  if (args.status?.trim()) {
+    q = q.eq("status", args.status.trim() as CanonicalRaceStatus);
+  }
+  const qt = args.query?.trim();
+  if (qt) {
+    const esc = escapeIlikeFragment(qt);
+    q = q.or(`name.ilike.%${esc}%,slug.ilike.%${esc}%,city.ilike.%${esc}%`);
+  }
+  const { data, error } = await q;
+  if (error) {
+    runfolioLog.warn("canonical.repo.searchOps", error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, data: (data as CanonicalRaceRow[]).map(raceRowToDomain) };
+}
+
+export async function listCanonicalRacesByStatus(
+  status: CanonicalRaceStatus,
+  limit = 80
+): Promise<RepositoryResult<CanonicalRace[]>> {
+  const supabase = createServiceRoleClient();
+  if (!supabase) return noClient();
+  const { data, error } = await supabase
+    .from(RACES)
+    .select("*")
+    .eq("status", status)
+    .order("updated_at", { ascending: false })
+    .limit(Math.min(limit, 200));
+  if (error) {
+    runfolioLog.warn("canonical.repo.listByStatus", error.message, { status });
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, data: (data as CanonicalRaceRow[]).map(raceRowToDomain) };
+}
+
+export type CanonicalSeriesShort = { id: string; slug: string; name: string };
+
+export async function listCanonicalSeriesShort(limit = 300): Promise<RepositoryResult<CanonicalSeriesShort[]>> {
+  const supabase = createServiceRoleClient();
+  if (!supabase) return noClient();
+  const { data, error } = await supabase
+    .from("canonical_race_series")
+    .select("id, slug, name")
+    .order("name", { ascending: true })
+    .limit(limit);
+  if (error) {
+    runfolioLog.warn("canonical.repo.listSeries", error.message);
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, data: (data ?? []) as CanonicalSeriesShort[] };
+}
+
+export async function listEditionAliasesForRace(raceId: string): Promise<RepositoryResult<CanonicalRaceAliasRow[]>> {
+  const supabase = createServiceRoleClient();
+  if (!supabase) return noClient();
+  const { data, error } = await supabase
+    .from(ALIAS_TABLE)
+    .select("id, race_id, series_id, alias_text, alias_normalized, kind")
+    .eq("race_id", raceId);
+  if (error) {
+    runfolioLog.warn("canonical.repo.listAliases", error.message, { raceId });
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, data: (data ?? []) as CanonicalRaceAliasRow[] };
+}
+
+export async function insertEditionAlias(args: {
+  raceId: string;
+  aliasText: string;
+  kind?: string;
+}): Promise<RepositoryResult<void>> {
+  const supabase = createServiceRoleClient();
+  if (!supabase) return noClient();
+  const text = args.aliasText.trim();
+  if (!text) return { ok: false, error: "Empty alias." };
+  const norm = normalizeRaceName(text);
+  if (!norm) return { ok: false, error: "Alias normalizes to empty." };
+  const now = new Date().toISOString();
+  const { error } = await supabase.from(ALIAS_TABLE).insert({
+    race_id: args.raceId,
+    series_id: null,
+    alias_text: text,
+    alias_normalized: norm,
+    kind: args.kind?.trim() || "variant"
+  });
+  if (error) {
+    if (error.code === "23505") return { ok: false, error: "Duplicate alias for this edition." };
+    runfolioLog.warn("canonical.repo.insertAlias", error.message, { raceId: args.raceId });
+    return { ok: false, error: error.message };
+  }
+  await supabase.from(RACES).update({ updated_at: now }).eq("id", args.raceId);
+  return { ok: true, data: undefined };
+}
+
+export type PortfolioRaceLinkRow = {
+  id: string;
+  user_id: string;
+  name: string;
+  strava_activity_id: string | null;
+  canonical_race_id: string | null;
+};
+
+export async function listPortfolioRacesLinkedToCanonical(
+  canonicalRaceId: string,
+  limit = 80
+): Promise<RepositoryResult<PortfolioRaceLinkRow[]>> {
+  const supabase = createServiceRoleClient();
+  if (!supabase) return noClient();
+  const { data, error } = await supabase
+    .from("races")
+    .select("id, user_id, name, strava_activity_id, canonical_race_id")
+    .eq("canonical_race_id", canonicalRaceId)
+    .limit(Math.min(limit, 200));
+  if (error) {
+    runfolioLog.warn("canonical.repo.listPortfolioLinks", error.message, { canonicalRaceId });
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, data: (data ?? []) as PortfolioRaceLinkRow[] };
+}
+
+export async function clearPortfolioRaceCanonicalLink(portfolioRaceId: string): Promise<RepositoryResult<void>> {
+  const supabase = createServiceRoleClient();
+  if (!supabase) return noClient();
+  const now = new Date().toISOString();
+  const { error } = await supabase
+    .from("races")
+    .update({ canonical_race_id: null, updated_at: now })
+    .eq("id", portfolioRaceId);
+  if (error) {
+    runfolioLog.warn("canonical.repo.clearPortfolioCanon", error.message, { portfolioRaceId });
+    return { ok: false, error: error.message };
+  }
+  return { ok: true, data: undefined };
+}
+
+/**
+ * Move provider sources + edition aliases + user links off `removeId`, hide the loser row.
+ * Does not delete the loser UUID (slug renamed) so FK logs remain valid.
+ */
+export async function mergeCanonicalRaceEditionsIntoWinner(
+  keepId: string,
+  removeId: string
+): Promise<RepositoryResult<{ keep: CanonicalRace }>> {
+  if (keepId === removeId) return { ok: false, error: "keepId and removeId must differ." };
+  const supabase = createServiceRoleClient();
+  if (!supabase) return noClient();
+
+  const [keepRes, removeRes] = await Promise.all([
+    getCanonicalRaceById(keepId),
+    getCanonicalRaceById(removeId)
+  ]);
+  if (!keepRes.ok) return { ok: false, error: keepRes.error };
+  if (!removeRes.ok) return { ok: false, error: removeRes.error };
+  if (!keepRes.data || !removeRes.data) {
+    return { ok: false, error: "One or both races not found." };
+  }
+  const loser = removeRes.data;
+  const now = new Date().toISOString();
+
+  const { error: srcErr } = await supabase
+    .from(SOURCES)
+    .update({ race_id: keepId, updated_at: now })
+    .eq("race_id", removeId);
+  if (srcErr) {
+    runfolioLog.error("canonical.repo.merge.sources", srcErr, { keepId, removeId });
+    return { ok: false, error: srcErr.message };
+  }
+
+  const aliases = await listEditionAliasesForRace(removeId);
+  if (aliases.ok) {
+    for (const al of aliases.data) {
+      const { error: uerr } = await supabase.from(ALIAS_TABLE).update({ race_id: keepId }).eq("id", al.id);
+      if (uerr?.code === "23505") {
+        await supabase.from(ALIAS_TABLE).delete().eq("id", al.id);
+      } else if (uerr) {
+        runfolioLog.warn("canonical.repo.merge.alias", uerr.message, { aliasId: al.id });
+        return { ok: false, error: uerr.message };
+      }
+    }
+  }
+
+  const { error: prErr } = await supabase
+    .from("races")
+    .update({ canonical_race_id: keepId, updated_at: now })
+    .eq("canonical_race_id", removeId);
+  if (prErr) {
+    runfolioLog.error("canonical.repo.merge.portfolio", prErr, { keepId, removeId });
+    return { ok: false, error: prErr.message };
+  }
+
+  const { data: goals } = await supabase.from("user_bucket_list_goals").select("id, user_id").eq("canonical_race_id", removeId);
+  for (const g of goals ?? []) {
+    const row = g as { id: string; user_id: string };
+    const { data: clash } = await supabase
+      .from("user_bucket_list_goals")
+      .select("id")
+      .eq("user_id", row.user_id)
+      .eq("canonical_race_id", keepId)
+      .maybeSingle();
+    if (clash) {
+      await supabase.from("user_bucket_list_goals").delete().eq("id", row.id);
+    } else {
+      await supabase.from("user_bucket_list_goals").update({ canonical_race_id: keepId }).eq("id", row.id);
+    }
+  }
+
+  await supabase.from("canonical_enrichment_jobs").delete().eq("race_id", removeId);
+
+  const newSlug = `merged-${removeId.slice(0, 8)}-${loser.slug}`.slice(0, 120);
+  const { error: hidErr } = await supabase
+    .from(RACES)
+    .update({
+      status: "hidden",
+      slug: newSlug,
+      series_id: null,
+      updated_at: now
+    })
+    .eq("id", removeId);
+  if (hidErr) {
+    runfolioLog.error("canonical.repo.merge.hideLoser", hidErr, { removeId });
+    return { ok: false, error: hidErr.message };
+  }
+
+  const keptFresh = await getCanonicalRaceById(keepId);
+  if (!keptFresh.ok) return { ok: false, error: keptFresh.error };
+  if (!keptFresh.data) return { ok: false, error: "Missing keep row after merge." };
+  const rescored = recomputeCanonicalScores(keptFresh.data);
+  rescored.updatedAt = now;
+  const upd = await updateCanonicalRace(rescored);
+  if (!upd.ok) return { ok: false, error: upd.error };
+  return { ok: true, data: { keep: upd.data } };
 }

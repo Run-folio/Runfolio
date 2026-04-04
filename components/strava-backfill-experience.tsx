@@ -9,9 +9,15 @@ import type {
   StravaBackfillUxPhase,
   StravaRateLimitUxKind
 } from "@/lib/strava-backfill-model";
+import { hasServerRecordedStravaBackfillBatch } from "@/lib/strava-backfill-model";
 import { usePersistence } from "@/components/persistence-context";
 import { buildSetupUrl } from "@/lib/setup-url";
 import {
+  STRAVA_BACKFILL_JUMP_OPTIONS,
+  type StravaBackfillJumpPreset
+} from "@/lib/strava-sync/backfill-jump-windows";
+import {
+  BACKFILL_DATE_CHUNK_DAYS,
   BACKFILL_DEFAULT_MAX_PAGES,
   BACKFILL_FIRST_BATCH_MAX_PAGES,
   PER_PAGE
@@ -94,6 +100,8 @@ type BackfillBatchSummary = {
   backfillExhausted: boolean;
   /** True when Strava returned rows but none passed the historical import filter */
   batchHadStravaRowsButNoneEligible: boolean;
+  /** One-shot window scan — sequential cursor unchanged */
+  jumpScan?: boolean;
 };
 
 function formatWhen(iso: string | null): string | null {
@@ -114,6 +122,13 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
   const [pending, start] = useTransition();
   const [banner, setBanner] = useState<string | null>(null);
   const [lastBatchSummary, setLastBatchSummary] = useState<BackfillBatchSummary | null>(null);
+  /** Batch “completed” = Strava pages were fetched and evaluated, even when 0 activities were saved. */
+  const hasStartedBackfill = useMemo(
+    () =>
+      hasServerRecordedStravaBackfillBatch(initialProgress) || lastBatchSummary != null,
+    [initialProgress, lastBatchSummary]
+  );
+
   const phaseInfo = useMemo(() => {
     if (!initialProgress.ingestStateTableAvailable) {
       return {
@@ -141,6 +156,14 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
     initialProgress.phase !== "no_matches" &&
     initialProgress.phase !== "rate_limited";
 
+  /** Date-window jump works even when sequential backfill is finished (does not move the main cursor). */
+  const canRunJumpScan =
+    initialProgress.ingestStateTableAvailable &&
+    stravaOAuthConfigured &&
+    persistenceAvailable &&
+    !pending &&
+    initialProgress.phase !== "rate_limited";
+
   const runImport = () => {
     if (pending) return;
     setBanner(null);
@@ -160,7 +183,42 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           eligibleInBatch: res.eligibleInBatch,
           rawFetched: res.rawFetched,
           backfillExhausted: res.backfillExhausted,
-          batchHadStravaRowsButNoneEligible
+          batchHadStravaRowsButNoneEligible,
+          jumpScan: res.jumpScan === true
+        });
+        setBanner(
+          res.stoppedForRateLimit && res.rateLimitUserMessage?.trim()
+            ? res.rateLimitUserMessage
+            : null
+        );
+      }
+      router.refresh();
+    });
+  };
+
+  const runJumpScan = (preset: StravaBackfillJumpPreset) => {
+    if (pending) return;
+    setBanner(null);
+    start(async () => {
+      const fd = new FormData();
+      fd.set("jump_preset", preset);
+      const res = await backfillStravaHistoryAction(fd);
+      if ("error" in res && res.error) {
+        setLastBatchSummary(null);
+        setBanner(res.error);
+        return;
+      }
+      if ("ok" in res && res.ok) {
+        const batchHadStravaRowsButNoneEligible =
+          res.rawFetched > 0 && res.eligibleInBatch === 0 && res.upserted === 0 && res.skippedUnchanged === 0;
+        setLastBatchSummary({
+          upserted: res.upserted,
+          skippedUnchanged: res.skippedUnchanged,
+          eligibleInBatch: res.eligibleInBatch,
+          rawFetched: res.rawFetched,
+          backfillExhausted: res.backfillExhausted,
+          batchHadStravaRowsButNoneEligible,
+          jumpScan: res.jumpScan === true
         });
         setBanner(
           res.stoppedForRateLimit && res.rateLimitUserMessage?.trim()
@@ -333,9 +391,9 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           >
             {pending
               ? "Importing…"
-              : initialProgress.phase === "ready"
-                ? "Start import — first batch"
-                : "Import next batch"}
+              : hasStartedBackfill
+                ? "Continue backfill"
+                : "Start import — first batch"}
           </Button>
           <Link
             href="/matches"
@@ -347,6 +405,33 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           </Link>
         </div>
 
+        <div className="mt-6 rounded-[12px] border border-white/10 bg-black/20 p-5">
+          <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Jump to older history</h3>
+          <p className="mt-2 text-sm leading-relaxed text-white/70">
+            Pull a <strong className="font-medium text-white/85">specific past window</strong> in one go (Strava{" "}
+            <code className="rounded bg-black/35 px-1 text-[11px] text-white/80">after</code> /{" "}
+            <code className="rounded bg-black/35 px-1 text-[11px] text-white/80">before</code>
+            ). Does <strong className="font-medium text-white/85">not</strong> move your sequential backfill cursor—use{" "}
+            <strong className="font-medium text-white/85">Continue backfill</strong> for ordered history. Dedupes by Strava
+            activity id.
+          </p>
+          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            {STRAVA_BACKFILL_JUMP_OPTIONS.map((opt) => (
+              <Button
+                key={opt.value}
+                type="button"
+                variant="secondary"
+                className="min-h-[44px] justify-start border-white/20 bg-white/[0.04] px-4 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-white/90 hover:bg-white/[0.08]"
+                disabled={!canRunJumpScan || pending}
+                title={opt.hint}
+                onClick={() => runJumpScan(opt.value)}
+              >
+                {opt.label}
+              </Button>
+            ))}
+          </div>
+        </div>
+
         {lastBatchSummary ? (
           <div
             className="mt-8 rounded-[12px] border border-white/12 bg-black/25 p-5"
@@ -354,6 +439,12 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             aria-label="Last backfill batch summary"
           >
             <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">Last batch summary</h3>
+            {lastBatchSummary.jumpScan ? (
+              <p className="mt-2 text-[12px] leading-relaxed text-sky-200/90">
+                One-time <strong className="font-medium text-sky-100">date-window</strong> scan — your sequential import
+                cursor was not changed.
+              </p>
+            ) : null}
             <ul className="mt-3 space-y-1.5 text-sm text-white/80">
               <li>
                 <strong className="font-medium text-white/90">Saved or updated:</strong> {lastBatchSummary.upserted} (new
@@ -425,8 +516,11 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           <li>
             The <strong className="font-medium text-white/80">first</strong> import batch loads at most{" "}
             {BACKFILL_FIRST_BATCH_MAX_PAGES} Strava list page (~{PER_PAGE * BACKFILL_FIRST_BATCH_MAX_PAGES} activities) to
-            stay gentle on rate limits; later batches load up to {BACKFILL_DEFAULT_MAX_PAGES} pages (~
-            {PER_PAGE * BACKFILL_DEFAULT_MAX_PAGES} activities) each.
+            stay gentle on rate limits. Later batches each target roughly{" "}
+            <strong className="font-medium text-white/80">{BACKFILL_DATE_CHUNK_DAYS} days</strong> of older history (Strava{" "}
+            <code className="rounded bg-black/30 px-1 text-[11px]">after</code> /{" "}
+            <code className="rounded bg-black/30 px-1 text-[11px]">before</code>) and paginate up to{" "}
+            {BACKFILL_DEFAULT_MAX_PAGES} pages (~{PER_PAGE * BACKFILL_DEFAULT_MAX_PAGES} activities) inside that window.
           </li>
           <li>Rows are deduped locally—re-running won&apos;t create duplicates.</li>
         </ul>
