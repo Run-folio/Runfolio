@@ -16,6 +16,7 @@ import { RaceDiscoverPortfolioActions } from "@/components/race-discover-portfol
 import { usedStravaActivityIdsFromRaces } from "@/lib/catalog-discover-user-state";
 import { confirmedCompletedPortfolioRaces } from "@/lib/portfolio-race";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
+import { parseActivityPageId } from "@/lib/activity-route-id";
 import { getDiscoverRaceById } from "@/lib/known-race-match";
 import { getStravaConnectionStubFeed } from "@/lib/strava-feed";
 import { isStravaManualLinkPoolActivity, rankStravaActivitiesForDiscoverRace } from "@/lib/strava-race-candidates";
@@ -260,27 +261,29 @@ export default async function RaceIdRouterPage({ params }: Props) {
                   <dd className="mt-1 font-semibold text-white">{userMatch.time ?? "—"}</dd>
                 </div>
                 <div className="sm:col-span-3">
-                  <dt className="text-[10px] uppercase tracking-wider text-muted">Strava & portfolio</dt>
+                  <dt className="text-[10px] uppercase tracking-wider text-muted">Activity & portfolio</dt>
                   <dd className="mt-2 flex flex-wrap gap-x-4 gap-y-2">
                     {userMatch.strava_activity_id ? (
                       <>
-                        <a
-                          href={`https://www.strava.com/activities/${userMatch.strava_activity_id}`}
-                          className="font-semibold text-accent hover:underline"
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open on Strava
-                        </a>
+                        {parseActivityPageId(userMatch.strava_activity_id)?.kind === "file_import" ? null : (
+                          <a
+                            href={`https://www.strava.com/activities/${userMatch.strava_activity_id}`}
+                            className="font-semibold text-accent hover:underline"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open on Strava
+                          </a>
+                        )}
                         <Link
-                          href={`/activities/${userMatch.strava_activity_id}`}
+                          href={`/activities/${encodeURIComponent(userMatch.strava_activity_id)}`}
                           className="font-semibold text-gold hover:underline"
                         >
                           Runfolio activity page →
                         </Link>
                       </>
                     ) : (
-                      <span className="text-muted">No Strava link — manual or pre-Strava entry</span>
+                      <span className="text-muted">No activity link — manual or pre-Strava entry</span>
                     )}
                   </dd>
                 </div>

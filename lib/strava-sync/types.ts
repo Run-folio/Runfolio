@@ -1,7 +1,11 @@
+export type ActivityIngestSource = "strava" | "garmin_file" | "manual_file";
+
 export type StravaSyncedActivityRow = {
   id: string;
   user_id: string;
   strava_activity_id: string;
+  /** strava (API sync) | garmin_file (.fit) | manual_file (GPX/TCX, etc.) */
+  activity_source?: ActivityIngestSource;
   name: string;
   description: string | null;
   distance_m: number | null;

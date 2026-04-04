@@ -9,6 +9,8 @@ export type QualityFlags = {
   missingLogo: boolean;
   missingCoordinates: boolean;
   missingDescription: boolean;
+  /** No multi-distance row when edition often lists several. */
+  missingDistanceOptions: boolean;
 };
 
 const WEIGHTS = {
@@ -21,7 +23,9 @@ const WEIGHTS = {
   coords: 8,
   description: 7,
   registrationUrl: 5,
-  elevation: 5
+  elevation: 5,
+  longDescription: 4,
+  distanceOptions: 3
 };
 
 function hasLocation(r: Pick<CanonicalRace, "city" | "country" | "region">): boolean {
@@ -43,11 +47,19 @@ export function computeCompletenessScore(r: CanonicalRace): number {
   add(WEIGHTS.location, hasLocation(r));
   add(WEIGHTS.distance, r.distanceKm != null && r.distanceKm > 0);
   add(WEIGHTS.officialUrl, Boolean(r.officialUrl?.trim()));
-  add(WEIGHTS.logo, Boolean(r.logoUrl?.trim() || r.heroImageUrl?.trim()));
+  add(
+    WEIGHTS.logo,
+    Boolean(r.logoUrl?.trim() || r.heroImageUrl?.trim() || r.fallbackImageUrl?.trim())
+  );
   add(WEIGHTS.coords, r.latitude != null && r.longitude != null);
   add(WEIGHTS.description, Boolean(r.description?.trim() && r.description.length > 20));
   add(WEIGHTS.registrationUrl, Boolean(r.registrationUrl?.trim()));
   add(WEIGHTS.elevation, r.elevationGainM != null && r.elevationGainM > 0);
+  add(WEIGHTS.longDescription, Boolean(r.longDescription?.trim() && r.longDescription.length > 80));
+  add(
+    WEIGHTS.distanceOptions,
+    Array.isArray(r.distanceOptionsKm) && r.distanceOptionsKm.length > 1
+  );
   return max === 0 ? 0 : Math.round((earned / max) * 100);
 }
 
@@ -71,9 +83,10 @@ export function computeQualityFlags(r: CanonicalRace): QualityFlags {
     missingLocation: !hasLocation(r),
     missingDistance: r.distanceKm == null || r.distanceKm <= 0,
     missingOfficialUrl: !r.officialUrl?.trim(),
-    missingLogo: !r.logoUrl?.trim() && !r.heroImageUrl?.trim(),
+    missingLogo: !r.logoUrl?.trim() && !r.heroImageUrl?.trim() && !r.fallbackImageUrl?.trim(),
     missingCoordinates: r.latitude == null || r.longitude == null,
-    missingDescription: !r.description?.trim() || r.description.length < 20
+    missingDescription: !r.description?.trim() || r.description.length < 20,
+    missingDistanceOptions: !Array.isArray(r.distanceOptionsKm) || r.distanceOptionsKm.length <= 1
   };
 }
 

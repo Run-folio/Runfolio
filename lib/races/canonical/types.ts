@@ -11,6 +11,15 @@ export type CanonicalRaceStatus =
   | "needs_review"
   | "duplicate_candidate";
 
+/** Background web enrichment lifecycle (see `canonical_enrichment_jobs`). */
+export type CanonicalEnrichmentStatus =
+  | "never"
+  | "queued"
+  | "running"
+  | "complete"
+  | "failed"
+  | "skipped";
+
 /**
  * App-owned canonical record: one row ≈ one **edition** when `startDate` is set.
  * `seriesId` links recurring editions to `canonical_race_series` when backfilled.
@@ -22,11 +31,15 @@ export type CanonicalRace = {
   seriesId: string | null;
   name: string;
   description: string | null;
+  /** Longer editorial or extracted body copy (cards may use `description`). */
+  longDescription: string | null;
   organizerName: string | null;
   officialUrl: string | null;
   registrationUrl: string | null;
   logoUrl: string | null;
   heroImageUrl: string | null;
+  /** When no hero/logo from sources — often app-generated branded card URL. */
+  fallbackImageUrl: string | null;
   country: string | null;
   region: string | null;
   city: string | null;
@@ -37,6 +50,8 @@ export type CanonicalRace = {
   endDate: string | null;
   timezone: string | null;
   distanceKm: number | null;
+  /** Multiple distances when parsed from official pages (e.g. half + full). */
+  distanceOptionsKm: number[];
   elevationGainM: number | null;
   raceType: string | null;
   surfaceType: string | null;
@@ -55,6 +70,10 @@ export type CanonicalRace = {
   completenessScore: number;
   qualityFlags: Record<string, boolean>;
   status: CanonicalRaceStatus;
+  enrichmentStatus: CanonicalEnrichmentStatus;
+  lastEnrichedAt: string | null;
+  /** Provenance: image scores, flags like usedGeneratedSummary, fetch URL, errors. */
+  enrichmentMeta: Record<string, unknown>;
   /** Field names locked against automated overwrites (future manual curation). */
   curationLocked: Record<string, boolean>;
   createdAt: string;
@@ -89,6 +108,7 @@ export type SearchableRaceRow = {
   elevationGainM: number | null;
   logoUrl: string | null;
   heroImageUrl: string | null;
+  fallbackImageUrl: string | null;
   raceType: string | null;
   surfaceType: string | null;
   categoryTags: string[];

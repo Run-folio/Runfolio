@@ -64,6 +64,7 @@ export type PublicRunnerProfile = {
 /** Serializable Strava snapshot for `/activities/[id]` (from API or feed fallback). */
 export type ActivityPortfolioStravaView = {
   strava_id: string;
+  activity_source?: import("@/lib/strava-sync/types").ActivityIngestSource;
   name: string;
   sport_type: string | null;
   type: string | null;
@@ -136,6 +137,8 @@ export type Activity = {
 /** Normalized Strava activity for UI (list + insights). Serializable for RSC → client. */
 export type StravaFeedActivity = {
   strava_id: string;
+  /** Present for synced rows; `strava` when omitted (legacy). */
+  activity_source?: import("@/lib/strava-sync/types").ActivityIngestSource;
   name: string;
   start_date: string;
   start_date_local?: string | null;

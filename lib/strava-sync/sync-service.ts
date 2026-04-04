@@ -3,12 +3,15 @@ import {
   backfillMaxPagesForRun,
   INCREMENTAL_MAX_PAGES,
   PER_PAGE,
+  STRAVA_FIRST_BACKFILL_COOLDOWN_SEC,
   syncAfterEpochFromLatestStart
 } from "@/lib/strava-sync/fetch-summaries";
 import { filterSummariesForPersist } from "@/lib/strava-sync/import-scope";
 import {
+  firstBackfillCooldownRemainingSec,
   getIngestState,
   getStravaIngestStateTableStatus,
+  markFirstBackfillAttemptNow,
   maxStartEpochFromSummaries,
   minStartEpochFromSummaries,
   recordIngestError,
@@ -36,19 +39,40 @@ import {
   type StravaAthleteActivitiesPageResult,
   type StravaSummaryActivityJson
 } from "@/lib/strava-api";
+import { classifyStrava429FromHeaders, logStrava429Classification } from "@/lib/strava-rate-limit";
 import { runfolioLog } from "@/lib/runfolio-log";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 const AFTER_OVERLAP_SEC = 7200;
 
-const inflightBackfillByUser = new Map<string, Promise<BackfillSyncResult>>();
-const inflightIncrementalByUser = new Map<string, Promise<IncrementalSyncResult>>();
+type StravaListOpKind = "backfill" | "incremental";
 
-function rateLimitHintDetail(retryAfterSec: number | null): string {
-  if (retryAfterSec != null && retryAfterSec > 0) {
-    const mins = Math.max(1, Math.ceil(retryAfterSec / 60));
-    return `Strava rate limit (Retry-After ~${mins} min).`;
+const inflightStravaListByUser = new Map<
+  string,
+  { kind: StravaListOpKind; promise: Promise<unknown> }
+>();
+
+/**
+ * One in-flight Strava list operation per user: duplicate backfill dedupes; backfill vs incremental excludes.
+ */
+function enterStravaListOp<T>(userId: string, kind: StravaListOpKind, run: () => Promise<T>): Promise<T> {
+  const cur = inflightStravaListByUser.get(userId);
+  if (cur) {
+    if (cur.kind === kind) {
+      return cur.promise as Promise<T>;
+    }
+    runfolioLog.info("strava.sync", "blocked_concurrent_list_op", { userId, requested: kind, active: cur.kind });
+    return Promise.reject(
+      new Error("Another Strava import or sync is already running. Wait for it to finish before retrying.")
+    ) as Promise<T>;
   }
-  return "Strava rate limit — try again shortly.";
+  const promise = run().finally(() => {
+    if (inflightStravaListByUser.get(userId)?.promise === promise) {
+      inflightStravaListByUser.delete(userId);
+    }
+  });
+  inflightStravaListByUser.set(userId, { kind, promise });
+  return promise;
 }
 
 function stravaHeadersForLog(h: Record<string, string>): string {
@@ -60,17 +84,42 @@ function stravaHeadersForLog(h: Record<string, string>): string {
 }
 
 export function formatStravaRateLimitUserMessage(
-  retryAfterSec: number | null,
-  savedSoFar: number
+  savedSoFar: number,
+  headers: Record<string, string>,
+  retryAfterSec: number | null
 ): string {
-  const when =
-    retryAfterSec != null && retryAfterSec > 0
-      ? ` Strava asked to wait about ${Math.max(1, Math.ceil(retryAfterSec / 60))} minutes.`
-      : "";
-  if (savedSoFar <= 0) {
-    return `Imported 0 activities before Strava paused this sync.${when}`;
-  }
-  return `Imported ${savedSoFar} activit${savedSoFar === 1 ? "y" : "ies"}. Strava paused further requests for now.${when}`;
+  const rl = classifyStrava429FromHeaders(headers, retryAfterSec);
+  if (savedSoFar <= 0) return rl.userMessage;
+  return `Imported ${savedSoFar} activit${savedSoFar === 1 ? "y" : "ies"}. ${rl.userMessage}`;
+}
+
+type StravaRateLimitPageResult = {
+  ok: false;
+  httpStatus: number;
+  kind: "rate_limit";
+  message: string;
+  retryAfterSec: number | null;
+  rateLimitHeaders: Record<string, string>;
+};
+
+async function recordClassifiedStrava429(
+  supabase: SupabaseClient,
+  userId: string,
+  r: StravaRateLimitPageResult,
+  log: { scope: string; firstEndpoint: string }
+): Promise<{ headers: Record<string, string>; retryAfterSec: number | null }> {
+  const rl = classifyStrava429FromHeaders(r.rateLimitHeaders, r.retryAfterSec);
+  await recordRateLimitHint(supabase, userId, rl.userMessage, {
+    kind: rl.kind,
+    untilIso: rl.untilIso
+  });
+  logStrava429Classification(log.scope, {
+    userId,
+    firstEndpoint: log.firstEndpoint,
+    httpStatus: r.httpStatus,
+    classification: rl
+  });
+  return { headers: r.rateLimitHeaders, retryAfterSec: r.retryAfterSec };
 }
 
 type AthleteListFetchMetrics = {
@@ -150,13 +199,7 @@ export type IncrementalSyncResult =
  * Empty sync table: user must run {@link backfillStravaHistoryForUserId} first.
  */
 export async function syncStravaActivitiesForUserId(userId: string): Promise<IncrementalSyncResult> {
-  const existing = inflightIncrementalByUser.get(userId);
-  if (existing) return existing;
-  const p = runIncrementalSync(userId).finally(() => {
-    if (inflightIncrementalByUser.get(userId) === p) inflightIncrementalByUser.delete(userId);
-  });
-  inflightIncrementalByUser.set(userId, p);
-  return p;
+  return enterStravaListOp(userId, "incremental", () => runIncrementalSync(userId));
 }
 
 async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult> {
@@ -195,6 +238,7 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
   let totalRaw = 0;
   let totalEligible = 0;
   let stravaOauthRefreshCalls = 0;
+  let rateLimitSnap: { headers: Record<string, string>; retryAfterSec: number | null } | null = null;
 
   for (let page = 1; page <= INCREMENTAL_MAX_PAGES; page++) {
     const token = await getValidStravaAccessToken();
@@ -215,7 +259,10 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
     if (!r.ok && r.kind === "rate_limit") {
       stoppedForRateLimit = true;
       retryAfterSec = r.retryAfterSec;
-      await recordRateLimitHint(supabase, userId, rateLimitHintDetail(r.retryAfterSec));
+      rateLimitSnap = await recordClassifiedStrava429(supabase, userId, r as unknown as StravaRateLimitPageResult, {
+        scope: "strava.sync.incremental",
+        firstEndpoint: "GET /api/v3/athlete/activities"
+      });
       runfolioLog.warn("strava.sync.incremental", "rate_limit", {
         userId,
         page,
@@ -268,7 +315,11 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
   if (stoppedForRateLimit && totalRaw === 0) {
     return {
       ok: false,
-      error: formatStravaRateLimitUserMessage(retryAfterSec, 0),
+      error: formatStravaRateLimitUserMessage(
+        0,
+        rateLimitSnap?.headers ?? {},
+        rateLimitSnap?.retryAfterSec ?? retryAfterSec
+      ),
       requestsMade,
       stravaOauthRefreshCalls,
       retryAfterSec
@@ -276,7 +327,11 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
   }
 
   const rateLimitUserMessage = stoppedForRateLimit
-    ? formatStravaRateLimitUserMessage(retryAfterSec, totalUpserted)
+    ? formatStravaRateLimitUserMessage(
+        totalUpserted,
+        rateLimitSnap?.headers ?? {},
+        retryAfterSec
+      )
     : undefined;
 
   return {
@@ -326,13 +381,7 @@ export async function backfillStravaHistoryForUserId(
   userId: string,
   opts?: { maxPages?: number }
 ): Promise<BackfillSyncResult> {
-  const existing = inflightBackfillByUser.get(userId);
-  if (existing) return existing;
-  const p = runBackfillStravaHistory(userId, opts).finally(() => {
-    if (inflightBackfillByUser.get(userId) === p) inflightBackfillByUser.delete(userId);
-  });
-  inflightBackfillByUser.set(userId, p);
-  return p;
+  return enterStravaListOp(userId, "backfill", () => runBackfillStravaHistory(userId, opts));
 }
 
 async function runBackfillStravaHistory(
@@ -363,6 +412,17 @@ async function runBackfillStravaHistory(
   const before = beforeEpoch != null && beforeEpoch > 0 ? beforeEpoch : undefined;
   const isFirstEverBackfillBatch = defaultMax === BACKFILL_FIRST_BATCH_MAX_PAGES;
 
+  if (isFirstEverBackfillBatch) {
+    const waitSec = firstBackfillCooldownRemainingSec(state, STRAVA_FIRST_BACKFILL_COOLDOWN_SEC);
+    if (waitSec > 0) {
+      return {
+        ok: false,
+        error: `The first import can only be started once every ${STRAVA_FIRST_BACKFILL_COOLDOWN_SEC} seconds. Try again in ${waitSec} seconds so Strava quota can recover.`
+      };
+    }
+    await markFirstBackfillAttemptNow(supabase, userId);
+  }
+
   let totalUpserted = 0;
   let totalSkipped = 0;
   let totalErrors = 0;
@@ -373,6 +433,7 @@ async function runBackfillStravaHistory(
   let stravaOauthRefreshCalls = 0;
   let stoppedForRateLimit = false;
   let retryAfterSec: number | null = null;
+  let rateLimitSnap: { headers: Record<string, string>; retryAfterSec: number | null } | null = null;
 
   for (let page = 1; page <= maxPages; page++) {
     let token: string | null = null;
@@ -401,6 +462,10 @@ async function runBackfillStravaHistory(
     stravaOauthRefreshCalls += oauthTokenRefreshCalls;
 
     if (isFirstEverBackfillBatch && page === 1) {
+      const rlMeta =
+        !r.ok && r.kind === "rate_limit"
+          ? classifyStrava429FromHeaders(r.rateLimitHeaders, r.retryAfterSec)
+          : null;
       runfolioLog.info("strava.backfill", "first_list_response", {
         userId,
         firstEndpoint: "GET /api/v3/athlete/activities",
@@ -412,14 +477,20 @@ async function runBackfillStravaHistory(
         activitiesReturned: r.ok ? r.data.length : null,
         listOk: r.ok,
         listKind: r.ok ? "success" : r.kind,
-        failureBeforeFirstPersist: !(r.ok && r.data.length > 0)
+        failureBeforeFirstPersist: !(r.ok && r.data.length > 0),
+        rlInferredKind: rlMeta?.kind,
+        rlInferReason: rlMeta?.inferReason,
+        rlUntilIso: rlMeta?.untilIso
       });
     }
 
     if (!r.ok && r.kind === "rate_limit") {
       stoppedForRateLimit = true;
       retryAfterSec = r.retryAfterSec;
-      await recordRateLimitHint(supabase, userId, rateLimitHintDetail(r.retryAfterSec));
+      rateLimitSnap = await recordClassifiedStrava429(supabase, userId, r as unknown as StravaRateLimitPageResult, {
+        scope: "strava.backfill",
+        firstEndpoint: "GET /api/v3/athlete/activities"
+      });
       runfolioLog.warn("strava.backfill", "rate_limit", {
         userId,
         page,
@@ -484,7 +555,11 @@ async function runBackfillStravaHistory(
   if (stoppedForRateLimit && !hadPersistBeforeRateLimit) {
     return {
       ok: false,
-      error: formatStravaRateLimitUserMessage(retryAfterSec, 0),
+      error: formatStravaRateLimitUserMessage(
+        0,
+        rateLimitSnap?.headers ?? {},
+        rateLimitSnap?.retryAfterSec ?? retryAfterSec
+      ),
       requestsMade,
       stravaOauthRefreshCalls,
       retryAfterSec,
@@ -526,7 +601,7 @@ async function runBackfillStravaHistory(
   });
 
   const rateLimitUserMessage = stoppedForRateLimit
-    ? formatStravaRateLimitUserMessage(retryAfterSec, totalUpserted)
+    ? formatStravaRateLimitUserMessage(totalUpserted, rateLimitSnap?.headers ?? {}, retryAfterSec)
     : undefined;
 
   if (stoppedForRateLimit) {

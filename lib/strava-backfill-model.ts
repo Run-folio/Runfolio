@@ -1,6 +1,9 @@
 const RATE_LIMIT_RECENCY_MS = 20 * 60 * 1000;
 const ERROR_BLOCK_RECENCY_MS = 2 * 60 * 60 * 1000;
 
+/** Mirrors `user_strava_ingest_state.strava_rate_limit_kind` after rate-limit meta migration. */
+export type StravaRateLimitUxKind = "short_window" | "daily" | "unknown";
+
 export type StravaBackfillUxPhase =
   | "ready"
   | "partial"
@@ -15,6 +18,8 @@ export type StravaIngestStateForBackfill = {
   backfill_exhausted: boolean;
   last_rate_limit_at: string | null;
   last_error: string | null;
+  strava_rate_limit_kind?: string | null;
+  strava_rate_limit_until?: string | null;
   updated_at: string;
 };
 
@@ -27,6 +32,9 @@ export type StravaBackfillProgress = {
   lastBackfillAt: string | null;
   lastRateLimitAt: string | null;
   lastError: string | null;
+  /** Parsed from ingest state when migration `migration_strava_rate_limit_meta.sql` is applied. */
+  stravaRateLimitKind: StravaRateLimitUxKind | null;
+  stravaRateLimitUntil: string | null;
   updatedAt: string | null;
   /**
    * False when `user_strava_ingest_state` is missing or unreadable (migration not applied or RLS).
@@ -42,10 +50,20 @@ function isRecent(ts: string | null, windowMs: number): boolean {
   return Date.now() - ms < windowMs;
 }
 
+export function coerceStravaRateLimitUxKind(raw: string | null | undefined): StravaRateLimitUxKind | null {
+  if (raw === "short_window" || raw === "daily" || raw === "unknown") return raw;
+  return null;
+}
+
 export function deriveBackfillUxPhase(
   state: StravaIngestStateForBackfill | null,
   syncedActivityCount: number
 ): StravaBackfillUxPhase {
+  const untilRaw = state?.strava_rate_limit_until ?? null;
+  const untilMs = untilRaw ? Date.parse(untilRaw) : NaN;
+  if (Number.isFinite(untilMs) && Date.now() < untilMs) {
+    return "rate_limited";
+  }
   if (isRecent(state?.last_rate_limit_at ?? null, RATE_LIMIT_RECENCY_MS)) {
     return "rate_limited";
   }

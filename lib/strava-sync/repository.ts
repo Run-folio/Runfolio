@@ -28,6 +28,7 @@ export function summaryToUpsertRow(
   const lat = raw.start_latlng;
   return {
     user_id: userId,
+    activity_source: "strava",
     strava_activity_id: String(raw.id),
     name: raw.name,
     description: raw.description?.trim() ?? null,

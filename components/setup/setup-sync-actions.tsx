@@ -26,7 +26,9 @@ export function SetupSyncActions() {
           variant="secondary"
           className="min-h-[48px] rounded-[14px] border-white/20 bg-white/5 px-8 text-[12px] font-semibold uppercase tracking-[0.1em] text-white hover:bg-white/10"
           disabled={pendingSync}
+          aria-busy={pendingSync}
           onClick={() => {
+            if (pendingSync) return;
             setMsg(null);
             startSync(async () => {
               const res = await syncStravaActivitiesAction();

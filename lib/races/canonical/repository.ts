@@ -1,6 +1,7 @@
 import { normalizeRaceName } from "@/lib/races/dedupe";
 import { sourceTrustRank } from "@/lib/races/canonical/source-trust";
 import type {
+  CanonicalEnrichmentStatus,
   CanonicalRace,
   CanonicalRaceSource,
   CanonicalRaceStatus,
@@ -20,11 +21,13 @@ export type CanonicalRaceRow = {
   series_id?: string | null;
   name: string;
   description: string | null;
+  long_description: string | null;
   organizer_name: string | null;
   official_url: string | null;
   registration_url: string | null;
   logo_url: string | null;
   hero_image_url: string | null;
+  fallback_image_url: string | null;
   country: string | null;
   region: string | null;
   city: string | null;
@@ -35,6 +38,7 @@ export type CanonicalRaceRow = {
   end_date: string | null;
   timezone: string | null;
   distance_km: number | null;
+  distance_options_km: number[] | null;
   elevation_gain_m: number | null;
   race_type: string | null;
   surface_type: string | null;
@@ -49,6 +53,9 @@ export type CanonicalRaceRow = {
   completeness_score: number;
   quality_flags: Record<string, boolean> | null;
   status: CanonicalRaceStatus;
+  enrichment_status: CanonicalEnrichmentStatus;
+  last_enriched_at: string | null;
+  enrichment_meta: Record<string, unknown> | null;
   curation_locked: Record<string, boolean> | null;
   created_at: string;
   updated_at: string;
@@ -76,11 +83,13 @@ export function raceRowToDomain(row: CanonicalRaceRow): CanonicalRace {
     seriesId: row.series_id ?? null,
     name: row.name,
     description: row.description,
+    longDescription: row.long_description ?? null,
     organizerName: row.organizer_name,
     officialUrl: row.official_url,
     registrationUrl: row.registration_url,
     logoUrl: row.logo_url,
     heroImageUrl: row.hero_image_url,
+    fallbackImageUrl: row.fallback_image_url ?? null,
     country: row.country,
     region: row.region,
     city: row.city,
@@ -91,6 +100,7 @@ export function raceRowToDomain(row: CanonicalRaceRow): CanonicalRace {
     endDate: row.end_date,
     timezone: row.timezone,
     distanceKm: row.distance_km,
+    distanceOptionsKm: Array.isArray(row.distance_options_km) ? row.distance_options_km : [],
     elevationGainM: row.elevation_gain_m,
     raceType: row.race_type,
     surfaceType: row.surface_type,
@@ -105,6 +115,9 @@ export function raceRowToDomain(row: CanonicalRaceRow): CanonicalRace {
     completenessScore: row.completeness_score,
     qualityFlags: row.quality_flags ?? {},
     status: row.status,
+    enrichmentStatus: row.enrichment_status ?? "never",
+    lastEnrichedAt: row.last_enriched_at ?? null,
+    enrichmentMeta: row.enrichment_meta ?? {},
     curationLocked: row.curation_locked ?? {},
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -134,11 +147,13 @@ function domainToRaceRowPatch(r: CanonicalRace): Record<string, unknown> {
     series_id: r.seriesId,
     name: r.name,
     description: r.description,
+    long_description: r.longDescription,
     organizer_name: r.organizerName,
     official_url: r.officialUrl,
     registration_url: r.registrationUrl,
     logo_url: r.logoUrl,
     hero_image_url: r.heroImageUrl,
+    fallback_image_url: r.fallbackImageUrl,
     country: r.country,
     region: r.region,
     city: r.city,
@@ -149,6 +164,7 @@ function domainToRaceRowPatch(r: CanonicalRace): Record<string, unknown> {
     end_date: r.endDate,
     timezone: r.timezone,
     distance_km: r.distanceKm,
+    distance_options_km: r.distanceOptionsKm,
     elevation_gain_m: r.elevationGainM,
     race_type: r.raceType,
     surface_type: r.surfaceType,
@@ -163,6 +179,9 @@ function domainToRaceRowPatch(r: CanonicalRace): Record<string, unknown> {
     completeness_score: r.completenessScore,
     quality_flags: r.qualityFlags,
     status: r.status,
+    enrichment_status: r.enrichmentStatus,
+    last_enriched_at: r.lastEnrichedAt,
+    enrichment_meta: r.enrichmentMeta,
     curation_locked: r.curationLocked,
     updated_at: r.updatedAt
   };

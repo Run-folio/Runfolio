@@ -12,7 +12,9 @@ export type RaceIngestSource =
   | "utmb_ws"
   | "raceresult"
   | "mock"
-  | "manual";
+  | "manual"
+  /** Trusted fetch of official race / registration HTML (og/meta/JSON-LD) — background enrichment only. */
+  | "official_page";
 
 /** ISO 8601 date (YYYY-MM-DD) or full datetime string from provider */
 export type IsoDateString = string;

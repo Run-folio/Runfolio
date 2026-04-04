@@ -3,13 +3,14 @@ import type { NormalizedRace, RaceIngestSource } from "@/lib/races/types/normali
 /** Higher = wins field conflicts during merge */
 const SOURCE_PRIORITY: Record<RaceIngestSource, number> = {
   raceresult: 100,
+  manual: 95,
+  official_page: 88,
   active: 80,
   runsignup: 70,
   chronotrack: 60,
-  utmb_catalog: 50,
   utmb_ws: 55,
-  mock: 15,
-  manual: 40
+  utmb_catalog: 50,
+  mock: 15
 };
 
 export function providerPriority(source: RaceIngestSource): number {

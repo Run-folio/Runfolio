@@ -7,6 +7,7 @@ import { addCatalogRaceToBucketListAction, deleteFutureBucketGoalAction } from "
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { StravaActivityMatchModal } from "@/components/strava-activity-match-modal";
 import { usePersistence } from "@/components/persistence-context";
+import { parseActivityPageId } from "@/lib/activity-route-id";
 import { buildSetupUrl } from "@/lib/setup-url";
 import type { DiscoverStravaActivityCandidate, Race } from "@/types";
 
@@ -123,19 +124,21 @@ export function RaceDiscoverPortfolioActions({
         {completedRow.strava_activity_id ? (
           <div className="flex flex-col gap-2 sm:flex-row">
             <Link
-              href={`/activities/${completedRow.strava_activity_id}`}
+              href={`/activities/${encodeURIComponent(completedRow.strava_activity_id)}`}
               className="flex flex-1 items-center justify-center rounded-[12px] border border-white/15 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-white transition hover:border-white/30"
             >
               View linked activity
             </Link>
-            <a
-              href={`https://www.strava.com/activities/${completedRow.strava_activity_id}`}
-              target="_blank"
-              rel="noreferrer"
-              className="flex flex-1 items-center justify-center rounded-[12px] border border-white/10 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted transition hover:text-white"
-            >
-              Open on Strava
-            </a>
+            {parseActivityPageId(completedRow.strava_activity_id)?.kind === "file_import" ? null : (
+              <a
+                href={`https://www.strava.com/activities/${completedRow.strava_activity_id}`}
+                target="_blank"
+                rel="noreferrer"
+                className="flex flex-1 items-center justify-center rounded-[12px] border border-white/10 px-4 py-2.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted transition hover:text-white"
+              >
+                Open on Strava
+              </a>
+            )}
           </div>
         ) : null}
         <Link

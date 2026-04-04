@@ -14,6 +14,12 @@ export const BACKFILL_DEFAULT_MAX_PAGES = 3;
  */
 export const BACKFILL_FIRST_BATCH_MAX_PAGES = 1;
 
+/**
+ * Minimum seconds between **starts** of the first-ever backfill batch (no cursor, zero batches).
+ * Server-enforced; protects Strava quota from rapid re-clicks after 429.
+ */
+export const STRAVA_FIRST_BACKFILL_COOLDOWN_SEC = 60;
+
 export function backfillMaxPagesForRun(state: {
   backfill_before_epoch: number | null;
   backfill_batches_completed: number;

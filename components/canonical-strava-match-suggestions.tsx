@@ -10,6 +10,7 @@ import { CANONICAL_SUGGESTED_HIGH_MIN_SCORE } from "@/lib/strava-canonical-match
 import type { CanonicalStravaSuggestion } from "@/lib/strava-canonical-match/suggestions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { parseActivityPageId } from "@/lib/activity-route-id";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -114,14 +115,23 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
                 {dismissPending ? "…" : "Not this one"}
               </Button>
             </form>
-            <Link
-              href={`https://www.strava.com/activities/${s.stravaActivityId}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center rounded-[10px] border border-white/15 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted hover:border-white/30 hover:text-white"
-            >
-              View on Strava
-            </Link>
+            {parseActivityPageId(s.stravaActivityId)?.kind === "file_import" ? (
+              <Link
+                href={`/activities/${encodeURIComponent(s.stravaActivityId)}`}
+                className="inline-flex items-center rounded-[10px] border border-white/15 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted hover:border-white/30 hover:text-white"
+              >
+                View activity
+              </Link>
+            ) : (
+              <Link
+                href={`https://www.strava.com/activities/${s.stravaActivityId}`}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center rounded-[10px] border border-white/15 px-3 py-2 text-[10px] font-semibold uppercase tracking-wider text-muted hover:border-white/30 hover:text-white"
+              >
+                View on Strava
+              </Link>
+            )}
           </div>
           {s.alternatives.length > 0 ? (
             <details className="mt-4 border-t border-white/10 pt-3 text-xs">

@@ -98,7 +98,11 @@ export default async function MatchHubPage() {
                 Import past race efforts
               </Link>{" "}
               walks your Strava history in batches; use <strong className="font-medium text-white/85">Sync new only</strong>{" "}
-              below for new activities since your last sync.
+              below for new activities since your last sync. No Strava?{" "}
+              <Link href="/import/activity-file" className="font-semibold text-emerald-300/95 underline-offset-4 hover:underline">
+                Import a .fit / .gpx / .tcx file
+              </Link>{" "}
+              instead.
             </p>
 
             <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -124,6 +128,12 @@ export default async function MatchHubPage() {
                 className="text-[12px] font-semibold uppercase tracking-[0.15em] text-muted hover:text-white"
               >
                 Add a race manually →
+              </Link>
+              <Link
+                href="/import/activity-file"
+                className="text-[12px] font-semibold uppercase tracking-[0.15em] text-emerald-300/90 hover:text-emerald-200"
+              >
+                Import activity file →
               </Link>
             </div>
             {totalAttention > 0 ? (

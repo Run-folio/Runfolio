@@ -17,7 +17,8 @@ export function parseInternalRaceId(internalId: string): { source: RaceIngestSou
     "utmb_ws",
     "raceresult",
     "mock",
-    "manual"
+    "manual",
+    "official_page"
   ];
   if (!allowed.includes(source)) return null;
   return { source, sourceRaceId };

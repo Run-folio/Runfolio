@@ -65,7 +65,11 @@ export default async function ImportPastRacesPage() {
           <Link href="/races/find" className="font-semibold text-accent underline-offset-4 hover:underline">
             Find a race
           </Link>{" "}
-          to link a specific finish from saved activities (broader than backfill) or use Add race with a Strava URL.
+          to link a specific finish from saved activities (broader than backfill) or use Add race with a Strava URL.{" "}
+          <Link href="/import/activity-file" className="font-semibold text-emerald-300/90 underline-offset-4 hover:underline">
+            Import an activity file
+          </Link>{" "}
+          (FIT/GPX/TCX) if Strava is unavailable.
         </p>
       </main>
     </>

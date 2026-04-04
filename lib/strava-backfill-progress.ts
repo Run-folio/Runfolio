@@ -1,7 +1,11 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { deriveBackfillUxPhase, type StravaBackfillProgress } from "@/lib/strava-backfill-model";
+import {
+  coerceStravaRateLimitUxKind,
+  deriveBackfillUxPhase,
+  type StravaBackfillProgress
+} from "@/lib/strava-backfill-model";
 import { getIngestState, getStravaIngestStateTableStatus } from "@/lib/strava-sync/ingest-state";
 
 export type { StravaBackfillProgress, StravaBackfillUxPhase } from "@/lib/strava-backfill-model";
@@ -30,6 +34,8 @@ export async function loadStravaBackfillProgress(
       lastBackfillAt: null,
       lastRateLimitAt: null,
       lastError: tableStatus.message,
+      stravaRateLimitKind: null,
+      stravaRateLimitUntil: null,
       updatedAt: null,
       ingestStateTableAvailable: false
     };
@@ -48,6 +54,8 @@ export async function loadStravaBackfillProgress(
     lastBackfillAt: state?.last_backfill_at ?? null,
     lastRateLimitAt: state?.last_rate_limit_at ?? null,
     lastError: state?.last_error ?? null,
+    stravaRateLimitKind: coerceStravaRateLimitUxKind(state?.strava_rate_limit_kind ?? null),
+    stravaRateLimitUntil: state?.strava_rate_limit_until ?? null,
     updatedAt: state?.updated_at ?? null,
     ingestStateTableAvailable: true
   };

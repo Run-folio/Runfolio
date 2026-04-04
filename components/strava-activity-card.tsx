@@ -28,6 +28,8 @@ export function StravaActivityCard({
   const loc = [activity.location_city, activity.location_country].filter(Boolean).join(", ") || "—";
   const sport = activity.sport_type || activity.type || "Activity";
   const photo = activity.primary_photo_url;
+  const src = activity.activity_source ?? "strava";
+  const isStrava = src === "strava";
 
   const inner = (
     <>
@@ -111,7 +113,7 @@ export function StravaActivityCard({
         )}
       >
         <Link
-          href={`/activities/${activity.strava_id}`}
+          href={`/activities/${encodeURIComponent(activity.strava_id)}`}
           className="block p-4 pb-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           {inner}
@@ -120,14 +122,18 @@ export function StravaActivityCard({
           </p>
         </Link>
         <div className="border-t border-white/10 px-4 pb-3 pt-2">
-          <a
-            href={activity.strava_url}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
-          >
-            Open in Strava
-          </a>
+          {isStrava && activity.strava_url.startsWith("http") ? (
+            <a
+              href={activity.strava_url}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
+            >
+              Open in Strava
+            </a>
+          ) : (
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-white/45">Imported file</span>
+          )}
         </div>
       </div>
     );
@@ -137,9 +143,18 @@ export function StravaActivityCard({
     <div className={cn("border border-border bg-[#0d0d0f] p-4", className)}>
       {inner}
       <div className="mt-2">
-        <Link href={activity.strava_url} className="text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline" target="_blank" rel="noreferrer">
-          Open in Strava
-        </Link>
+        {isStrava && activity.strava_url.startsWith("http") ? (
+          <Link
+            href={activity.strava_url}
+            className="text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Open in Strava
+          </Link>
+        ) : (
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-white/45">Imported file</span>
+        )}
       </div>
     </div>
   );

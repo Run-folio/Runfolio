@@ -10,18 +10,23 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "canonical-series-backfill": "tsx scripts/canonical-series-backfill.ts",
-    "utmb-canonical-ingest": "tsx scripts/utmb-canonical-ingest.ts"
+    "utmb-canonical-ingest": "tsx scripts/utmb-canonical-ingest.ts",
+    "canonical-enrichment-worker": "tsx scripts/canonical-enrichment-worker.ts"
   },
   "dependencies": {
+    "@mapbox/polyline": "^1.2.1",
     "@supabase/ssr": "^0.10.0",
     "@supabase/supabase-js": "^2.101.1",
     "clsx": "^2.1.1",
+    "fast-xml-parser": "^5.5.10",
+    "fit-file-parser": "^2.3.3",
     "next": "^15.2.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1"
   },
   "devDependencies": {
+    "@types/mapbox__polyline": "^1.0.5",
     "@types/node": "^22.13.4",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",

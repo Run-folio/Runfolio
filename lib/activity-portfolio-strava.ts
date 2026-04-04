@@ -1,4 +1,5 @@
 import type { LinkedStravaActivitySnapshot } from "@/lib/linked-activity-snapshot";
+import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import type { ActivityPortfolioStravaView } from "@/types";
 import type { Race } from "@/types";
 import {
@@ -29,6 +30,7 @@ export function buildActivityPortfolioStravaView(
   const elapsedSec = raw.elapsed_time ?? raw.moving_time;
   return {
     strava_id: stravaId,
+    activity_source: "strava",
     name: raw.name,
     sport_type: raw.sport_type ?? null,
     type: raw.type ?? null,
@@ -59,6 +61,7 @@ export function buildActivityPortfolioStravaViewFromSnapshot(
   const elapsedSec = snap.elapsed_time_sec ?? movSec;
   return {
     strava_id: snap.strava_activity_id,
+    activity_source: snap.activity_source ?? "strava",
     name: snap.activity_title,
     sport_type: snap.sport_type,
     type: snap.activity_type,
@@ -79,10 +82,42 @@ export function buildActivityPortfolioStravaViewFromSnapshot(
   };
 }
 
+/** Persisted sync row (Strava or file import) — no live Strava API. */
+export function buildActivityPortfolioStravaViewFromSyncedRow(row: StravaSyncedActivityRow): ActivityPortfolioStravaView {
+  const distKm = row.distance_km ?? 0;
+  const movSec = row.moving_time_sec ?? 0;
+  const movLabel = movSec > 0 ? formatStravaMovingTime(movSec) : "—";
+  const elapsedSec = row.elapsed_time_sec ?? movSec;
+  const src = row.activity_source ?? "strava";
+  const loc = [row.city, row.country].filter(Boolean).join(", ") || "—";
+  return {
+    strava_id: row.strava_activity_id,
+    activity_source: src,
+    name: row.name,
+    sport_type: row.sport_type ?? null,
+    type: row.activity_type ?? null,
+    start_date: row.start_date.slice(0, 10),
+    location_label: loc,
+    distance_km: distKm,
+    moving_time_label: movLabel,
+    elapsed_time_label:
+      elapsedSec > 0 && elapsedSec !== movSec ? formatDurationFromSeconds(elapsedSec) : null,
+    pace_label: null,
+    elevation_m: row.elevation_gain_m != null ? Math.round(row.elevation_gain_m) : null,
+    kudos_count: row.kudos_count ?? 0,
+    achievement_count: row.achievement_count ?? 0,
+    description: row.description ?? null,
+    has_map: Boolean(row.polyline?.trim()),
+    strava_url: src === "strava" ? `https://www.strava.com/activities/${row.strava_activity_id}` : "",
+    photo_urls: []
+  };
+}
+
 /** When live Strava fetch fails — hydrate from saved race row only. */
 export function buildActivityPortfolioStravaViewFromRace(race: Race, stravaId: string): ActivityPortfolioStravaView {
   return {
     strava_id: stravaId,
+    activity_source: "strava",
     name: race.name,
     sport_type: null,
     type: null,

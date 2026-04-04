@@ -29,7 +29,7 @@ function formatDistance(km: number | null): string {
 }
 
 function RaceMedia({ race }: { race: SearchableRaceRow }) {
-  const src = race.logoUrl?.trim() || race.heroImageUrl?.trim();
+  const src = race.logoUrl?.trim() || race.heroImageUrl?.trim() || race.fallbackImageUrl?.trim();
   if (src) {
     return (
       <div className="flex h-[88px] w-full items-center justify-center bg-black/45 px-2">

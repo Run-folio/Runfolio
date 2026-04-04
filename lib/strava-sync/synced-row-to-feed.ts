@@ -8,8 +8,14 @@ export function syncedRowToStravaFeedActivity(row: StravaSyncedActivityRow): Str
   const distM = row.distance_m ?? Math.round(distKm * 1000);
   const mov = row.moving_time_sec ?? 0;
   const elap = row.elapsed_time_sec ?? mov;
+  const source = row.activity_source ?? "strava";
+  const stravaUrl =
+    source === "strava"
+      ? `https://www.strava.com/activities/${row.strava_activity_id}`
+      : `/activities/${encodeURIComponent(row.strava_activity_id)}`;
   return {
     strava_id: row.strava_activity_id,
+    activity_source: source,
     name: row.name,
     start_date: row.start_date,
     start_date_local: null,
@@ -28,7 +34,7 @@ export function syncedRowToStravaFeedActivity(row: StravaSyncedActivityRow): Str
     kudos_count: row.kudos_count ?? 0,
     achievement_count: row.achievement_count ?? 0,
     summary_polyline: row.polyline,
-    strava_url: `https://www.strava.com/activities/${row.strava_activity_id}`,
+    strava_url: stravaUrl,
     primary_photo_url: null,
     description: row.description
   };

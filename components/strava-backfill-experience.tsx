@@ -4,7 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { backfillStravaHistoryAction } from "@/lib/actions";
-import type { StravaBackfillProgress, StravaBackfillUxPhase } from "@/lib/strava-backfill-model";
+import type {
+  StravaBackfillProgress,
+  StravaBackfillUxPhase,
+  StravaRateLimitUxKind
+} from "@/lib/strava-backfill-model";
 import { usePersistence } from "@/components/persistence-context";
 import { buildSetupUrl } from "@/lib/setup-url";
 import {
@@ -58,6 +62,30 @@ const PHASE_UI: Record<
   }
 };
 
+function rateLimitedPhaseUI(kind: StravaRateLimitUxKind | null): (typeof PHASE_UI)["rate_limited"] {
+  if (kind === "daily") {
+    return {
+      title: "Paused — Strava daily limit",
+      description:
+        "Strava daily limit reached — try again after midnight UTC. Waiting 15 minutes will not help; this is Strava’s daily cap, not the short rolling window.",
+      badgeClass: "border-rose-400/35 bg-rose-500/12 text-rose-50"
+    };
+  }
+  if (kind === "short_window") {
+    return {
+      title: "Paused — Strava short-window limit",
+      description:
+        "Strava short-window limit reached — try again at the next 15-minute window once your read quota rolls forward.",
+      badgeClass: "border-rose-400/35 bg-rose-500/12 text-rose-50"
+    };
+  }
+  return {
+    title: "Paused — Strava rate limit",
+    description: "Strava rate limited — retry later.",
+    badgeClass: "border-rose-400/35 bg-rose-500/12 text-rose-50"
+  };
+}
+
 type BackfillBatchSummary = {
   upserted: number;
   skippedUnchanged: number;
@@ -96,6 +124,9 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
         badgeClass: "border-amber-400/40 bg-amber-500/12 text-amber-50"
       };
     }
+    if (initialProgress.phase === "rate_limited") {
+      return rateLimitedPhaseUI(initialProgress.stravaRateLimitKind);
+    }
     return PHASE_UI[initialProgress.phase];
   }, [initialProgress]);
 
@@ -111,6 +142,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
     initialProgress.phase !== "rate_limited";
 
   const runImport = () => {
+    if (pending) return;
     setBanner(null);
     start(async () => {
       const res = await backfillStravaHistoryAction();
@@ -236,6 +268,17 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
               Strava history&quot;—Strava doesn&apos;t give a reliable total.
             </p>
             <dl className="mt-4 grid gap-2 text-[13px] text-white/60 sm:grid-cols-2">
+              {initialProgress.phase === "rate_limited" && initialProgress.stravaRateLimitUntil ? (
+                <div className="sm:col-span-2">
+                  <dt className="text-muted">Suggested earliest retry</dt>
+                  <dd className="font-medium text-white/85">
+                    {formatWhen(initialProgress.stravaRateLimitUntil) ?? initialProgress.stravaRateLimitUntil}
+                    {initialProgress.stravaRateLimitKind === "daily" ? (
+                      <span className="ml-1 text-[11px] text-muted">(next UTC day rollover)</span>
+                    ) : null}
+                  </dd>
+                </div>
+              ) : null}
               <div>
                 <dt className="text-muted">Activities saved in Runfolio</dt>
                 <dd className="font-medium text-white/85">{initialProgress.syncedActivityCount}</dd>
@@ -271,14 +314,19 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             type="button"
             variant="primary"
             className="min-h-[48px] px-8 text-[12px] font-semibold uppercase tracking-[0.12em]"
-            disabled={!canRunBackfill}
+            disabled={!canRunBackfill || pending}
+            aria-busy={pending}
             title={
               !initialProgress.ingestStateTableAvailable
                 ? "Fix database setup before importing."
                 : initialProgress.phase === "complete" || initialProgress.phase === "no_matches"
                   ? "Historical import is finished for this path."
                   : initialProgress.phase === "rate_limited"
-                    ? "Wait before retrying — Strava rate limits are temporary."
+                    ? initialProgress.stravaRateLimitKind === "daily"
+                      ? "Daily Strava cap — try again after midnight UTC (or after the suggested time). Waiting 15 minutes will not fix a daily limit."
+                      : initialProgress.stravaRateLimitKind === "short_window"
+                        ? "Short-window limit — try again after the next ~15-minute Strava bucket."
+                        : "Wait before retrying — Strava rate limits are temporary."
                     : undefined
             }
             onClick={runImport}

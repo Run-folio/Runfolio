@@ -17,6 +17,10 @@ Run these SQL files in the Supabase SQL editor for your project, in this exact o
 15. migration_public_race_finishers.sql
 16. migration_auth_user_update_sync_name.sql (if not already applied — keeps public.users.name in sync on auth updates)
 17. migration_backfill_public_users_from_auth.sql (optional one-time repair for legacy signups)
+18. migration_strava_rate_limit_meta.sql — Strava 429 kind + suggested retry (`strava_rate_limit_kind`, `strava_rate_limit_until` on `user_strava_ingest_state`)
+19. migration_strava_first_backfill_throttle.sql — first-batch click throttle (`first_backfill_last_attempt_at` on `user_strava_ingest_state`)
+20. migration_activity_file_source.sql — `activity_source` on `strava_synced_activities` (strava | garmin_file | manual_file)
+21. migration_canonical_enrichment_pipeline.sql — enrichment columns on `canonical_races` + `canonical_enrichment_jobs` queue
 
 Optional / follow-on (not every project):
 - migration_strava_ingest_v2.sql — `manual_link_only` on synced activities and race snapshots (run after base Strava migrations if you use that flow)

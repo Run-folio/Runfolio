@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
 import { ActivityPortfolioClient } from "@/components/activity-portfolio-client";
@@ -8,8 +7,10 @@ import type { LinkedStravaActivitySnapshot } from "@/lib/linked-activity-snapsho
 import {
   buildActivityPortfolioStravaView,
   buildActivityPortfolioStravaViewFromRace,
-  buildActivityPortfolioStravaViewFromSnapshot
+  buildActivityPortfolioStravaViewFromSnapshot,
+  buildActivityPortfolioStravaViewFromSyncedRow
 } from "@/lib/activity-portfolio-strava";
+import { parseActivityPageId } from "@/lib/activity-route-id";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import { getRaceByStravaActivityId } from "@/lib/get-race-by-strava-activity";
 import { RACE_MATCH_HIGH_SCORE, rankKnownRaceMatches } from "@/lib/known-race-match";
@@ -18,71 +19,97 @@ import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
 import { fetchStravaActivityWithRecovery } from "@/lib/strava-resolve-access";
-import { parseStravaActivityId } from "@/lib/strava-api";
 import { buildManualRaceSoftHints, type ManualRaceSoftHint } from "@/lib/match-hub/manual-link-hints";
 import { rankCanonicalMatchesForSyncedRowDetailed } from "@/lib/strava-canonical-match/suggestions";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
-import type { ActivityMatchInput } from "@/types";
-import type { Race } from "@/types";
+import type { ActivityMatchInput, ActivityPortfolioStravaView, Race } from "@/types";
 
 type Props = { params: Promise<{ activityId: string }> };
 
+function activityPath(activityId: string): string {
+  return `/activities/${activityId}`;
+}
+
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { activityId } = await params;
-  const id = parseStravaActivityId(activityId);
-  if (!id) return { title: "Activity · Runfolio" };
-  return { title: `Activity ${id} · Runfolio` };
+  const parsed = parseActivityPageId(activityId);
+  if (!parsed) return { title: "Activity · Runfolio" };
+  if (parsed.kind === "file_import") return { title: "Imported activity · Runfolio" };
+  return { title: `Activity ${parsed.id} · Runfolio` };
 }
 
 export default async function ActivityPortfolioPage({ params }: Props) {
   const { activityId } = await params;
-  const stravaId = parseStravaActivityId(activityId);
-  if (!stravaId) notFound();
+  const parsed = parseActivityPageId(activityId);
+  if (!parsed) notFound();
+
+  const path = activityPath(activityId);
+  const activityKey = parsed.id;
 
   if (!isSupabaseConfigured()) {
     return (
-      <DataBackendSetupGate
-        title="Race activity"
-        featureLabel="Saving finishes and catalog links"
-        returnTo={`/activities/${stravaId}`}
-      />
+      <DataBackendSetupGate title="Race activity" featureLabel="Saving finishes and catalog links" returnTo={path} />
     );
   }
 
-  await requirePersistenceReadyOrRedirect(`/activities/${stravaId}`);
+  await requirePersistenceReadyOrRedirect(path);
 
   const { user, authError } = await getServerAuthUser();
   if (authError || !user) {
-    redirect(`/auth/login?next=${encodeURIComponent(`/activities/${stravaId}`)}`);
-  }
-
-  const race = await getRaceByStravaActivityId(stravaId, user.id);
-  const snap = race?.linked_activity_snapshot as LinkedStravaActivitySnapshot | null | undefined;
-
-  let stravaFetchFailed = false;
-  let stravaView = null as ReturnType<typeof buildActivityPortfolioStravaView> | null;
-
-  if (snap && String(snap.strava_activity_id) === stravaId) {
-    stravaView = buildActivityPortfolioStravaViewFromSnapshot(snap);
-  } else {
-    try {
-      const { activity } = await fetchStravaActivityWithRecovery(stravaId);
-      stravaView = buildActivityPortfolioStravaView(stravaId, activity);
-    } catch {
-      stravaFetchFailed = true;
-      if (race) {
-        stravaView = buildActivityPortfolioStravaViewFromRace(race, stravaId);
-      }
-    }
-  }
-
-  if (!stravaView) {
-    redirect(
-      `/races/new?strava_error=${encodeURIComponent("Could not load this Strava activity. Connect Strava or check the activity ID.")}`
-    );
+    redirect(`/auth/login?next=${encodeURIComponent(path)}`);
   }
 
   const supabase = await createClient();
+  const race = await getRaceByStravaActivityId(activityKey, user.id);
+  const snap = race?.linked_activity_snapshot as LinkedStravaActivitySnapshot | null | undefined;
+
+  let stravaFetchFailed = false;
+  let stravaView: ActivityPortfolioStravaView | null = null;
+  let syncRowRaw: StravaSyncedActivityRow | null = null;
+
+  if (parsed.kind === "file_import") {
+    const { data: row } = await supabase
+      .from("strava_synced_activities")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("strava_activity_id", activityKey)
+      .maybeSingle();
+    if (!row) notFound();
+    syncRowRaw = row as StravaSyncedActivityRow;
+    stravaView = buildActivityPortfolioStravaViewFromSyncedRow(syncRowRaw);
+  } else {
+    const stravaId = parsed.id;
+    if (snap && String(snap.strava_activity_id) === stravaId) {
+      stravaView = buildActivityPortfolioStravaViewFromSnapshot(snap);
+    } else {
+      try {
+        const { activity } = await fetchStravaActivityWithRecovery(stravaId);
+        stravaView = buildActivityPortfolioStravaView(stravaId, activity);
+      } catch {
+        stravaFetchFailed = true;
+        if (race) {
+          stravaView = buildActivityPortfolioStravaViewFromRace(race, stravaId);
+        }
+      }
+    }
+
+    if (!stravaView) {
+      redirect(
+        `/races/new?strava_error=${encodeURIComponent("Could not load this Strava activity. Connect Strava or check the activity ID.")}`
+      );
+    }
+
+    const { data: row } = await supabase
+      .from("strava_synced_activities")
+      .select("*")
+      .eq("user_id", user.id)
+      .eq("strava_activity_id", stravaId)
+      .maybeSingle();
+    syncRowRaw = (row ?? null) as StravaSyncedActivityRow | null;
+  }
+
+  if (!stravaView) notFound();
+
   const { data: userRaces } = await supabase.from("races").select("*").eq("user_id", user.id);
   const allRaces = (userRaces ?? []) as Race[];
 
@@ -94,9 +121,16 @@ export default async function ActivityPortfolioPage({ params }: Props) {
     elevation_m: stravaView.elevation_m,
     location_city: null,
     location_country: null,
+    start_latitude: null,
+    start_longitude: null,
     sport_type: stravaView.sport_type,
     type: stravaView.type
   };
+  if (syncRowRaw?.latitude != null && syncRowRaw.longitude != null) {
+    matchInput.start_latitude = syncRowRaw.latitude;
+    matchInput.start_longitude = syncRowRaw.longitude;
+  }
+
   const ranked = rankKnownRaceMatches(matchInput, allRaces, 0.28);
   const topDiscover = ranked[0];
   const autoDiscoverId =
@@ -110,17 +144,10 @@ export default async function ActivityPortfolioPage({ params }: Props) {
       allRaces.some((r) => r.discover_race_id === suggestedDiscoverRaceId && !r.is_completed)
   );
 
-  const { data: syncRowRaw } = await supabase
-    .from("strava_synced_activities")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("strava_activity_id", stravaId)
-    .maybeSingle();
-
   let manualLinkSoftHints: ManualRaceSoftHint[] = [];
   if (syncRowRaw) {
-    const { ranked } = await rankCanonicalMatchesForSyncedRowDetailed(syncRowRaw as StravaSyncedActivityRow);
-    manualLinkSoftHints = buildManualRaceSoftHints(ranked);
+    const { ranked: canonRanked } = await rankCanonicalMatchesForSyncedRowDetailed(syncRowRaw);
+    manualLinkSoftHints = buildManualRaceSoftHints(canonRanked);
   }
 
   let canonicalRaceSlug: string | null = null;

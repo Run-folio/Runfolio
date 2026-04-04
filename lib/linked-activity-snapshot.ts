@@ -1,9 +1,10 @@
 import { formatStravaMovingTime } from "@/lib/strava-api";
-import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
+import type { ActivityIngestSource, StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 
 /** Persisted at Strava↔race link time; renders portfolio without live Strava API. */
 export type LinkedStravaActivitySnapshot = {
   strava_activity_id: string;
+  activity_source?: ActivityIngestSource;
   activity_title: string;
   start_date: string;
   distance_km: number;
@@ -26,8 +27,10 @@ export function snapshotFromSyncedRow(
 ): LinkedStravaActivitySnapshot {
   const sid = row.strava_activity_id;
   const mov = row.moving_time_sec ?? 0;
+  const src = row.activity_source ?? "strava";
   return {
     strava_activity_id: sid,
+    activity_source: src,
     activity_title: row.name,
     start_date: row.start_date.slice(0, 10),
     distance_km: row.distance_km ?? 0,
@@ -37,7 +40,7 @@ export function snapshotFromSyncedRow(
     moving_time_label: mov > 0 ? formatStravaMovingTime(mov) : null,
     sport_type: row.sport_type ?? null,
     activity_type: row.activity_type ?? null,
-    strava_url: `https://www.strava.com/activities/${sid}`,
+    strava_url: src === "strava" ? `https://www.strava.com/activities/${sid}` : "",
     captured_at: new Date().toISOString(),
     discover_race_id: meta.discover_race_id ?? null,
     canonical_race_id: meta.canonical_race_id ?? null,
@@ -63,6 +66,7 @@ export function snapshotFromRaceLinkFields(opts: {
   const sid = opts.stravaActivityId;
   return {
     strava_activity_id: sid,
+    activity_source: "strava",
     activity_title: opts.activityTitle,
     start_date: opts.startDateYmd.slice(0, 10),
     distance_km: opts.distanceKm,

@@ -76,6 +76,14 @@ export function ActivityPortfolioClient({
   );
   const heroScene = getRaceSceneImagePath(displayTitle);
   const sportLabel = stravaView.sport_type || stravaView.type || "Run";
+  const ingestSource = stravaView.activity_source ?? "strava";
+  const isStravaSource = ingestSource === "strava";
+  const sourceBadge =
+    ingestSource === "garmin_file"
+      ? "Imported · FIT file"
+      : ingestSource === "manual_file"
+        ? "Imported · GPX/TCX file"
+        : null;
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -160,16 +168,23 @@ export function ActivityPortfolioClient({
                 On your bucket list
               </span>
             ) : null}
+            {sourceBadge ? (
+              <span className="border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-emerald-200/90">
+                {sourceBadge}
+              </span>
+            ) : null}
           </div>
           <div className="mt-6 flex flex-wrap gap-3">
-            <a
-              href={stravaView.strava_url}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center border border-white/25 bg-black/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-white transition hover:border-accent/50 hover:text-accent"
-            >
-              Open in Strava
-            </a>
+            {isStravaSource && stravaView.strava_url ? (
+              <a
+                href={stravaView.strava_url}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center border border-white/25 bg-black/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-white transition hover:border-accent/50 hover:text-accent"
+              >
+                Open in Strava
+              </a>
+            ) : null}
             {canonicalHref ? (
               <Link
                 href={canonicalHref}
@@ -238,7 +253,7 @@ export function ActivityPortfolioClient({
               }}
               softSuggestions={manualLinkSoftHints}
               responseMode="page"
-              returnTo={`/activities/${stravaView.strava_id}`}
+              returnTo={`/activities/${encodeURIComponent(stravaView.strava_id)}`}
               showUnlink={Boolean(race?.canonical_race_id)}
               onUnlinked={() => setLinkUiOpen(true)}
               pending={linkAuxPending}
@@ -272,7 +287,9 @@ export function ActivityPortfolioClient({
         ) : null}
 
         <section className="space-y-4">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/55">From Strava</h2>
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/55">
+            {isStravaSource ? "From Strava" : "Activity details"}
+          </h2>
           <Card className="border-white/10 bg-[#0a0a0a] p-6">
             <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {statGrid.map(({ label, value }) => (
@@ -284,7 +301,9 @@ export function ActivityPortfolioClient({
             </dl>
             {stravaView.description ? (
               <div className="mt-6 border-t border-white/10 pt-6">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Strava description</p>
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
+                  {isStravaSource ? "Strava description" : "Notes"}
+                </p>
                 <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-white/80">
                   {stravaView.description}
                 </p>
@@ -294,10 +313,21 @@ export function ActivityPortfolioClient({
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Route</p>
               {stravaView.has_map ? (
                 <p className="mt-2 text-sm text-white/75">
-                  Map data is available on Strava.{" "}
-                  <a href={stravaView.strava_url} className="font-semibold text-accent underline-offset-4 hover:underline" target="_blank" rel="noreferrer">
-                    View the route →
-                  </a>
+                  {isStravaSource && stravaView.strava_url ? (
+                    <>
+                      Map data is available on Strava.{" "}
+                      <a
+                        href={stravaView.strava_url}
+                        className="font-semibold text-accent underline-offset-4 hover:underline"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View the route →
+                      </a>
+                    </>
+                  ) : (
+                    <>A simplified route from your uploaded file is stored in Runfolio (no external activity link).</>
+                  )}
                 </p>
               ) : (
                 <p className="mt-2 text-sm text-muted">No route preview in this import.</p>
@@ -310,7 +340,9 @@ export function ActivityPortfolioClient({
           <div className="flex flex-wrap items-end justify-between gap-3">
             <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/55">Gallery</h2>
             <p className="max-w-xl text-xs text-muted">
-              Strava often returns a single primary image per activity. Add image URLs below to build a fuller album.
+              {isStravaSource
+                ? "Strava often returns a single primary image per activity. Add image URLs below to build a fuller album."
+                : "File imports do not include photos. Paste image URLs below if you want a gallery on your portfolio."}
             </p>
           </div>
           {photos.length === 0 ? (
@@ -318,9 +350,13 @@ export function ActivityPortfolioClient({
               <div className="relative aspect-[2.2/1] max-h-52 w-full border-b border-white/10">
                 <Image src={heroScene} alt="" fill className="object-cover opacity-35 saturate-50" sizes="(max-width:768px) 100vw, 896px" />
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/85 via-black/45 to-black/25 px-6 text-center">
-                  <p className="text-sm font-medium text-white/90">No Strava images returned for this activity</p>
+                  <p className="text-sm font-medium text-white/90">
+                    {isStravaSource ? "No Strava images returned for this activity" : "No images on this import"}
+                  </p>
                   <p className="mt-2 max-w-md text-xs leading-relaxed text-white/55">
-                    The API often exposes only a primary shot, or none. Your hero uses course art until you add photos.
+                    {isStravaSource
+                      ? "The API often exposes only a primary shot, or none. Your hero uses course art until you add photos."
+                      : "Upload GPX/TCX/FIT for metrics and route — add photo URLs in Edit story when you are ready."}
                   </p>
                 </div>
               </div>
@@ -339,7 +375,7 @@ export function ActivityPortfolioClient({
                 <div className="pointer-events-none absolute inset-3 border border-gold/20 md:inset-4" aria-hidden />
               </div>
               <figcaption className="mt-4 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-white/45">
-                Primary from Strava · add more in Edit story
+                {isStravaSource ? "Primary from Strava · add more in Edit story" : "Primary image · add more in Edit story"}
               </figcaption>
             </figure>
           ) : (

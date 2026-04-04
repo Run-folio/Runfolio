@@ -27,6 +27,7 @@ export function toSearchableRaceRow(r: CanonicalRace): SearchableRaceRow {
     elevationGainM: r.elevationGainM,
     logoUrl: r.logoUrl,
     heroImageUrl: r.heroImageUrl,
+    fallbackImageUrl: r.fallbackImageUrl,
     raceType: r.raceType,
     surfaceType: r.surfaceType,
     categoryTags: r.categoryTags,

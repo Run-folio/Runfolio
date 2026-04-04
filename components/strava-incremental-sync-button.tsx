@@ -31,6 +31,7 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
         type="button"
         variant="secondary"
         disabled={pending || !persistenceAvailable}
+        aria-busy={pending}
         title={!persistenceAvailable ? reason ?? "Saving unavailable" : undefined}
         className={
           compact
@@ -38,6 +39,7 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
             : "text-[11px] font-semibold uppercase tracking-wider"
         }
         onClick={() => {
+          if (pending) return;
           setMsg(null);
           start(async () => {
             const res = await syncStravaActivitiesAction();

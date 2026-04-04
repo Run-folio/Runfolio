@@ -18,6 +18,7 @@ type Viewer = Awaited<ReturnType<typeof fetchCanonicalRaceViewerState>>;
 function RaceHeroMedia({ race }: { race: CanonicalRace }) {
   const hero = race.heroImageUrl?.trim();
   const logo = race.logoUrl?.trim();
+  const fallback = race.fallbackImageUrl?.trim();
   if (hero) {
     return (
       <div className="relative aspect-[21/9] min-h-[200px] w-full overflow-hidden rounded-2xl border border-white/10 bg-black md:aspect-[24/9] md:min-h-[280px]">
@@ -32,6 +33,15 @@ function RaceHeroMedia({ race }: { race: CanonicalRace }) {
       <div className="flex min-h-[200px] w-full items-center justify-center rounded-2xl border border-white/10 bg-gradient-to-br from-[#2a1810] via-black to-[#0a1628] px-8 py-16 md:min-h-[240px]">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={logo} alt="" className="max-h-36 w-auto max-w-[min(100%,420px)] object-contain" loading="eager" />
+      </div>
+    );
+  }
+  if (fallback) {
+    return (
+      <div className="relative aspect-[21/9] min-h-[200px] w-full overflow-hidden rounded-2xl border border-white/10 bg-black md:aspect-[24/9] md:min-h-[280px]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={fallback} alt="" className="h-full w-full object-cover" loading="eager" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#05070c] via-[#05070c]/40 to-transparent" />
       </div>
     );
   }

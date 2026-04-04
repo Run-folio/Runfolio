@@ -7,6 +7,8 @@ import { runfolioLog } from "@/lib/runfolio-log";
 export const STRAVA_INGEST_STATE_TABLE = "user_strava_ingest_state";
 
 export const STRAVA_INGEST_STATE_MIGRATION = "migration_strava_ingest_state.sql";
+export const STRAVA_RATE_LIMIT_META_MIGRATION = "migration_strava_rate_limit_meta.sql";
+export const STRAVA_FIRST_BACKFILL_THROTTLE_MIGRATION = "migration_strava_first_backfill_throttle.sql";
 
 const TABLE = STRAVA_INGEST_STATE_TABLE;
 
@@ -56,6 +58,11 @@ export type UserStravaIngestState = {
   backfill_batches_completed: number;
   last_rate_limit_at: string | null;
   last_error: string | null;
+  /** From migration_strava_rate_limit_meta.sql — optional until applied. */
+  strava_rate_limit_kind?: string | null;
+  strava_rate_limit_until?: string | null;
+  /** From migration_strava_first_backfill_throttle.sql — optional until applied. */
+  first_backfill_last_attempt_at?: string | null;
   updated_at: string;
 };
 
@@ -97,6 +104,43 @@ export function minStartEpochFromSummaries(summaries: { start_date: string }[]):
   return Number.isFinite(minMs) ? Math.floor(minMs / 1000) : null;
 }
 
+/** Seconds remaining before another first-batch backfill may start (0 = allowed). */
+export function firstBackfillCooldownRemainingSec(
+  state: UserStravaIngestState | null,
+  cooldownSec: number
+): number {
+  const raw = state?.first_backfill_last_attempt_at;
+  if (!raw?.trim()) return 0;
+  const elapsed = (Date.now() - Date.parse(raw)) / 1000;
+  if (!Number.isFinite(elapsed)) return 0;
+  return Math.max(0, Math.ceil(cooldownSec - elapsed));
+}
+
+/** Record that the user started a first-batch backfill attempt (after cooldown check passes). */
+export async function markFirstBackfillAttemptNow(supabase: SupabaseClient, userId: string): Promise<void> {
+  const existing = await getIngestState(supabase, userId);
+  const now = isoNow();
+  const { error } = await supabase.from(TABLE).upsert(
+    {
+      user_id: userId,
+      incremental_high_water_epoch: existing?.incremental_high_water_epoch ?? null,
+      last_incremental_at: existing?.last_incremental_at ?? null,
+      backfill_before_epoch: existing?.backfill_before_epoch ?? null,
+      backfill_exhausted: existing?.backfill_exhausted ?? false,
+      backfill_batches_completed: existing?.backfill_batches_completed ?? 0,
+      last_backfill_at: existing?.last_backfill_at ?? null,
+      last_rate_limit_at: existing?.last_rate_limit_at ?? null,
+      last_error: existing?.last_error ?? null,
+      strava_rate_limit_kind: existing?.strava_rate_limit_kind ?? null,
+      strava_rate_limit_until: existing?.strava_rate_limit_until ?? null,
+      first_backfill_last_attempt_at: now,
+      updated_at: now
+    },
+    { onConflict: "user_id" }
+  );
+  if (error) runfolioLog.warn("strava.ingestState.firstBackfillAttempt", error.message, { userId });
+}
+
 export async function touchIncrementalSyncOnly(supabase: SupabaseClient, userId: string): Promise<void> {
   const existing = await getIngestState(supabase, userId);
   const { error } = await supabase.from(TABLE).upsert(
@@ -110,6 +154,9 @@ export async function touchIncrementalSyncOnly(supabase: SupabaseClient, userId:
       last_backfill_at: existing?.last_backfill_at ?? null,
       last_rate_limit_at: existing?.last_rate_limit_at ?? null,
       last_error: null,
+      strava_rate_limit_kind: null,
+      strava_rate_limit_until: null,
+      first_backfill_last_attempt_at: existing?.first_backfill_last_attempt_at ?? null,
       updated_at: isoNow()
     },
     { onConflict: "user_id" }
@@ -135,6 +182,9 @@ export async function upsertIngestStateIncremental(
       last_backfill_at: existing?.last_backfill_at ?? null,
       last_rate_limit_at: existing?.last_rate_limit_at ?? null,
       last_error: null,
+      strava_rate_limit_kind: null,
+      strava_rate_limit_until: null,
+      first_backfill_last_attempt_at: existing?.first_backfill_last_attempt_at ?? null,
       updated_at: isoNow()
     },
     { onConflict: "user_id" }
@@ -169,6 +219,9 @@ export async function upsertIngestStateBackfill(
       last_backfill_at: isoNow(),
       last_rate_limit_at: existing?.last_rate_limit_at ?? null,
       last_error: null,
+      strava_rate_limit_kind: null,
+      strava_rate_limit_until: null,
+      first_backfill_last_attempt_at: existing?.first_backfill_last_attempt_at ?? null,
       updated_at: isoNow()
     },
     { onConflict: "user_id" }
@@ -189,20 +242,31 @@ export async function recordIngestError(supabase: SupabaseClient, userId: string
       last_backfill_at: existing?.last_backfill_at ?? null,
       last_rate_limit_at: existing?.last_rate_limit_at ?? null,
       last_error: message.slice(0, 2000),
+      strava_rate_limit_kind: null,
+      strava_rate_limit_until: null,
+      first_backfill_last_attempt_at: existing?.first_backfill_last_attempt_at ?? null,
       updated_at: isoNow()
     },
     { onConflict: "user_id" }
   );
 }
 
+export type StravaRateLimitPersistKind = "short_window" | "daily" | "unknown";
+
 export async function recordRateLimitHint(
   supabase: SupabaseClient,
   userId: string,
-  detail?: string | null
+  detail?: string | null,
+  opts?: {
+    kind?: StravaRateLimitPersistKind;
+    untilIso?: string | null;
+  }
 ): Promise<void> {
   const existing = await getIngestState(supabase, userId);
   const lastError =
     detail?.trim() ? detail.trim().slice(0, 2000) : (existing?.last_error ?? null);
+  const kind = opts?.kind ?? null;
+  const untilIso = opts?.untilIso?.trim() ? opts.untilIso.trim() : null;
   await supabase.from(TABLE).upsert(
     {
       user_id: userId,
@@ -214,6 +278,9 @@ export async function recordRateLimitHint(
       last_backfill_at: existing?.last_backfill_at ?? null,
       last_rate_limit_at: isoNow(),
       last_error: lastError,
+      strava_rate_limit_kind: kind,
+      strava_rate_limit_until: untilIso,
+      first_backfill_last_attempt_at: existing?.first_backfill_last_attempt_at ?? null,
       updated_at: isoNow()
     },
     { onConflict: "user_id" }

@@ -18,8 +18,18 @@ import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { ManualRaceLinkPanel } from "@/components/manual-race-link-panel";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { parseActivityPageId } from "@/lib/activity-route-id";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { cn } from "@/lib/utils";
+
+function activityExternalLink(id: string): { stravaUrl: string | null; portfolioPath: string } {
+  const raw = id.trim();
+  const p = parseActivityPageId(raw);
+  return {
+    portfolioPath: `/activities/${encodeURIComponent(raw)}`,
+    stravaUrl: p?.kind === "file_import" ? null : `https://www.strava.com/activities/${raw}`
+  };
+}
 
 type Props = {
   initialBundle: MatchHubBundle;
@@ -493,30 +503,41 @@ export function MatchHubClient({
           </HubEmpty>
         ) : (
           <ul className="divide-y divide-white/10 rounded-2xl border border-white/12 bg-panel/25">
-            {recentlyConfirmed.map((r) => (
-              <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-                <div>
-                  <p className="font-medium text-white">{r.displayRaceName}</p>
-                  <p className="type-meta text-xs text-muted">
-                    {r.date ?? "—"} ·{" "}
-                    <a
-                      href={`https://www.strava.com/activities/${r.stravaActivityId}`}
-                      className="text-accent hover:underline"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Strava
-                    </a>
-                  </p>
-                </div>
-                <Link
-                  href={`/activities/${r.stravaActivityId}`}
-                  className="text-[11px] font-semibold uppercase tracking-wider text-accent hover:underline"
-                >
-                  Open story →
-                </Link>
-              </li>
-            ))}
+            {recentlyConfirmed.map((r) => {
+              const { stravaUrl, portfolioPath } = activityExternalLink(r.stravaActivityId);
+              return (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+                  <div>
+                    <p className="font-medium text-white">{r.displayRaceName}</p>
+                    <p className="type-meta text-xs text-muted">
+                      {r.date ?? "—"}
+                      {stravaUrl ? (
+                        <>
+                          {" "}
+                          ·{" "}
+                          <a
+                            href={stravaUrl}
+                            className="text-accent hover:underline"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Strava
+                          </a>
+                        </>
+                      ) : (
+                        <span className="text-white/40"> · File import</span>
+                      )}
+                    </p>
+                  </div>
+                  <Link
+                    href={portfolioPath}
+                    className="text-[11px] font-semibold uppercase tracking-wider text-accent hover:underline"
+                  >
+                    Open story →
+                  </Link>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
@@ -566,6 +587,7 @@ function HighConfidenceCard({
 }) {
   const top = s.topMatch!;
   const m = activityMeta(s);
+  const { stravaUrl, portfolioPath } = activityExternalLink(s.stravaActivityId);
   const stat = [m.date, m.km ? `${m.km} km` : "—", m.el != null && m.el > 0 ? `${Math.round(m.el)} m` : null]
     .filter(Boolean)
     .join(" · ");
@@ -623,14 +645,23 @@ function HighConfidenceCard({
             >
               Not now
             </button>
-            <a
-              href={`https://www.strava.com/activities/${s.stravaActivityId}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-white/45 underline-offset-2 hover:text-white hover:underline"
-            >
-              Open Strava
-            </a>
+            {stravaUrl ? (
+              <a
+                href={stravaUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="text-white/45 underline-offset-2 hover:text-white hover:underline"
+              >
+                Open Strava
+              </a>
+            ) : (
+              <Link
+                href={portfolioPath}
+                className="text-white/45 underline-offset-2 hover:text-white hover:underline"
+              >
+                Open activity
+              </Link>
+            )}
           </div>
         </div>
       </Card>

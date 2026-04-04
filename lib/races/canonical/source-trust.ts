@@ -12,13 +12,15 @@ import type { RaceIngestSource } from "@/lib/races/types/normalized";
  */
 const TRUST_RANK: Record<RaceIngestSource, number> = {
   raceresult: 100,
+  manual: 95,
+  /** Official site HTML signals (og:image, JSON-LD) — strong for imagery/copy when domain aligns. */
+  official_page: 88,
   active: 82,
   runsignup: 78,
-  chronotrack: 65,
   utmb_catalog: 72,
   /** Dated canonical editions + series metadata from curated UTMB ingest (preferred over catalog stubs for merge). */
   utmb_ws: 76,
-  manual: 95,
+  chronotrack: 65,
   mock: 10
 };
 
