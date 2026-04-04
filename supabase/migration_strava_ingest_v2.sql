@@ -1,4 +1,7 @@
 -- Strava ingest v2: distinguish high-signal match queue vs manual-link-only cache; durable race ↔ activity snapshot.
+--
+-- **Required for current app code.** Without `manual_link_only`, PostgREST returns 42703 on sync/backfill
+-- (select/insert/update reference this column). Apply via MIGRATION_ORDER.txt (step including this file).
 
 alter table strava_synced_activities
   add column if not exists manual_link_only boolean not null default false;
