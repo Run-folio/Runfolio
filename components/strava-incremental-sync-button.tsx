@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { syncStravaActivitiesAction } from "@/lib/actions";
 import { usePersistence } from "@/components/persistence-context";
@@ -17,13 +17,15 @@ type Props = {
 
 /**
  * **Incremental sync only** — new Strava activities after the last successful sync.
- * Historical import lives on `/import/past-races`.
+ * Historical import lives on `/my-races` (Import from Strava).
  */
 export function StravaIncrementalSyncButton({ compact, className }: Props) {
   const router = useRouter();
+  const pathname = usePathname() ?? "/dashboard";
   const { persistenceAvailable, reason } = usePersistence();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
+  const [showReconnect, setShowReconnect] = useState(false);
 
   return (
     <div className={cn("flex flex-col items-start gap-2", className)}>
@@ -41,13 +43,15 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
         onClick={() => {
           if (pending) return;
           setMsg(null);
+          setShowReconnect(false);
           start(async () => {
             const res = await syncStravaActivitiesAction();
             if ("error" in res && res.error) {
               let hint = res.error;
               if ("needBackfill" in res && res.needBackfill) {
-                hint = `${res.error} Open Import past race efforts first.`;
+                hint = `${res.error} Open My Races → Import from Strava first.`;
               }
+              setShowReconnect("needStravaReconnect" in res && res.needStravaReconnect === true);
               setMsg(hint);
               return;
             }
@@ -93,9 +97,17 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
         {pending ? "Syncing…" : compact ? "Sync new only" : "Sync new activities from Strava"}
       </Button>
       {msg ? (
-        <p className="max-w-md text-xs text-muted" role="status">
-          {msg}
-        </p>
+        <div className="max-w-md space-y-2 text-xs text-muted" role="status">
+          <p>{msg}</p>
+          {showReconnect ? (
+            <Link
+              href={`/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(pathname)}`}
+              className="font-semibold text-accent underline-offset-4 hover:underline"
+            >
+              Reconnect Strava
+            </Link>
+          ) : null}
+        </div>
       ) : null}
       {!persistenceAvailable && reason ? (
         <p className="max-w-md text-[11px] text-amber-200/90" role="status">

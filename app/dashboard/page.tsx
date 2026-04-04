@@ -204,10 +204,10 @@ export default async function DashboardPage() {
           </div>
           <div className="flex shrink-0 flex-col gap-3 md:items-end">
             <Link
-              href="/matches"
+              href="/my-races"
               className="rounded-[12px] bg-accent px-4 py-2 text-center text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
             >
-              Match &amp; import
+              My Races
             </Link>
             <Link
               href="/races/new"
@@ -248,7 +248,7 @@ export default async function DashboardPage() {
                 </p>
                 <div className="mt-5 flex flex-wrap justify-center gap-4">
                   <Link
-                    href="/matches"
+                    href="/my-races"
                     className="inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-accent hover:underline"
                   >
                     Review Strava matches →
@@ -292,7 +292,7 @@ export default async function DashboardPage() {
               <div className="max-w-xl space-y-2">
                 <p className="type-meta text-sm text-muted">
                   <Link
-                    href="/import/past-races"
+                    href="/my-races#import-strava"
                     className="font-semibold text-accent underline-offset-4 hover:underline"
                   >
                     Import past race efforts
@@ -300,8 +300,8 @@ export default async function DashboardPage() {
                   pulls likely race history from Strava in safe batches and stores it here for matching—no live Strava
                   reads after import. <strong className="font-medium text-white/90">Sync new activities</strong> (below)
                   only fetches what&apos;s new since your last sync. The{" "}
-                  <Link href="/matches" className="font-medium text-accent hover:underline">
-                    Match &amp; import hub
+                  <Link href="/my-races" className="font-medium text-accent hover:underline">
+                    My Races hub
                   </Link>{" "}
                   is where you review and confirm linked finishes permanently in Runfolio.
                 </p>
@@ -319,7 +319,7 @@ export default async function DashboardPage() {
               </div>
               <div className="flex flex-col items-stretch gap-3 sm:items-end">
                 <Link
-                  href="/import/past-races"
+                  href="/my-races#import-strava"
                   className="inline-flex min-h-[40px] items-center justify-center rounded-[12px] bg-accent px-5 text-[11px] font-semibold uppercase tracking-wider text-white transition hover:bg-[#f08a4d]"
                 >
                   Find my race history
@@ -333,14 +333,14 @@ export default async function DashboardPage() {
             />
             <p className="mx-auto max-w-2xl text-center text-[11px] leading-relaxed text-white/45">
               Under 80% confidence we don&apos;t auto-suggest — use{" "}
-              <Link href="/matches#hub-unmatched" className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href="/my-races#my-races-unmatched" className="font-semibold text-accent underline-offset-4 hover:underline">
                 manual linking
               </Link>{" "}
               to search the verified catalog (names, aliases, places) and attach your finish without re-syncing Strava.
             </p>
             <p className="text-center text-[11px] text-muted">
-              <Link href="/matches" className="font-semibold uppercase tracking-[0.12em] text-accent hover:underline">
-                Open full Match &amp; import hub →
+              <Link href="/my-races" className="font-semibold uppercase tracking-[0.12em] text-accent hover:underline">
+                Open full My Races hub →
               </Link>
             </p>
           </section>
@@ -489,7 +489,7 @@ export default async function DashboardPage() {
                   {raceStripStats.totalDistanceKm} km
                 </p>
                 <p className="type-meta mt-1 text-[10px]">
-                  Same strip as Match &amp; Import (persisted sync when available)
+                  Same strip as My Races (persisted sync when available)
                 </p>
               </div>
               <div>

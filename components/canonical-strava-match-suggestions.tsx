@@ -146,8 +146,8 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
               </ul>
               <p className="type-meta mt-2 text-[10px]">
                 Prefer{" "}
-                <Link href="/matches" className="text-accent underline-offset-4 hover:underline">
-                  Match &amp; import
+                <Link href="/my-races" className="text-accent underline-offset-4 hover:underline">
+                  My Races
                 </Link>{" "}
                 to confirm or search manually.
               </p>
@@ -166,8 +166,8 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
         <p className="type-meta mt-2 max-w-2xl text-sm">
           From activities saved when you sync Strava. We only surface catalog links at <strong className="text-white/80">80%+</strong>{" "}
           confidence — everything else belongs in manual linking on{" "}
-          <Link href="/matches" className="font-medium text-accent underline-offset-4 hover:underline">
-            Match &amp; Import
+          <Link href="/my-races" className="font-medium text-accent underline-offset-4 hover:underline">
+            My Races
           </Link>
           .
         </p>
@@ -184,8 +184,8 @@ export function CanonicalStravaMatchSuggestions({ suggestions, returnAfterConfir
       </div>
 
       <p className="text-center text-[11px] text-muted">
-        <Link href="/matches" className="font-semibold uppercase tracking-[0.12em] text-accent hover:underline">
-          Full Match &amp; import hub →
+        <Link href="/my-races" className="font-semibold uppercase tracking-[0.12em] text-accent hover:underline">
+          Open My Races →
         </Link>
         {" · "}Manual search and saved-for-later
       </p>

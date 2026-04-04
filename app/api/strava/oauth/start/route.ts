@@ -1,7 +1,20 @@
 import { NextResponse } from "next/server";
-import { STRAVA_OAUTH_STATE_COOKIE } from "@/lib/strava-cookies";
+import {
+  STRAVA_OAUTH_MODE_COOKIE,
+  STRAVA_OAUTH_NEXT_COOKIE,
+  STRAVA_OAUTH_STATE_COOKIE
+} from "@/lib/strava-cookies";
 import { getStravaClientCredentials, getStravaRedirectUri } from "@/lib/strava-env";
 import { stravaAuthorizeUrl } from "@/lib/strava-oauth";
+import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
+
+const cookieBase = {
+  httpOnly: true,
+  sameSite: "lax" as const,
+  path: "/",
+  secure: process.env.NODE_ENV === "production",
+  maxAge: 600
+};
 
 export async function GET(request: Request) {
   const cred = getStravaClientCredentials();
@@ -12,16 +25,17 @@ export async function GET(request: Request) {
     );
   }
 
+  const reqUrl = new URL(request.url);
+  const nextParam = reqUrl.searchParams.get("next") ?? "/dashboard";
+  const nextPath = parseSafeRedirectPath(nextParam) ?? "/dashboard";
+  const mode = reqUrl.searchParams.get("mode") === "reconnect" ? "reconnect" : "login";
+
   const state = crypto.randomUUID();
   const redirectUri = getStravaRedirectUri(request);
   const authorize = stravaAuthorizeUrl({ clientId: cred.clientId, redirectUri, state });
   const res = NextResponse.redirect(authorize);
-  res.cookies.set(STRAVA_OAUTH_STATE_COOKIE, state, {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 600
-  });
+  res.cookies.set(STRAVA_OAUTH_STATE_COOKIE, state, cookieBase);
+  res.cookies.set(STRAVA_OAUTH_NEXT_COOKIE, nextPath, cookieBase);
+  res.cookies.set(STRAVA_OAUTH_MODE_COOKIE, mode, cookieBase);
   return res;
 }

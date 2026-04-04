@@ -28,16 +28,16 @@ export function StravaFirstTimeBackfillCta() {
         </p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link
-            href="/import/past-races"
+            href="/my-races#import-strava"
             className="inline-flex min-h-[44px] items-center justify-center rounded-[12px] bg-accent px-6 text-[12px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-[#f08a4d]"
           >
             Start backfill
           </Link>
           <Link
-            href="/matches"
+            href="/my-races"
             className="inline-flex min-h-[44px] items-center justify-center rounded-[12px] border border-border bg-panelAlt px-6 text-[12px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-slate-800"
           >
-            Match &amp; import
+            My Races
           </Link>
         </div>
         <p className="mt-4 text-[11px] text-muted">

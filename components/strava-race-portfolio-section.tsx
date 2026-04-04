@@ -63,8 +63,8 @@ export function StravaRacePortfolioSection({
               ? stravaFeedErrorMessage
               : "Strava isn’t connected or the feed couldn’t load."}{" "}
             Hook it up from{" "}
-            <Link href="/matches" className="font-semibold text-accent underline-offset-4 hover:underline">
-              Match &amp; import hub
+            <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
+              My Races
             </Link>
             , the{" "}
             <Link href={buildSetupUrl("/dashboard")} className="font-semibold text-white/85 underline-offset-4 hover:underline">
@@ -106,7 +106,7 @@ export function StravaRacePortfolioSection({
             Live Strava didn&apos;t load this visit
             {stravaFeedErrorMessage ? ` — ${stravaFeedErrorMessage}` : ""}.{" "}
             {hasSyncedStravaRows
-              ? "You still have saved activities from sync — open Match & import for the full list."
+              ? "You still have saved activities from sync — open My Races for the full list."
               : "Run Sync from Strava after reconnecting, or import one activity by URL."}
           </p>
         ) : null}
@@ -117,8 +117,8 @@ export function StravaRacePortfolioSection({
               : "No qualifying efforts in your latest Strava import yet. Sync from Strava (above), then check back."}
           </p>
           <div className="mt-4 flex flex-wrap gap-4">
-            <Link href="/matches" className="text-sm font-semibold uppercase tracking-wider text-accent hover:underline">
-              Match &amp; import hub →
+            <Link href="/my-races" className="text-sm font-semibold uppercase tracking-wider text-accent hover:underline">
+              My Races →
             </Link>
             <Link href="/races/new" className="text-sm font-semibold text-muted hover:text-white">
               One activity by URL →
@@ -176,7 +176,7 @@ export function StravaRacePortfolioSection({
       {usingLiveRacePreviewOnly && layout === "dashboard" ? (
         <p className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100/90">
           This strip is a <strong className="text-white">live Strava preview</strong> — nothing is saved in Runfolio yet.
-          Use <strong className="text-white">Sync from Strava</strong> so Overview and Match &amp; Import share the same
+          Use <strong className="text-white">Sync from Strava</strong> so Overview and My Races share the same
           stored activities.
         </p>
       ) : null}

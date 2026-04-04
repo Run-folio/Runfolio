@@ -118,8 +118,8 @@ export function buildOnboardingProgress(input: BuildInput): OnboardingProgress {
       secondaryCta = { href: "https://supabase.com/dashboard", label: "Open Supabase" };
       break;
     case "sign_in":
-      primaryCta = { href: `/auth/login?next=${encodeURIComponent(loginNext)}`, label: "Sign in" };
-      secondaryCta = { href: `/auth/signup?next=${encodeURIComponent(loginNext)}`, label: "Create account" };
+      primaryCta = { href: `/auth/login?next=${encodeURIComponent(loginNext)}`, label: "Continue with Strava" };
+      secondaryCta = { href: "/races/new", label: "Add a race manually" };
       break;
     case "backend_or_session":
       primaryCta = { href: `/auth/login?next=${encodeURIComponent(loginNext)}`, label: "Sign in again" };
@@ -130,15 +130,18 @@ export function buildOnboardingProgress(input: BuildInput): OnboardingProgress {
       secondaryCta = { href: "/dashboard", label: "Overview" };
       break;
     case "connect_strava":
-      primaryCta = { href: "/api/strava/oauth/start", label: "Connect Strava" };
+      primaryCta = {
+        href: `/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(loginNext)}`,
+        label: "Reconnect Strava"
+      };
       secondaryCta = { href: "/races/new", label: "Skip — add manually" };
       break;
     case "sync_activities":
       primaryCta = null; // client Sync button
-      secondaryCta = { href: "/matches", label: "Open Match & Import" };
+      secondaryCta = { href: "/my-races", label: "Open My Races" };
       break;
     case "match_handoff":
-      primaryCta = { href: "/matches", label: "Open Match & Import" };
+      primaryCta = { href: "/my-races", label: "Open My Races" };
       secondaryCta =
         safeNext && safeNext !== "/setup" && safeNext !== "/dashboard"
           ? { href: safeNext, label: "Back where I was" }

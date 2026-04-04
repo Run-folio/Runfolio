@@ -8,7 +8,6 @@ import { raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { getDiscoverRaceDetail, isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 import { getDiscoverRaceById } from "@/lib/known-race-match";
 import { getRaceByStravaActivityId } from "@/lib/get-race-by-strava-activity";
-import { ensurePublicUserRow } from "@/lib/ensure-public-user-row";
 import { clarifySupabaseError, logSupabaseSchemaIssue } from "@/lib/supabase-user-error";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 import { getEnvPersistenceFailure, requireActionPersistence } from "@/lib/persistence-readiness";
@@ -109,85 +108,6 @@ function profilePublishPayload() {
     profile_approved_at: new Date().toISOString(),
     profile_featured: false
   };
-}
-
-export async function signUpAction(formData: FormData) {
-  const nextPath = parseSafeRedirectPath(String(formData.get("next") ?? "")) ?? "/dashboard";
-  const envBlock = getEnvPersistenceFailure();
-  if (envBlock) {
-    runfolioLog.warn("actions.signUp", "env block", { status: envBlock.status });
-    redirect(
-      `/auth/signup?next=${encodeURIComponent(nextPath)}&setup=${encodeURIComponent(envBlock.status)}`
-    );
-  }
-  try {
-    const email = String(formData.get("email") ?? "");
-    const password = String(formData.get("password") ?? "");
-    const name = String(formData.get("name") ?? "");
-    const supabase = await createClient();
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { name } }
-    });
-    if (error) return { error: dbErr(error) };
-
-    if (data.user) {
-      const metaUser = { ...data.user, user_metadata: { ...data.user.user_metadata, name } };
-      const ensured = await ensurePublicUserRow(supabase, metaUser);
-      if (!ensured.ok) {
-        runfolioLog.error("actions.signUp.usersRow", ensured.error, {
-          code: ensured.code ?? "",
-          userId: data.user.id,
-          hasSession: Boolean(data.session)
-        });
-        if (data.session) {
-          return {
-            error: `Account created but your profile row could not be saved: ${ensured.error}. Check Supabase RLS and the users table, or try signing in again.`
-          };
-        }
-      }
-    }
-    redirect(nextPath);
-  } catch (e) {
-    if (isDynamicServerError(e)) throw e;
-    if (isRedirectError(e)) throw e;
-    runfolioLog.error("actions.signUp", e);
-    return { error: e instanceof Error ? e.message : "Sign up failed unexpectedly." };
-  }
-}
-
-export async function signInAction(formData: FormData) {
-  const nextPath = parseSafeRedirectPath(String(formData.get("next") ?? "")) ?? "/dashboard";
-  const envBlock = getEnvPersistenceFailure();
-  if (envBlock) {
-    runfolioLog.warn("actions.signIn", "env block", { status: envBlock.status });
-    redirect(`/auth/login?next=${encodeURIComponent(nextPath)}&setup=${encodeURIComponent(envBlock.status)}`);
-  }
-  try {
-    const email = String(formData.get("email") ?? "");
-    const password = String(formData.get("password") ?? "");
-    const supabase = await createClient();
-    const { data: signInData, error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) return { error: dbErr(error) };
-    if (signInData.user) {
-      const ensured = await ensurePublicUserRow(supabase, signInData.user);
-      if (!ensured.ok) {
-        runfolioLog.error("actions.signIn.usersRow", ensured.error, {
-          code: ensured.code ?? "",
-          userId: signInData.user.id
-        });
-      }
-    }
-    runfolioLog.info("actions.signIn", "success", { nextPath });
-    redirect(nextPath);
-  } catch (e) {
-    if (isDynamicServerError(e)) throw e;
-    if (isRedirectError(e)) throw e;
-    runfolioLog.error("actions.signIn", e);
-    return { error: e instanceof Error ? e.message : "Sign in failed unexpectedly." };
-  }
 }
 
 export async function createRaceAction(formData: FormData) {
@@ -1125,10 +1045,19 @@ export async function syncStravaActivitiesAction() {
     const res = await syncStravaActivitiesForUserId(user.id, supabase);
     if (!res.ok) {
       await revalidatePortfolioSurfaces(supabase, user.id, {
-        alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/import/past-races"]
+        alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/my-races"]
       });
       if (res.needBackfill) {
         return { error: res.error, needBackfill: true as const };
+      }
+      if ("needStravaReconnect" in res && res.needStravaReconnect) {
+        return {
+          error: res.error,
+          needStravaReconnect: true as const,
+          retryAfterSec: res.retryAfterSec ?? null,
+          requestsMade: res.requestsMade,
+          stravaOauthRefreshCalls: res.stravaOauthRefreshCalls
+        };
       }
       return {
         error: res.error,
@@ -1138,7 +1067,7 @@ export async function syncStravaActivitiesAction() {
       };
     }
     await revalidatePortfolioSurfaces(supabase, user.id, {
-      alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/import/past-races"]
+      alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/my-races"]
     });
     runfolioLog.info("actions.stravaSync", "incremental_ok", {
       upserted: res.upserted,
@@ -1190,8 +1119,17 @@ export async function backfillStravaHistoryAction(formData?: FormData) {
     });
     if (!res.ok) {
       await revalidatePortfolioSurfaces(supabase, user.id, {
-        alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/matches", "/import/past-races"]
+        alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/my-races", "/matches"]
       });
+      if (res.needStravaReconnect) {
+        return {
+          error: res.error,
+          needStravaReconnect: true as const,
+          retryAfterSec: res.retryAfterSec ?? null,
+          requestsMade: res.requestsMade,
+          stravaOauthRefreshCalls: res.stravaOauthRefreshCalls
+        };
+      }
       return {
         error: res.error,
         retryAfterSec: res.retryAfterSec ?? null,
@@ -1200,7 +1138,7 @@ export async function backfillStravaHistoryAction(formData?: FormData) {
       };
     }
     await revalidatePortfolioSurfaces(supabase, user.id, {
-      alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/matches", "/import/past-races"]
+      alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/my-races", "/matches"]
     });
     runfolioLog.info("actions.stravaBackfill", "ok", {
       upserted: res.upserted,
@@ -1330,7 +1268,7 @@ export async function dismissCanonicalStravaMatchAction(formData: FormData) {
     if (!stravaActivityId) return { error: "Missing activity." };
     const res = await dismissCanonicalMatchSuggestion(supabase, user.id, stravaActivityId);
     if (!res.ok) return { error: res.error };
-    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/dashboard", "/matches"] });
+    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/dashboard", "/my-races", "/matches"] });
     return { ok: true as const };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;
@@ -1395,7 +1333,7 @@ export async function unlinkStravaCatalogFinishAction(formData: FormData) {
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
       stravaActivityId,
-      alsoPaths: ["/matches", "/dashboard", `/activities/${stravaActivityId}`, "/bucket-list"]
+      alsoPaths: ["/my-races", "/matches", "/dashboard", `/activities/${stravaActivityId}`, "/bucket-list"]
     });
     return { ok: true as const };
   } catch (e) {
@@ -1632,7 +1570,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
       : `/races/${canonicalRaceId}`;
     await revalidatePortfolioSurfaces(supabase, user.id, {
       stravaActivityId,
-      alsoPaths: [returnTo, "/bucket-list", canonRacePath, "/matches"]
+      alsoPaths: [returnTo, "/bucket-list", canonRacePath, "/my-races", "/matches"]
     });
     if (isJsonResponse) {
       runfolioLog.info("actions.confirmCanonicalStravaMatch.ok", "json response (no redirect)", {

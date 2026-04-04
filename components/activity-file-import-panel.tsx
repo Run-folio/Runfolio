@@ -66,8 +66,8 @@ export function ActivityFileImportPanel({ className }: Props) {
       const w = (o.warnings ?? []).filter(Boolean);
       setMsg(
         w.length
-          ? `Imported. ${w.join(" ")} Open Match & import to link it to a catalog race.`
-          : "Imported. Open Match & import to link it to a catalog race."
+          ? `Imported. ${w.join(" ")} Open My Races to link it to a catalog race.`
+          : "Imported. Open My Races to link it to a catalog race."
       );
     });
   }
@@ -92,8 +92,8 @@ export function ActivityFileImportPanel({ className }: Props) {
           <strong className="font-medium text-white/85">.gpx</strong>, or{" "}
           <strong className="font-medium text-white/85">.tcx</strong> file. We parse distance, time, elevation, and
           route when present, save it like a synced activity, and you can use{" "}
-          <Link href="/matches" className="font-semibold text-accent underline-offset-4 hover:underline">
-            Match &amp; import
+          <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
+            My Races
           </Link>{" "}
           to link the effort to a verified race — same flow as Strava imports.
         </p>
@@ -113,10 +113,10 @@ export function ActivityFileImportPanel({ className }: Props) {
             {pending ? "Importing…" : "Choose file (.fit, .gpx, .tcx)"}
           </Button>
           <Link
-            href="/matches"
+            href="/my-races"
             className="text-[12px] font-semibold uppercase tracking-[0.15em] text-muted hover:text-white"
           >
-            Match &amp; import →
+            My Races →
           </Link>
         </div>
         {err ? (

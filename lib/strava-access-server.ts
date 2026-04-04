@@ -4,11 +4,30 @@ import {
 } from "@/lib/strava-cookies";
 import { getStravaClientCredentials } from "@/lib/strava-env";
 import { refreshStravaAccessToken } from "@/lib/strava-oauth";
+import { createClient } from "@/lib/supabase/server";
+import {
+  getStravaAccessTokenWithoutProactiveRefreshForUser,
+  getValidStravaAccessTokenForUser,
+  userHasStravaCredentials
+} from "@/lib/strava-credentials-db";
 
 /**
- * Valid access token for server-side Strava calls; refreshes using httpOnly cookies when needed.
+ * Valid access token for Strava: uses DB credentials for the signed-in user, then legacy cookies/env.
  */
 export async function getValidStravaAccessToken(): Promise<string | null> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (user?.id) {
+      const fromDb = await getValidStravaAccessTokenForUser(user.id);
+      if (fromDb) return fromDb;
+    }
+  } catch {
+    /* fall through */
+  }
+
   const cred = getStravaClientCredentials();
   const jar = await getStravaTokensFromCookies();
   const envAccess = process.env.STRAVA_ACCESS_TOKEN?.trim();
@@ -25,22 +44,30 @@ export async function getValidStravaAccessToken(): Promise<string | null> {
       await persistStravaTokensToCookies(t);
       access = t.access_token;
     } catch {
-      /* fall through — may still have stale access for one attempt */
+      /* fall through */
     }
   }
 
   return access ?? null;
 }
 
-/**
- * For rate-limit-sensitive flows (historical backfill): return an existing access token without the
- * “refresh 2 minutes before expiry” proactive call. The first Strava HTTP for the user is then typically
- * `GET /athlete/activities`; a 401 triggers refresh inside the list helper instead.
- */
 export async function getStravaAccessTokenWithoutProactiveRefresh(): Promise<{
   token: string | null;
   oauthRefreshCount: number;
 }> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (user?.id) {
+      const fromDb = await getStravaAccessTokenWithoutProactiveRefreshForUser(user.id);
+      if (fromDb.token) return fromDb;
+    }
+  } catch {
+    /* fall through */
+  }
+
   const cred = getStravaClientCredentials();
   const jar = await getStravaTokensFromCookies();
   const envAccess = process.env.STRAVA_ACCESS_TOKEN?.trim();
@@ -67,6 +94,18 @@ export async function getStravaAccessTokenWithoutProactiveRefresh(): Promise<{
 }
 
 export async function hasStravaConnection(): Promise<boolean> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user }
+    } = await supabase.auth.getUser();
+    if (user?.id && (await userHasStravaCredentials(user.id))) {
+      return true;
+    }
+  } catch {
+    /* fall through */
+  }
+
   const jar = await getStravaTokensFromCookies();
   if (jar.accessToken || jar.refreshToken) return true;
   return Boolean(

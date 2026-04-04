@@ -31,10 +31,10 @@ export function RunningProfileCompletedGrid({ races, isOwner }: Props) {
           </p>
           <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <Link
-              href="/matches"
+              href="/my-races"
               className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold hover:text-white"
             >
-              Match &amp; import Strava finishes →
+              My Races →
             </Link>
             <Link
               href="/dashboard"

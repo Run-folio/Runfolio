@@ -47,3 +47,14 @@ export async function persistStravaTokensToCookies(tokens: StravaTokenResponse):
 }
 
 export const STRAVA_OAUTH_STATE_COOKIE = "strava_oauth_state";
+/** Safe internal path after OAuth (see parseSafeRedirectPath). */
+export const STRAVA_OAUTH_NEXT_COOKIE = "strava_oauth_next";
+/** `login` | `reconnect` */
+export const STRAVA_OAUTH_MODE_COOKIE = "strava_oauth_mode";
+
+/** Remove legacy cookie-based Strava tokens (tokens now live in DB per user). */
+export function clearStravaTokenCookiesOnResponse(res: NextResponse): void {
+  res.cookies.delete(ACCESS);
+  res.cookies.delete(REFRESH);
+  res.cookies.delete(EXPIRES);
+}

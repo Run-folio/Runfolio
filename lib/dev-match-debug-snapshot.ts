@@ -8,7 +8,7 @@ import { loadUserStravaOverviewState } from "@/lib/strava-user-overview";
 import type { Race } from "@/types";
 
 export type DevMatchDebugSnapshot = {
-  page: "dashboard" | "matches" | "profile";
+  page: "dashboard" | "matches" | "my-races" | "profile";
   importedActivitiesCount: number;
   suggestedMatchesCount: number;
   confirmedMatchesCount: number;

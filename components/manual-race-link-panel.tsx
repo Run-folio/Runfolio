@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { confirmCanonicalStravaMatchAction, unlinkStravaCatalogFinishAction } from "@/lib/actions";
 import type { ManualRaceSoftHint } from "@/lib/match-hub/manual-link-hints";
 import type { SearchableRaceRow } from "@/lib/races/canonical/types";
@@ -38,7 +38,7 @@ type Props = {
   /** When set, parent handles submit (e.g. Match hub banner + refresh). */
   onConfirm?: (fd: FormData, stravaActivityId: string) => void;
   pending?: boolean;
-  /** `hub` → Match & Import; `page` → activity story (JSON, no redirect). */
+  /** `hub` → My Races / queue refresh; `page` → activity story (JSON, no redirect). */
   responseMode: "hub" | "page";
   returnTo: string;
   onNotRace: () => void;
@@ -48,6 +48,8 @@ type Props = {
   /** After successful unlink (e.g. reopen linking UI on activity page). */
   onUnlinked?: () => void;
   className?: string;
+  /** Mobile-first My Races: large primary actions, less explanatory copy. */
+  compact?: boolean;
 };
 
 export function ManualRaceLinkPanel({
@@ -61,9 +63,11 @@ export function ManualRaceLinkPanel({
   onSnooze,
   showUnlink,
   onUnlinked,
-  className
+  className,
+  compact
 }: Props) {
   const router = useRouter();
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<SearchableRaceRow[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -171,10 +175,12 @@ export function ManualRaceLinkPanel({
   };
 
   return (
-    <Card className={cn("border border-white/12 bg-panel/35 p-5", className)}>
+    <Card className={cn("border border-white/12 bg-panel/35 p-4 sm:p-5", className)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">Link to race</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent">
+            {compact ? "Unmatched" : "Link to race"}
+          </p>
           <p className="mt-1 font-semibold text-white">{ctx.activityTitle}</p>
           <p className="type-meta mt-1 text-sm text-muted">{statLine}</p>
         </div>
@@ -185,6 +191,29 @@ export function ManualRaceLinkPanel({
         ) : null}
       </div>
 
+      {compact ? (
+        <div className="mt-4 flex flex-col gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            disabled={pending}
+            className="min-h-[48px] w-full text-[13px] font-semibold uppercase tracking-[0.08em]"
+            onClick={() => searchInputRef.current?.focus()}
+          >
+            Match race
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            className="min-h-[48px] w-full border-white/20 bg-white/[0.06] text-[13px] font-semibold uppercase tracking-[0.08em]"
+            onClick={onNotRace}
+          >
+            Not a race
+          </Button>
+        </div>
+      ) : null}
+
       {localErr ? (
         <p className="mt-3 text-sm text-red-300" role="alert">
           {localErr}
@@ -194,10 +223,12 @@ export function ManualRaceLinkPanel({
       {softSuggestions.length > 0 ? (
         <div className="mt-5 rounded-xl border border-white/10 bg-black/25 px-4 py-4">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-white/50">Possible matches</p>
-          <p className="type-meta mt-1 text-xs text-white/45">
-            Based on your activity date, distance, and location — under {CANONICAL_SUGGESTED_HIGH_MIN_SCORE}% so we don&apos;t auto-claim. Pick one only if
-            it&apos;s correct.
-          </p>
+          {!compact ? (
+            <p className="type-meta mt-1 text-xs text-white/45">
+              Based on your activity date, distance, and location — under {CANONICAL_SUGGESTED_HIGH_MIN_SCORE}% so we don&apos;t auto-claim. Pick one only if
+              it&apos;s correct.
+            </p>
+          ) : null}
           <ul className="mt-3 space-y-3">
             {softSuggestions.map((h) => (
               <li key={h.canonicalRaceId} className="rounded-lg border border-white/8 bg-white/[0.03] px-3 py-3">
@@ -205,7 +236,7 @@ export function ManualRaceLinkPanel({
                   <div className="min-w-0">
                     <p className="font-medium text-white">{h.name}</p>
                     <p className="type-meta mt-1 text-[11px] text-muted">{h.subtitle}</p>
-                    <p className="mt-1 text-[10px] tabular-nums text-white/40">Rough fit · {Math.round(h.score)}%</p>
+                    {!compact ? <p className="mt-1 text-[10px] tabular-nums text-white/40">Rough fit · {Math.round(h.score)}%</p> : null}
                   </div>
                   <form
                     onSubmit={(ev) => {
@@ -234,6 +265,7 @@ export function ManualRaceLinkPanel({
         <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Search verified catalog</p>
         <div className="flex flex-wrap gap-2">
           <Input
+            ref={searchInputRef}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="Race name, city, country, or abbreviation…"
@@ -244,7 +276,7 @@ export function ManualRaceLinkPanel({
             {searching ? "…" : "Search"}
           </Button>
         </div>
-        <p className="text-[11px] text-white/35">Results favor editions near your activity date (±3 weeks).</p>
+        {!compact ? <p className="text-[11px] text-white/35">Results favor editions near your activity date (±3 weeks).</p> : null}
         {searchErr ? <p className="text-xs text-amber-200/90">{searchErr}</p> : null}
         {hits && hits.length === 0 && debouncedQ.length >= 2 && !searching ? (
           <p className="text-xs text-white/45">No hits — try another spelling or browse the full library.</p>
@@ -295,18 +327,38 @@ export function ManualRaceLinkPanel({
         ) : null}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/10 pt-4 text-[11px]">
-        <Button type="button" variant="ghost" disabled={pending} className="text-white/55" onClick={onNotRace}>
-          Not a race
-        </Button>
-        <Button type="button" variant="ghost" disabled={pending} onClick={onSnooze}>
-          Save for later
-        </Button>
-        <Link href="/races/find" className="font-semibold uppercase tracking-wider text-accent hover:underline">
+      <div
+        className={cn(
+          "mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-white/10 pt-4 text-[11px]",
+          compact && "flex-col items-stretch"
+        )}
+      >
+        {!compact ? (
+          <>
+            <Button type="button" variant="ghost" disabled={pending} className="text-white/55" onClick={onNotRace}>
+              Not a race
+            </Button>
+            <Button type="button" variant="ghost" disabled={pending} onClick={onSnooze}>
+              Save for later
+            </Button>
+          </>
+        ) : (
+          <Button type="button" variant="ghost" disabled={pending} className="min-h-[44px] w-full text-white/70" onClick={onSnooze}>
+            Save for later
+          </Button>
+        )}
+        <Link
+          href="/races/find"
+          className={cn("font-semibold uppercase tracking-wider text-accent hover:underline", compact && "min-h-[44px] text-center")}
+        >
           Browse library
         </Link>
-        <span className="text-white/30">·</span>
-        <span className="text-white/40">Can&apos;t find your event? Library search may still list it under another name.</span>
+        {!compact ? (
+          <>
+            <span className="text-white/30">·</span>
+            <span className="text-white/40">Can&apos;t find your event? Library search may still list it under another name.</span>
+          </>
+        ) : null}
       </div>
     </Card>
   );

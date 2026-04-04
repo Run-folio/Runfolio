@@ -1,5 +1,8 @@
-/** Scopes needed for GET /activities/:id on the authenticated athlete’s activities. */
-export const STRAVA_AUTH_SCOPES = ["activity:read", "activity:read_all"].join(",");
+/**
+ * `read` — athlete profile (avatar URL on GET /athlete).
+ * `activity:read` + `activity:read_all` — list/read activities.
+ */
+export const STRAVA_AUTH_SCOPES = ["read", "activity:read", "activity:read_all"].join(",");
 
 export type StravaTokenResponse = {
   token_type: string;
@@ -7,6 +10,11 @@ export type StravaTokenResponse = {
   expires_in: number;
   refresh_token: string;
   access_token: string;
+  /** Present on authorization_code exchange; includes avatar URLs. */
+  athlete?: {
+    profile_medium?: string | null;
+    profile?: string | null;
+  };
 };
 
 export async function exchangeStravaCode(

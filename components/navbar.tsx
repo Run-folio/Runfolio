@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useTransition, type MouseEvent } from "react";
+import { useCallback, useState, useTransition, type MouseEvent } from "react";
 import { signOutAction } from "@/lib/sign-out-action";
 import { usePersistence } from "@/components/persistence-context";
 import { buildSetupUrl } from "@/lib/setup-url";
@@ -12,8 +12,7 @@ import { cn } from "@/lib/utils";
 
 const links = [
   { href: "/dashboard", label: "Overview" },
-  { href: "/matches", label: "Match & import" },
-  { href: "/import/past-races", label: "Past races" },
+  { href: "/my-races", label: "My Races" },
   { href: "/races/new", label: "Add race" },
   { href: "/races/find", label: "Find a race" },
   { href: "/compare", label: "Compare" },
@@ -26,8 +25,7 @@ function isNavActive(pathname: string | null, href: string) {
   if (pathname === href) return true;
   if (href === "/collections") return pathname.startsWith("/collections");
   if (href === "/dashboard") return pathname === "/dashboard";
-  if (href === "/matches") return pathname === "/matches" || pathname.startsWith("/matches/");
-  if (href === "/import/past-races") return pathname === "/import/past-races" || pathname.startsWith("/import/");
+  if (href === "/my-races") return pathname === "/my-races" || pathname.startsWith("/my-races/");
   if (href === "/compare") return pathname === "/compare";
   return pathname.startsWith(`${href}/`);
 }
@@ -36,11 +34,23 @@ type NavbarProps = {
   /** Public profile URL, e.g. /Alex%20Thompson */
   profileHref: string;
   profileInitial: string;
+  /** Strava `profile_medium` URL when saved on `users.strava_profile_url`. */
+  profileImageUrl?: string | null;
 };
 
-function ProfileNavAvatar({ profileHref, profileInitial }: { profileHref: string; profileInitial: string }) {
+function ProfileNavAvatar({
+  profileHref,
+  profileInitial,
+  profileImageUrl
+}: {
+  profileHref: string;
+  profileInitial: string;
+  profileImageUrl?: string | null;
+}) {
   const router = useRouter();
   const [navPending, startNavTransition] = useTransition();
+  const [imgFailed, setImgFailed] = useState(false);
+  const showPhoto = Boolean(profileImageUrl?.trim()) && !imgFailed;
 
   const onClick = useCallback(
     (e: MouseEvent<HTMLAnchorElement>) => {
@@ -59,7 +69,7 @@ function ProfileNavAvatar({ profileHref, profileInitial }: { profileHref: string
     <a
       href={profileHref}
       className={cn(
-        "flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-full border border-accent/50 bg-panelAlt font-display text-sm font-semibold text-white ring-1 ring-white/10 transition hover:border-accent",
+        "relative flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-accent/50 bg-panelAlt font-display text-sm font-semibold text-white ring-1 ring-white/10 transition hover:border-accent",
         navPending && "pointer-events-none opacity-60"
       )}
       title="Your public profile"
@@ -67,12 +77,23 @@ function ProfileNavAvatar({ profileHref, profileInitial }: { profileHref: string
       aria-busy={navPending}
       onClick={onClick}
     >
-      {profileInitial}
+      {showPhoto ? (
+        <img
+          src={profileImageUrl!}
+          alt=""
+          width={36}
+          height={36}
+          className="h-full w-full object-cover"
+          onError={() => setImgFailed(true)}
+        />
+      ) : (
+        profileInitial
+      )}
     </a>
   );
 }
 
-export function Navbar({ profileHref, profileInitial }: NavbarProps) {
+export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarProps) {
   const pathname = usePathname();
   const { canPersist, reason, status, message, ctaHref, ctaLabel } = usePersistence();
   const hidePersistenceBanner =
@@ -144,7 +165,7 @@ export function Navbar({ profileHref, profileInitial }: NavbarProps) {
               Setup
             </Link>
           ) : null}
-          <ProfileNavAvatar profileHref={profileHref} profileInitial={profileInitial} />
+          <ProfileNavAvatar profileHref={profileHref} profileInitial={profileInitial} profileImageUrl={profileImageUrl} />
           <form action={signOutAction}>
             <Button variant="secondary" className="px-3 py-1.5 text-[10px] uppercase tracking-[0.15em]" type="submit">
               Log out

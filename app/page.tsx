@@ -18,11 +18,11 @@ export default function HomePage() {
             Curate your most meaningful races, import your history, and share a public profile that honors your effort.
           </p>
           <div className="mt-12 flex flex-wrap justify-center gap-4">
-            <Link href="/auth/signup">
-              <Button>Start your Runfolio</Button>
+            <Link href="/api/strava/oauth/start?next=%2Fdashboard">
+              <Button>Continue with Strava</Button>
             </Link>
             <Link href="/auth/login">
-              <Button variant="secondary">Log in</Button>
+              <Button variant="secondary">Sign in</Button>
             </Link>
           </div>
         </div>

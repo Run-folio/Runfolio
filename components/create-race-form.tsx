@@ -277,10 +277,10 @@ export function CreateRaceForm({
         <Card className="mb-5 border border-amber-400/25 bg-amber-950/20 p-4">
           <p className="text-sm leading-relaxed text-white/85">
             <span className="font-semibold text-amber-100/95">Batch Strava race review?</span> The{" "}
-            <Link href="/matches" className="font-semibold text-accent underline-offset-4 hover:underline">
-              Match &amp; import hub
+            <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
+              My Races
             </Link>{" "}
-            is the main place to confirm smart matches, clear rejects, and manually link verified events. Use this
+            page is the main place to confirm smart matches, clear rejects, and manually link verified events. Use this
             page for a one-off add.
           </p>
         </Card>

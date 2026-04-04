@@ -20,7 +20,7 @@ export function SetupFlowContent({ persistence, progress, safeNext }: Props) {
       <div className="rounded-2xl border border-white/[0.06] bg-[#070a10] p-6 md:p-8">
         <SetupStepper steps={steps} />
         <p className="type-meta mx-auto mt-6 max-w-xl text-center text-sm text-white/45">
-          A few short steps — then bucket goals, Strava imports, and Match &amp; Import all stay in sync with your
+          A few short steps — then bucket goals, Strava imports, and My Races all stay in sync with your
           public story.
         </p>
       </div>
@@ -62,7 +62,7 @@ export function SetupFlowContent({ persistence, progress, safeNext }: Props) {
           secondary={
             secondaryCta
               ? { href: secondaryCta.href, label: secondaryCta.label }
-              : { href: `/auth/signup?next=${encodeURIComponent(buildSetupUrl(safeNext))}`, label: "Create account" }
+              : { href: "/races/new", label: "Add a race manually" }
           }
         >
           <p>
@@ -104,7 +104,10 @@ export function SetupFlowContent({ persistence, progress, safeNext }: Props) {
           title="Connect Strava"
           primary={
             stravaOAuthConfigured
-              ? { href: "/api/strava/oauth/start", label: "Connect Strava" }
+              ? {
+                  href: `/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(buildSetupUrl(safeNext))}`,
+                  label: "Connect Strava"
+                }
               : undefined
           }
           secondary={
@@ -114,7 +117,7 @@ export function SetupFlowContent({ persistence, progress, safeNext }: Props) {
           }
         >
           <p>
-            Strava is how we spot long race efforts and suggest verified finishes — so Match &amp; Import stays fast,
+            Strava is how we spot long race efforts and suggest verified finishes — so My Races stays fast,
             and your portfolio reflects what you actually ran.
           </p>
           {!stravaOAuthConfigured ? (
@@ -152,21 +155,21 @@ export function SetupFlowContent({ persistence, progress, safeNext }: Props) {
           variant="success"
           eyebrow="You&apos;re set"
           title="Review matches & build your story"
-          primary={primaryCta ?? { href: "/matches", label: "Open Match & Import" }}
+          primary={primaryCta ?? { href: "/my-races", label: "Open My Races" }}
           secondary={
-            secondaryCta && safeNext !== "/matches"
+            secondaryCta && safeNext !== "/my-races"
               ? { href: secondaryCta.href, label: secondaryCta.label }
               : { href: "/bucket-list", label: "Bucket list" }
           }
         >
           <p>
-            Match &amp; Import is where long efforts become verified finishes. Confirm a race, and it moves into your
+            My Races is where long efforts become verified finishes. Confirm a race, and it moves into your
             completed collection — ready for your public profile.
           </p>
           {progress.syncedActivityCount > 0 ? (
             <p className="text-emerald-100/80">
               You have <strong className="text-white">{progress.syncedActivityCount}</strong> Strava activities stored —
-              head to Match &amp; Import to review the queue.
+              head to My Races to review the queue.
             </p>
           ) : !stravaOAuthConfigured ? (
             <p className="text-white/60">

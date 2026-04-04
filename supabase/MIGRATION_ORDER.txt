@@ -23,6 +23,8 @@ Run these SQL files in the Supabase SQL editor for your project, in this exact o
 21. migration_activity_file_source.sql — `activity_source` on `strava_synced_activities` (strava | garmin_file | manual_file)
 22. migration_canonical_enrichment_pipeline.sql — enrichment columns on `canonical_races` + `canonical_enrichment_jobs` queue
 23. migration_canonical_curation_meta.sql — `curation_meta` jsonb on `canonical_races` for internal race-ops tooling
+24. migration_users_strava_profile_url.sql — `strava_profile_url` on `users` (Strava avatar)
+25. migration_strava_oauth_auth.sql — `strava_athlete_id` on `users`, `strava_user_credentials` (tokens; service role only)
 
 After running, the public schema must include at least:
 - users, races, activities (optional legacy), activity_race_links (optional)
@@ -40,5 +42,7 @@ the base schema.sql (step 1) has not been applied to this Supabase project.
 - `activity_source`: `migration_activity_file_source.sql`
 - `match_hub_status`: `migration_match_hub.sql`
 - `profile_include`: `migration_runner_profile_identity.sql`
+
+**Production repair (several columns missing at once):** run `migration_strava_synced_additive_columns_bundle.sql` in the SQL Editor — idempotent bundle of the four columns above + indexes + `races.linked_activity_snapshot`.
 
 **What breaks without `user_strava_ingest_state`:** historical backfill and incremental Strava sync refuse to run (clear error), since cursors cannot be saved—you would re-fetch overlapping history and risk duplicative work and rate limits. The app detects a missing table and surfaces `supabase/migration_strava_ingest_state.sql` in the UI message.

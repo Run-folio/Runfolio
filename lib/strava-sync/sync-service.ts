@@ -37,15 +37,12 @@ import {
   upsertStravaSummariesForUser,
   type SyncSummary
 } from "@/lib/strava-sync/repository";
-import {
-  getStravaAccessTokenWithoutProactiveRefresh,
-  getValidStravaAccessToken
-} from "@/lib/strava-access-server";
 import { createClient } from "@/lib/supabase/server";
-import { refreshStravaAccessToken } from "@/lib/strava-oauth";
-import { persistStravaTokensToCookies } from "@/lib/strava-cookies";
-import { getStravaClientCredentials } from "@/lib/strava-env";
-import { getStravaTokensFromCookies } from "@/lib/strava-cookies";
+import {
+  getStravaAccessTokenWithoutProactiveRefreshForUser,
+  getValidStravaAccessTokenForUser,
+  refreshStravaAccessTokenForUser
+} from "@/lib/strava-credentials-db";
 import {
   tryFetchStravaAthleteActivitiesPage,
   type StravaAthleteActivitiesPageResult,
@@ -53,6 +50,7 @@ import {
 } from "@/lib/strava-api";
 import { classifyStrava429FromHeaders, logStrava429Classification } from "@/lib/strava-rate-limit";
 import { runfolioLog } from "@/lib/runfolio-log";
+import { ensureUserStravaProfileUrl } from "@/lib/strava-user-profile";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const AFTER_OVERLAP_SEC = 7200;
@@ -151,7 +149,8 @@ type AthleteListFetchMetrics = {
 
 async function fetchAthleteActivitiesPageWithRefresh(
   accessToken: string,
-  listOpts: { page: number; perPage: number; after?: number; before?: number }
+  listOpts: { page: number; perPage: number; after?: number; before?: number },
+  userId: string
 ): Promise<AthleteListFetchMetrics> {
   let athleteActivitiesListHttpCalls = 0;
   let oauthTokenRefreshCalls = 0;
@@ -160,33 +159,25 @@ async function fetchAthleteActivitiesPageWithRefresh(
   athleteActivitiesListHttpCalls++;
 
   if (!r.ok && r.kind === "unauthorized") {
-    const cred = getStravaClientCredentials();
-    const jar = await getStravaTokensFromCookies();
-    const refresh = jar.refreshToken ?? process.env.STRAVA_REFRESH_TOKEN?.trim();
-    if (cred && refresh) {
-      try {
-        const t = await refreshStravaAccessToken(refresh, cred.clientId, cred.clientSecret);
-        oauthTokenRefreshCalls++;
-        await persistStravaTokensToCookies(t);
-        r = await tryFetchStravaAthleteActivitiesPage(t.access_token, listOpts);
-        athleteActivitiesListHttpCalls++;
-      } catch (e2) {
-        runfolioLog.warn("strava.sync", "refresh failed", {
-          detail: e2 instanceof Error ? e2.message : "unknown"
-        });
-        return {
-          result: {
-            ok: false,
-            httpStatus: 401,
-            kind: "unauthorized",
-            message: "Strava session expired — reconnect.",
-            retryAfterSec: null,
-            rateLimitHeaders: {}
-          },
-          athleteActivitiesListHttpCalls,
-          oauthTokenRefreshCalls
-        };
-      }
+    const refreshed = await refreshStravaAccessTokenForUser(userId);
+    oauthTokenRefreshCalls++;
+    if (refreshed) {
+      r = await tryFetchStravaAthleteActivitiesPage(refreshed, listOpts);
+      athleteActivitiesListHttpCalls++;
+    } else {
+      runfolioLog.warn("strava.sync", "refresh failed after 401", { userId });
+      return {
+        result: {
+          ok: false,
+          httpStatus: 401,
+          kind: "unauthorized",
+          message: "Strava session expired — reconnect Strava from My Races or Overview.",
+          retryAfterSec: null,
+          rateLimitHeaders: {}
+        },
+        athleteActivitiesListHttpCalls,
+        oauthTokenRefreshCalls
+      };
     }
   }
 
@@ -208,6 +199,7 @@ export type IncrementalSyncResult =
       ok: false;
       error: string;
       needBackfill?: boolean;
+      needStravaReconnect?: boolean;
       requestsMade?: number;
       stravaOauthRefreshCalls?: number;
       retryAfterSec?: number | null;
@@ -269,18 +261,25 @@ async function runIncrementalSync(userId: string, supabaseClient?: SupabaseClien
   let rateLimitSnap: { headers: Record<string, string>; retryAfterSec: number | null } | null = null;
 
   for (let page = 1; page <= INCREMENTAL_MAX_PAGES; page++) {
-    const token = await getValidStravaAccessToken();
+    const token = await getValidStravaAccessTokenForUser(userId);
     if (!token) {
-      await recordIngestError(supabase, userId, "Connect Strava first.");
-      return { ok: false, error: "Connect Strava first." };
+      await recordIngestError(supabase, userId, "Connect Strava first — use Continue with Strava to sign in.");
+      return { ok: false, error: "Connect Strava first — use My Races or Overview to reconnect.", needStravaReconnect: true };
     }
 
+    if (page === 1) {
+      await ensureUserStravaProfileUrl(supabase, userId, token);
+    }
     const { result: r, athleteActivitiesListHttpCalls, oauthTokenRefreshCalls } =
-      await fetchAthleteActivitiesPageWithRefresh(token, {
-        page,
-        perPage: PER_PAGE,
-        after: afterEpoch
-      });
+      await fetchAthleteActivitiesPageWithRefresh(
+        token,
+        {
+          page,
+          perPage: PER_PAGE,
+          after: afterEpoch
+        },
+        userId
+      );
     requestsMade += athleteActivitiesListHttpCalls;
     stravaOauthRefreshCalls += oauthTokenRefreshCalls;
 
@@ -408,6 +407,7 @@ export type BackfillSyncResult =
   | {
       ok: false;
       error: string;
+      needStravaReconnect?: boolean;
       requestsMade?: number;
       stravaOauthRefreshCalls?: number;
       retryAfterSec?: number | null;
@@ -459,26 +459,38 @@ async function runBackfillJumpScan(
     let token: string | null = null;
     let oauthBeforeList = 0;
     if (page === 1) {
-      const t = await getStravaAccessTokenWithoutProactiveRefresh();
+      const t = await getStravaAccessTokenWithoutProactiveRefreshForUser(userId);
       token = t.token;
       oauthBeforeList = t.oauthRefreshCount;
     } else {
-      token = await getValidStravaAccessToken();
+      token = await getValidStravaAccessTokenForUser(userId);
     }
     stravaOauthRefreshCalls += oauthBeforeList;
 
     if (!token) {
       await recordIngestError(supabase, userId, "Connect Strava first.");
-      return { ok: false, error: "Connect Strava first.", stravaOauthRefreshCalls };
+      return {
+        ok: false,
+        error: "Connect Strava first — reconnect from My Races or Overview.",
+        stravaOauthRefreshCalls,
+        needStravaReconnect: true
+      };
     }
 
+    if (page === 1) {
+      await ensureUserStravaProfileUrl(supabase, userId, token);
+    }
     const { result: r, athleteActivitiesListHttpCalls, oauthTokenRefreshCalls } =
-      await fetchAthleteActivitiesPageWithRefresh(token, {
-        page,
-        perPage: PER_PAGE,
-        before: beforeEpoch,
-        after: afterEpoch
-      });
+      await fetchAthleteActivitiesPageWithRefresh(
+        token,
+        {
+          page,
+          perPage: PER_PAGE,
+          before: beforeEpoch,
+          after: afterEpoch
+        },
+        userId
+      );
     requestsMade += athleteActivitiesListHttpCalls;
     stravaOauthRefreshCalls += oauthTokenRefreshCalls;
 
@@ -646,26 +658,38 @@ async function runBackfillStravaHistory(
     let token: string | null = null;
     let oauthBeforeList = 0;
     if (page === 1) {
-      const t = await getStravaAccessTokenWithoutProactiveRefresh();
+      const t = await getStravaAccessTokenWithoutProactiveRefreshForUser(userId);
       token = t.token;
       oauthBeforeList = t.oauthRefreshCount;
     } else {
-      token = await getValidStravaAccessToken();
+      token = await getValidStravaAccessTokenForUser(userId);
     }
     stravaOauthRefreshCalls += oauthBeforeList;
 
     if (!token) {
       await recordIngestError(supabase, userId, "Connect Strava first.");
-      return { ok: false, error: "Connect Strava first.", stravaOauthRefreshCalls };
+      return {
+        ok: false,
+        error: "Connect Strava first — reconnect from My Races or Overview.",
+        stravaOauthRefreshCalls,
+        needStravaReconnect: true
+      };
     }
 
+    if (page === 1) {
+      await ensureUserStravaProfileUrl(supabase, userId, token);
+    }
     const { result: r, athleteActivitiesListHttpCalls, oauthTokenRefreshCalls } =
-      await fetchAthleteActivitiesPageWithRefresh(token, {
-        page,
-        perPage: PER_PAGE,
-        ...(before != null ? { before } : {}),
-        ...(afterEpoch != null ? { after: afterEpoch } : {})
-      });
+      await fetchAthleteActivitiesPageWithRefresh(
+        token,
+        {
+          page,
+          perPage: PER_PAGE,
+          ...(before != null ? { before } : {}),
+          ...(afterEpoch != null ? { after: afterEpoch } : {})
+        },
+        userId
+      );
     requestsMade += athleteActivitiesListHttpCalls;
     stravaOauthRefreshCalls += oauthTokenRefreshCalls;
 

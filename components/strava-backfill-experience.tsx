@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useMemo, useState, useTransition } from "react";
 import { backfillStravaHistoryAction } from "@/lib/actions";
 import type {
@@ -40,7 +40,7 @@ const PHASE_UI: Record<
   partial: {
     title: "Partially imported",
     description:
-      "Some history is already saved. Keep going to walk further back in time, or jump to Match & Import to review what you have.",
+      "Some history is already saved. Keep going to walk further back in time, or open My Races to review what you have.",
     badgeClass: "border-amber-400/35 bg-amber-500/12 text-amber-50"
   },
   complete: {
@@ -119,13 +119,17 @@ function formatWhen(iso: string | null): string | null {
 type Props = {
   initialProgress: StravaBackfillProgress;
   stravaOAuthConfigured: boolean;
+  /** My Races: strip long copy; action-first import strip. */
+  compact?: boolean;
 };
 
-export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigured }: Props) {
+export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigured, compact = false }: Props) {
   const router = useRouter();
+  const pathname = usePathname() ?? "/my-races";
   const { persistenceAvailable, reason } = usePersistence();
   const [pending, start] = useTransition();
   const [banner, setBanner] = useState<string | null>(null);
+  const [showBackfillReconnect, setShowBackfillReconnect] = useState(false);
   const [lastBatchSummary, setLastBatchSummary] = useState<BackfillBatchSummary | null>(null);
   /** Batch “completed” = Strava pages were fetched and evaluated, even when 0 activities were saved. */
   const hasStartedBackfill = useMemo(
@@ -172,10 +176,12 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
   const runImport = () => {
     if (pending) return;
     setBanner(null);
+    setShowBackfillReconnect(false);
     start(async () => {
       const res = await backfillStravaHistoryAction();
       if ("error" in res && res.error) {
         setLastBatchSummary(null);
+        setShowBackfillReconnect("needStravaReconnect" in res && res.needStravaReconnect === true);
         setBanner(res.error);
         return;
       }
@@ -208,12 +214,14 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
   const runJumpScan = (preset: StravaBackfillJumpPreset) => {
     if (pending) return;
     setBanner(null);
+    setShowBackfillReconnect(false);
     start(async () => {
       const fd = new FormData();
       fd.set("jump_preset", preset);
       const res = await backfillStravaHistoryAction(fd);
       if ("error" in res && res.error) {
         setLastBatchSummary(null);
+        setShowBackfillReconnect("needStravaReconnect" in res && res.needStravaReconnect === true);
         setBanner(res.error);
         return;
       }
@@ -244,50 +252,56 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
   };
 
   return (
-    <div className="space-y-10">
-      <header className="space-y-4">
-        <p className="type-eyebrow text-accent">Strava · Race history</p>
-        <h1 className="font-display text-4xl font-normal tracking-tight text-white md:text-5xl">
-          Import past race efforts
-        </h1>
-        <p className="max-w-2xl text-base leading-relaxed text-white/70">
-          Import likely race efforts from your Strava history. We&apos;ll save them in Runfolio for matching and review at
-          full quality—no need to keep calling Strava for what&apos;s already imported. Ongoing{" "}
-          <strong className="font-medium text-white/85">sync</strong> only checks for{" "}
-          <strong className="font-medium text-white/85">new</strong> activities after your last successful sync.
-        </p>
-      </header>
+    <div className={cn("space-y-10", compact && "space-y-6")}>
+      {compact ? (
+        <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Import from Strava</h2>
+      ) : (
+        <header className="space-y-4">
+          <p className="type-eyebrow text-accent">Strava · Race history</p>
+          <h1 className="font-display text-4xl font-normal tracking-tight text-white md:text-5xl">
+            Import past race efforts
+          </h1>
+          <p className="max-w-2xl text-base leading-relaxed text-white/70">
+            Import likely race efforts from your Strava history. We&apos;ll save them in Runfolio for matching and review at
+            full quality—no need to keep calling Strava for what&apos;s already imported. Ongoing{" "}
+            <strong className="font-medium text-white/85">sync</strong> only checks for{" "}
+            <strong className="font-medium text-white/85">new</strong> activities after your last successful sync.
+          </p>
+        </header>
+      )}
 
-      <section
-        className="rounded-[14px] border border-sky-400/25 bg-sky-500/[0.07] p-5 md:p-6"
-        aria-labelledby="backfill-expectations-heading"
-      >
-        <h2 id="backfill-expectations-heading" className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-200/90">
-          What to expect
-        </h2>
-        <ul className="mt-3 list-inside list-disc space-y-2 text-sm leading-relaxed text-white/75 marker:text-sky-300">
-          <li>
-            Backfill is intentionally selective: we import <strong className="text-white/90">likely races first</strong>{" "}
-            (long runs and clear signals)—not every run in your Strava history.
-          </li>
-          <li>
-            Shorter or low-key efforts may <strong className="text-white/90">not</strong> appear automatically. That keeps
-            rate limits and matching noise under control.
-          </li>
-          <li>
-            You can still <strong className="text-white/90">link any saved activity</strong> from a{" "}
-            <Link href="/races/find" className="font-semibold text-accent underline-offset-4 hover:underline">
-              verified race page
-            </Link>{" "}
-            (broader distance rules than backfill) or use{" "}
-            <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
-              Add race
-            </Link>{" "}
-            with a Strava URL. <strong className="text-white/90">Sync new activities</strong> also uses a wider import bar
-            for fresh efforts.
-          </li>
-        </ul>
-      </section>
+      {!compact ? (
+        <section
+          className="rounded-[14px] border border-sky-400/25 bg-sky-500/[0.07] p-5 md:p-6"
+          aria-labelledby="backfill-expectations-heading"
+        >
+          <h2 id="backfill-expectations-heading" className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-200/90">
+            What to expect
+          </h2>
+          <ul className="mt-3 list-inside list-disc space-y-2 text-sm leading-relaxed text-white/75 marker:text-sky-300">
+            <li>
+              Backfill is intentionally selective: we import <strong className="text-white/90">likely races first</strong>{" "}
+              (long runs and clear signals)—not every run in your Strava history.
+            </li>
+            <li>
+              Shorter or low-key efforts may <strong className="text-white/90">not</strong> appear automatically. That keeps
+              rate limits and matching noise under control.
+            </li>
+            <li>
+              You can still <strong className="text-white/90">link any saved activity</strong> from a{" "}
+              <Link href="/races/find" className="font-semibold text-accent underline-offset-4 hover:underline">
+                verified race page
+              </Link>{" "}
+              (broader distance rules than backfill) or use{" "}
+              <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
+                Add race
+              </Link>{" "}
+              with a Strava URL. <strong className="text-white/90">Sync new activities</strong> also uses a wider import bar
+              for fresh efforts.
+            </li>
+          </ul>
+        </section>
+      ) : null}
 
       {!stravaOAuthConfigured ? (
         <div className="rounded-[14px] border border-amber-400/30 bg-amber-500/10 px-5 py-4 text-sm text-amber-50/95">
@@ -300,14 +314,14 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
       {!persistenceAvailable && reason ? (
         <p className="text-sm text-amber-200/90">
           {reason}{" "}
-          <Link href={buildSetupUrl("/import/past-races")} className="font-semibold text-accent underline-offset-4 hover:underline">
+          <Link href={buildSetupUrl("/my-races")} className="font-semibold text-accent underline-offset-4 hover:underline">
             Open setup
           </Link>
         </p>
       ) : null}
 
       <section
-        className="rounded-[14px] border border-white/10 bg-panel/35 p-6 md:p-8"
+        className={cn("rounded-[14px] border border-white/10 bg-panel/35", compact ? "p-4" : "p-6 md:p-8")}
         aria-labelledby="backfill-status-heading"
       >
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -323,22 +337,26 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             >
               {phaseInfo.title}
             </p>
-            <p className="max-w-xl text-sm leading-relaxed text-white/70">
-              {phaseInfo.description.split("**").map((chunk, i) =>
-                i % 2 === 1 ? (
-                  <strong key={i} className="font-medium text-white/85">
-                    {chunk}
-                  </strong>
-                ) : (
-                  <span key={i}>{chunk}</span>
-                )
-              )}
-            </p>
-            <p className="max-w-xl text-[11px] leading-relaxed text-muted">
-              Progress uses your saved import batches and activity counts in Runfolio. We don&apos;t show a &quot;percent of
-              Strava history&quot;—Strava doesn&apos;t give a reliable total.
-            </p>
-            <dl className="mt-4 grid gap-2 text-[13px] text-white/60 sm:grid-cols-2">
+            {!compact ? (
+              <>
+                <p className="max-w-xl text-sm leading-relaxed text-white/70">
+                  {phaseInfo.description.split("**").map((chunk, i) =>
+                    i % 2 === 1 ? (
+                      <strong key={i} className="font-medium text-white/85">
+                        {chunk}
+                      </strong>
+                    ) : (
+                      <span key={i}>{chunk}</span>
+                    )
+                  )}
+                </p>
+                <p className="max-w-xl text-[11px] leading-relaxed text-muted">
+                  Progress uses your saved import batches and activity counts in Runfolio. We don&apos;t show a &quot;percent of
+                  Strava history&quot;—Strava doesn&apos;t give a reliable total.
+                </p>
+              </>
+            ) : null}
+            <dl className={cn("mt-4 grid gap-2 text-[13px] text-white/60", compact ? "grid-cols-1" : "sm:grid-cols-2")}>
               {initialProgress.phase === "rate_limited" && initialProgress.stravaRateLimitUntil ? (
                 <div className="sm:col-span-2">
                   <dt className="text-muted">Suggested earliest retry</dt>
@@ -380,11 +398,11 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           </div>
         </div>
 
-        <div className="mt-8 flex flex-wrap gap-3">
+        <div className={cn("mt-8 flex gap-3", compact ? "flex-col" : "flex-wrap")}>
           <Button
             type="button"
             variant="primary"
-            className="min-h-[48px] px-8 text-[12px] font-semibold uppercase tracking-[0.12em]"
+            className={cn("min-h-[48px] text-[12px] font-semibold uppercase tracking-[0.12em]", compact ? "w-full px-6" : "px-8")}
             disabled={!canRunBackfill || pending}
             aria-busy={pending}
             title={
@@ -408,42 +426,74 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
                 ? "Continue backfill"
                 : "Start import — first batch"}
           </Button>
-          <Link
-            href="/matches"
-            className={cn(
-              "inline-flex min-h-[48px] items-center justify-center rounded-[12px] border border-border bg-panelAlt px-8 text-[12px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-slate-800"
-            )}
-          >
-            Open Match &amp; import
-          </Link>
+          {!compact ? (
+            <Link
+              href="/my-races#my-races-queue"
+              className={cn(
+                "inline-flex min-h-[48px] items-center justify-center rounded-[12px] border border-border bg-panelAlt px-8 text-[12px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-slate-800"
+              )}
+            >
+              Open My Races queue
+            </Link>
+          ) : (
+            <Link
+              href="#my-races-queue"
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[12px] border border-border bg-panelAlt px-6 text-[12px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-slate-800"
+            >
+              Review matches below
+            </Link>
+          )}
         </div>
 
-        <div className="mt-6 rounded-[12px] border border-white/10 bg-black/20 p-5">
-          <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Jump to older history</h3>
-          <p className="mt-2 text-sm leading-relaxed text-white/70">
-            Pull a <strong className="font-medium text-white/85">specific past window</strong> in one go (Strava{" "}
-            <code className="rounded bg-black/35 px-1 text-[11px] text-white/80">after</code> /{" "}
-            <code className="rounded bg-black/35 px-1 text-[11px] text-white/80">before</code>
-            ). Does <strong className="font-medium text-white/85">not</strong> move your sequential backfill cursor—use{" "}
-            <strong className="font-medium text-white/85">Continue backfill</strong> for ordered history. Dedupes by Strava
-            activity id.
-          </p>
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            {STRAVA_BACKFILL_JUMP_OPTIONS.map((opt) => (
-              <Button
-                key={opt.value}
-                type="button"
-                variant="secondary"
-                className="min-h-[44px] justify-start border-white/20 bg-white/[0.04] px-4 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-white/90 hover:bg-white/[0.08]"
-                disabled={!canRunJumpScan || pending}
-                title={opt.hint}
-                onClick={() => runJumpScan(opt.value)}
-              >
-                {opt.label}
-              </Button>
-            ))}
+        {compact ? (
+          <details className="mt-6 rounded-[12px] border border-white/10 bg-black/20 p-4">
+            <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+              Import a specific date range
+            </summary>
+            <div className="mt-4 flex flex-col gap-2">
+              {STRAVA_BACKFILL_JUMP_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  variant="secondary"
+                  className="min-h-[48px] w-full justify-center border-white/20 bg-white/[0.04] text-[11px] font-semibold uppercase tracking-[0.1em] text-white/90 hover:bg-white/[0.08]"
+                  disabled={!canRunJumpScan || pending}
+                  title={opt.hint}
+                  onClick={() => runJumpScan(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
+          </details>
+        ) : (
+          <div className="mt-6 rounded-[12px] border border-white/10 bg-black/20 p-5">
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Jump to older history</h3>
+            <p className="mt-2 text-sm leading-relaxed text-white/70">
+              Pull a <strong className="font-medium text-white/85">specific past window</strong> in one go (Strava{" "}
+              <code className="rounded bg-black/35 px-1 text-[11px] text-white/80">after</code> /{" "}
+              <code className="rounded bg-black/35 px-1 text-[11px] text-white/80">before</code>
+              ). Does <strong className="font-medium text-white/85">not</strong> move your sequential backfill cursor—use{" "}
+              <strong className="font-medium text-white/85">Continue backfill</strong> for ordered history. Dedupes by Strava
+              activity id.
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {STRAVA_BACKFILL_JUMP_OPTIONS.map((opt) => (
+                <Button
+                  key={opt.value}
+                  type="button"
+                  variant="secondary"
+                  className="min-h-[44px] justify-start border-white/20 bg-white/[0.04] px-4 text-left text-[11px] font-semibold uppercase tracking-[0.1em] text-white/90 hover:bg-white/[0.08]"
+                  disabled={!canRunJumpScan || pending}
+                  title={opt.hint}
+                  onClick={() => runJumpScan(opt.value)}
+                >
+                  {opt.label}
+                </Button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {lastBatchSummary ? (
           <div
@@ -511,15 +561,17 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
                 </ul>
               </details>
             ) : null}
-            <p className="mt-4 text-[13px] leading-relaxed text-white/65">
-              <strong className="text-white/85">How selection works:</strong> Run / Trail Run / TrailRun / Race (and the
-              same distance rules for VirtualRun) are considered. By default we keep activities from{" "}
-              <strong className="text-white/85">{HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km</strong> and up. Shorter
-              efforts only join when they have strong <strong className="text-white/85">race-like titles</strong> (with a
-              minimum distance to cut noise) or line up with our <strong className="text-white/85">verified race catalog</strong>{" "}
-              (fast name + distance + location-style signals)—same idea as Match & Import, not a guess at your whole
-              archive.
-            </p>
+            {!compact ? (
+              <p className="mt-4 text-[13px] leading-relaxed text-white/65">
+                <strong className="text-white/85">How selection works:</strong> Run / Trail Run / TrailRun / Race (and the
+                same distance rules for VirtualRun) are considered. By default we keep activities from{" "}
+                <strong className="text-white/85">{HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km</strong> and up. Shorter
+                efforts only join when they have strong <strong className="text-white/85">race-like titles</strong> (with a
+                minimum distance to cut noise) or line up with our <strong className="text-white/85">verified race catalog</strong>{" "}
+                (fast name + distance + location-style signals)—same idea as Match & Import, not a guess at your whole
+                archive.
+              </p>
+            ) : null}
             {lastBatchSummary.batchHadStravaRowsButNoneEligible ? (
               <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[13px] leading-relaxed text-white/70">
                 This batch pulled Strava rows, but <strong className="text-white/85">none met the historical bar</strong>.
@@ -543,66 +595,78 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
         ) : null}
 
         {banner ? (
-          <p className="mt-6 text-sm text-amber-100/90" role="alert">
-            {banner}
-          </p>
+          <div className="mt-6 space-y-2 text-sm text-amber-100/90" role="alert">
+            <p>{banner}</p>
+            {showBackfillReconnect ? (
+              <Link
+                href={`/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(pathname)}`}
+                className="font-semibold text-accent underline-offset-4 hover:underline"
+              >
+                Reconnect Strava
+              </Link>
+            ) : null}
+          </div>
         ) : null}
       </section>
 
-      <section className="max-w-2xl space-y-3 text-sm leading-relaxed text-white/65">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">What we import (historical backfill)</h2>
-        <ul className="list-inside list-disc space-y-1.5 marker:text-accent">
-          <li>
-            Types: Run, Trail Run / TrailRun, Race, and VirtualRun under the same distance / title / catalog rules.
-          </li>
-          <li>
-            Default distance bar:{" "}
-            <strong className="font-medium text-white/80">{HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km+</strong>. Incremental
-            &quot;Sync new&quot; uses a <strong className="font-medium text-white/80">30 km</strong> bar plus a manual pool
-            for shorter new activities.
-          </li>
-          <li>
-            Under {HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km we only add rows when titles look like structured events
-            (15km+ floor) or when a strong <strong className="font-medium text-white/80">catalog match</strong> supports
-            the effort (10km+ floor).
-          </li>
-          <li>
-            The <strong className="font-medium text-white/80">first</strong> import batch loads at most{" "}
-            {BACKFILL_FIRST_BATCH_MAX_PAGES} Strava list page (~{PER_PAGE * BACKFILL_FIRST_BATCH_MAX_PAGES} activities) to
-            stay gentle on rate limits. Later batches each target roughly{" "}
-            <strong className="font-medium text-white/80">{BACKFILL_DATE_CHUNK_DAYS} days</strong> of older history (Strava{" "}
-            <code className="rounded bg-black/30 px-1 text-[11px]">after</code> /{" "}
-            <code className="rounded bg-black/30 px-1 text-[11px]">before</code>) and paginate up to{" "}
-            {BACKFILL_DEFAULT_MAX_PAGES} pages (~{PER_PAGE * BACKFILL_DEFAULT_MAX_PAGES} activities) inside that window.
-          </li>
-          <li>Rows are deduped locally—re-running won&apos;t create duplicates.</li>
-        </ul>
-      </section>
+      {!compact ? (
+        <>
+          <section className="max-w-2xl space-y-3 text-sm leading-relaxed text-white/65">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">What we import (historical backfill)</h2>
+            <ul className="list-inside list-disc space-y-1.5 marker:text-accent">
+              <li>
+                Types: Run, Trail Run / TrailRun, Race, and VirtualRun under the same distance / title / catalog rules.
+              </li>
+              <li>
+                Default distance bar:{" "}
+                <strong className="font-medium text-white/80">{HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km+</strong>. Incremental
+                &quot;Sync new&quot; uses a <strong className="font-medium text-white/80">30 km</strong> bar plus a manual pool
+                for shorter new activities.
+              </li>
+              <li>
+                Under {HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km we only add rows when titles look like structured events
+                (15km+ floor) or when a strong <strong className="font-medium text-white/80">catalog match</strong> supports
+                the effort (10km+ floor).
+              </li>
+              <li>
+                The <strong className="font-medium text-white/80">first</strong> import batch loads at most{" "}
+                {BACKFILL_FIRST_BATCH_MAX_PAGES} Strava list page (~{PER_PAGE * BACKFILL_FIRST_BATCH_MAX_PAGES} activities) to
+                stay gentle on rate limits. Later batches each target roughly{" "}
+                <strong className="font-medium text-white/80">{BACKFILL_DATE_CHUNK_DAYS} days</strong> of older history (Strava{" "}
+                <code className="rounded bg-black/30 px-1 text-[11px]">after</code> /{" "}
+                <code className="rounded bg-black/30 px-1 text-[11px]">before</code>) and paginate up to{" "}
+                {BACKFILL_DEFAULT_MAX_PAGES} pages (~{PER_PAGE * BACKFILL_DEFAULT_MAX_PAGES} activities) inside that window.
+              </li>
+              <li>Rows are deduped locally—re-running won&apos;t create duplicates.</li>
+            </ul>
+          </section>
 
-      <section className="max-w-2xl rounded-[14px] border border-white/10 bg-panel/25 p-5 md:p-6">
-        <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Looking for one specific race?</h2>
-        <p className="mt-2 text-sm leading-relaxed text-white/70">
-          Open a race in{" "}
-          <Link href="/races/find" className="font-semibold text-accent underline-offset-4 hover:underline">
-            Find a race
-          </Link>{" "}
-          and use <strong className="text-white/85">Link to Strava activity</strong>. That picker uses{" "}
-          <strong className="text-white/85">saved</strong> activities in Runfolio with a{" "}
-          <strong className="text-white/85">per-race distance window</strong>—broader than the{" "}
-          {HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km backfill default—so half marathons and similar finishes can appear
-          when they&apos;re synced. If an effort was never imported, use{" "}
-          <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
-            Add race
-          </Link>{" "}
-          with the Strava activity link.
-        </p>
-      </section>
+          <section className="max-w-2xl rounded-[14px] border border-white/10 bg-panel/25 p-5 md:p-6">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Looking for one specific race?</h2>
+            <p className="mt-2 text-sm leading-relaxed text-white/70">
+              Open a race in{" "}
+              <Link href="/races/find" className="font-semibold text-accent underline-offset-4 hover:underline">
+                Find a race
+              </Link>{" "}
+              and use <strong className="text-white/85">Link to Strava activity</strong>. That picker uses{" "}
+              <strong className="text-white/85">saved</strong> activities in Runfolio with a{" "}
+              <strong className="text-white/85">per-race distance window</strong>—broader than the{" "}
+              {HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km backfill default—so half marathons and similar finishes can appear
+              when they&apos;re synced. If an effort was never imported, use{" "}
+              <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
+                Add race
+              </Link>{" "}
+              with the Strava activity link.
+            </p>
+          </section>
 
-      <p className="text-center text-[11px] text-muted">
-        <Link href="/dashboard" className="font-semibold text-accent underline-offset-4 hover:underline">
-          ← Back to overview
-        </Link>
-      </p>
+          <p className="text-center text-[11px] text-muted">
+            <Link href="/dashboard" className="font-semibold text-accent underline-offset-4 hover:underline">
+              ← Back to overview
+            </Link>
+          </p>
+        </>
+      ) : null}
     </div>
   );
 }

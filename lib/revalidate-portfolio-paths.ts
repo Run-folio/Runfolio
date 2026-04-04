@@ -16,6 +16,7 @@ export async function revalidatePortfolioSurfaces(
 ) {
   revalidatePath("/dashboard");
   revalidatePath("/matches");
+  revalidatePath("/my-races");
   revalidatePath("/bucket-list");
   const profilePaths = await collectProfileRevalidatePaths(supabase, userId);
   for (const p of profilePaths) {
