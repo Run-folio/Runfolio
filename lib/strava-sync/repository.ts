@@ -8,9 +8,41 @@ import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { createClient } from "@/lib/supabase/server";
 import { collectStravaActivityPhotoUrls } from "@/lib/strava-api";
 import { runfolioLog } from "@/lib/runfolio-log";
+import {
+  STRAVA_SYNC_PERSIST_FAILURE_CAP,
+  type StravaPersistFailure,
+  pgErrorFromSupabase
+} from "@/lib/strava-sync/persist-failure";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const TABLE = "strava_synced_activities";
+
+function pushPersistFailure(list: StravaPersistFailure[], f: StravaPersistFailure): void {
+  if (list.length >= STRAVA_SYNC_PERSIST_FAILURE_CAP) return;
+  list.push(f);
+  runfolioLog.warn("stravaSync.persist", f.kind, {
+    operation: f.operation,
+    strava_activity_id: f.strava_activity_id,
+    param_user_id: f.param_user_id,
+    jwt_user_id: f.jwt_user_id,
+    existing_row_id: f.existing_row_id,
+    postgres_code: f.postgres_code,
+    message: f.message,
+    details: f.details,
+    hint: f.hint,
+    fallback_insert_attempted: f.fallback_insert_attempted,
+    affected_count: f.affected_count
+  });
+}
+
+function payloadSummaryFromRow(row: Record<string, unknown>): StravaPersistFailure["payload_summary"] {
+  return {
+    start_date: row.start_date != null ? String(row.start_date) : undefined,
+    distance_m: typeof row.distance_m === "number" ? row.distance_m : null,
+    sport_type: row.sport_type != null ? String(row.sport_type) : null,
+    activity_type: row.activity_type != null ? String(row.activity_type) : null
+  };
+}
 
 function photosFromSummary(raw: StravaSummaryActivityJson): string[] {
   return collectStravaActivityPhotoUrls(raw.photos ?? null);
@@ -86,6 +118,8 @@ export type SyncSummary = {
   skippedInvalid: number;
   /** insert/update calls we attempted after dedupe (excludes skippedUnchanged and skippedInvalid). */
   writeAttempts: number;
+  /** Capped list returned to the client for exact DB / auth diagnostics. */
+  persistFailures: StravaPersistFailure[];
 };
 
 /** RLS update policies compare `auth.uid()` to `user_id`; avoid PATCHing immutable identity columns. */
@@ -130,38 +164,60 @@ export async function upsertStravaSummariesForUser(
   let errors = 0;
   let skippedInvalid = 0;
   let writeAttempts = 0;
+  const persistFailures: StravaPersistFailure[] = [];
 
   const preInvalid = countInvalidSummaries(summaries);
   const { data: authUserResult, error: authReadError } = await supabase.auth.getUser();
   const jwtUserId = authUserResult?.user?.id ?? null;
 
   if (authReadError || !jwtUserId) {
-    runfolioLog.warn("stravaSync.persist", "abort_no_auth_session", {
-      paramUserId: userId,
-      authMessage: authReadError?.message ?? "no_user",
-      hint: "Supabase client has no JWT — RLS will block writes. Confirm cookies reach server actions and middleware refresh runs."
+    const pg = pgErrorFromSupabase(authReadError);
+    pushPersistFailure(persistFailures, {
+      kind: "abort_no_auth_session",
+      operation: "batch_abort",
+      strava_activity_id: null,
+      param_user_id: userId,
+      jwt_user_id: null,
+      existing_row_id: null,
+      fallback_insert_attempted: false,
+      postgres_code: pg.postgres_code,
+      message: pg.message,
+      details: pg.details,
+      hint: pg.hint ?? "Supabase client has no JWT — RLS will block writes. Confirm cookies reach server actions and middleware refresh runs.",
+      affected_count: Math.max(0, summaries.length - preInvalid)
     });
     return {
       upserted: 0,
       skippedUnchanged: 0,
       errors: Math.max(0, summaries.length - preInvalid),
       skippedInvalid: preInvalid,
-      writeAttempts: 0
+      writeAttempts: 0,
+      persistFailures
     };
   }
 
   if (jwtUserId !== userId) {
-    runfolioLog.warn("stravaSync.persist", "abort_jwt_user_mismatch", {
-      paramUserId: userId,
-      jwtUserId,
-      hint: "Caller user id does not match signed-in user — refusing writes."
+    pushPersistFailure(persistFailures, {
+      kind: "abort_jwt_user_mismatch",
+      operation: "batch_abort",
+      strava_activity_id: null,
+      param_user_id: userId,
+      jwt_user_id: jwtUserId,
+      existing_row_id: null,
+      fallback_insert_attempted: false,
+      postgres_code: null,
+      message: "param user_id does not match JWT sub",
+      details: JSON.stringify({ param_user_id: userId, jwt_user_id: jwtUserId }),
+      hint: "Caller user id does not match signed-in user — refusing writes.",
+      affected_count: Math.max(0, summaries.length - preInvalid)
     });
     return {
       upserted: 0,
       skippedUnchanged: 0,
       errors: Math.max(0, summaries.length - preInvalid),
       skippedInvalid: preInvalid,
-      writeAttempts: 0
+      writeAttempts: 0,
+      persistFailures
     };
   }
 
@@ -189,14 +245,19 @@ export async function upsertStravaSummariesForUser(
 
     if (selectExistingError) {
       errors += 1;
-      runfolioLog.warn("stravaSync.persist", "select_existing_failed", {
-        stravaActivityId: sid,
-        paramUserId: userId,
-        jwtUserId,
-        message: selectExistingError.message,
-        code: selectExistingError.code,
-        details: selectExistingError.details,
-        hint: selectExistingError.hint
+      const pg = pgErrorFromSupabase(selectExistingError);
+      pushPersistFailure(persistFailures, {
+        kind: "select_existing_failed",
+        operation: "select",
+        strava_activity_id: sid,
+        param_user_id: userId,
+        jwt_user_id: jwtUserId,
+        existing_row_id: null,
+        fallback_insert_attempted: false,
+        postgres_code: pg.postgres_code,
+        message: pg.message,
+        details: pg.details,
+        hint: pg.hint
       });
       continue;
     }
@@ -225,6 +286,9 @@ export async function upsertStravaSummariesForUser(
     runfolioLog.info("stravaSync.persist", "write_payload_preview", writePreview);
     writeAttempts += 1;
 
+    const existingId = existing ? String((existing as { id: string }).id) : null;
+    const summary = payloadSummaryFromRow(row);
+
     if (existing) {
       const updatePatch = rowPatchForStravaUpdate(row);
       const { data: updatedRows, error } = await supabase
@@ -235,38 +299,64 @@ export async function upsertStravaSummariesForUser(
         .select("id");
       if (error) {
         errors += 1;
-        runfolioLog.warn("stravaSync.persist", "update_failed", {
-          stravaId: sid,
-          paramUserId: userId,
-          jwtUserId,
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
+        const pg = pgErrorFromSupabase(error);
+        pushPersistFailure(persistFailures, {
+          kind: "update_failed",
+          operation: "update",
+          strava_activity_id: sid,
+          param_user_id: userId,
+          jwt_user_id: jwtUserId,
+          existing_row_id: existingId,
+          fallback_insert_attempted: false,
+          postgres_code: pg.postgres_code,
+          message: pg.message,
+          details: pg.details,
+          hint: pg.hint,
+          payload_summary: summary
         });
       } else if (!updatedRows?.length) {
-        runfolioLog.warn("stravaSync.persist", "update_zero_rows", {
-          stravaId: sid,
-          paramUserId: userId,
-          jwtUserId,
-          hint: "UPDATE matched 0 rows with user_id+strava_activity_id filter — retrying INSERT (e.g. stale id or RLS quirk)."
-        });
         const { data: insertedRows, error: insErr } = await supabase
           .from(TABLE)
           .insert({ ...row, created_at: now })
           .select("id");
         if (insErr) {
           errors += 1;
-          runfolioLog.warn("stravaSync.persist", "insert_after_update_zero_failed", {
-            stravaId: sid,
-            message: insErr.message,
-            code: insErr.code,
-            details: insErr.details,
-            hint: insErr.hint
+          const pgI = pgErrorFromSupabase(insErr);
+          pushPersistFailure(persistFailures, {
+            kind: "insert_after_update_zero_failed",
+            operation: "insert_fallback",
+            strava_activity_id: sid,
+            param_user_id: userId,
+            jwt_user_id: jwtUserId,
+            existing_row_id: existingId,
+            fallback_insert_attempted: true,
+            postgres_code: pgI.postgres_code,
+            message: `UPDATE affected 0 rows, then fallback INSERT failed: ${pgI.message}`,
+            details: JSON.stringify({
+              update_phase: "zero_rows_no_postgrest_error",
+              fallback_insert: pgI
+            }),
+            hint:
+              pgI.hint ??
+              "UPDATE often hits 0 rows under RLS without an error; the INSERT error above is the actionable Postgres/RLS signal.",
+            payload_summary: summary
           });
         } else if (!insertedRows?.length) {
           errors += 1;
-          runfolioLog.warn("stravaSync.persist", "insert_after_update_zero_empty", { stravaId: sid });
+          pushPersistFailure(persistFailures, {
+            kind: "insert_after_update_zero_empty",
+            operation: "insert_fallback",
+            strava_activity_id: sid,
+            param_user_id: userId,
+            jwt_user_id: jwtUserId,
+            existing_row_id: existingId,
+            fallback_insert_attempted: true,
+            postgres_code: null,
+            message: "UPDATE 0 rows; fallback INSERT succeeded but RETURNING was empty",
+            details: null,
+            hint: "Rare — check RLS on SELECT after INSERT.",
+            payload_summary: summary
+          });
         } else {
           upserted += 1;
           runfolioLog.info("stravaSync.persist", "insert_ok_after_update_zero", {
@@ -290,20 +380,36 @@ export async function upsertStravaSummariesForUser(
         .select("id");
       if (error) {
         errors += 1;
-        runfolioLog.warn("stravaSync.persist", "insert_failed", {
-          stravaId: sid,
-          paramUserId: userId,
-          jwtUserId,
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
+        const pg = pgErrorFromSupabase(error);
+        pushPersistFailure(persistFailures, {
+          kind: "insert_failed",
+          operation: "insert",
+          strava_activity_id: sid,
+          param_user_id: userId,
+          jwt_user_id: jwtUserId,
+          existing_row_id: null,
+          fallback_insert_attempted: false,
+          postgres_code: pg.postgres_code,
+          message: pg.message,
+          details: pg.details,
+          hint: pg.hint,
+          payload_summary: summary
         });
       } else if (!insertedRows?.length) {
         errors += 1;
-        runfolioLog.warn("stravaSync.persist", "insert_zero_rows", {
-          stravaId: sid,
-          hint: "Insert returned no row — unexpected with returning select"
+        pushPersistFailure(persistFailures, {
+          kind: "insert_zero_rows",
+          operation: "insert",
+          strava_activity_id: sid,
+          param_user_id: userId,
+          jwt_user_id: jwtUserId,
+          existing_row_id: null,
+          fallback_insert_attempted: false,
+          postgres_code: null,
+          message: "INSERT returned no row in RETURNING (no PostgREST error)",
+          details: null,
+          hint: "Check RLS SELECT on strava_synced_activities after insert.",
+          payload_summary: summary
         });
       } else {
         upserted += 1;
@@ -317,6 +423,7 @@ export async function upsertStravaSummariesForUser(
   }
 
   if (summaries.length > 0) {
+    const firstFail = persistFailures[0];
     runfolioLog.info("stravaSync.persist", "batch_summary", {
       paramUserId: userId,
       jwtUserId,
@@ -325,11 +432,15 @@ export async function upsertStravaSummariesForUser(
       skippedUnchanged,
       skippedInvalid,
       errors,
-      writeAttempts
+      writeAttempts,
+      persistFailureCount: persistFailures.length,
+      firstFailureKind: firstFail?.kind,
+      firstFailureCode: firstFail?.postgres_code,
+      firstFailureMessage: firstFail?.message?.slice(0, 280)
     });
   }
 
-  return { upserted, skippedUnchanged, errors, skippedInvalid, writeAttempts };
+  return { upserted, skippedUnchanged, errors, skippedInvalid, writeAttempts, persistFailures };
 }
 
 export async function listSyncedActivitiesForUser(

@@ -52,9 +52,15 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
               return;
             }
             if ("ok" in res && res.ok) {
+              const pfs = res.persistFailures ?? [];
+              const first = pfs[0];
+              const failDetail =
+                first != null
+                  ? ` First failure: [${first.kind}] code=${first.postgres_code ?? "—"} — ${first.message}`
+                  : "";
               const errPart =
                 res.errors && res.errors > 0
-                  ? ` ${res.errors} row(s) failed to save (see server logs: stravaSync.persist).`
+                  ? ` ${res.errors} row(s) failed.${failDetail || " See server logs: stravaSync.persist."}`
                   : "";
               const invalidPart =
                 res.skippedInvalid && res.skippedInvalid > 0

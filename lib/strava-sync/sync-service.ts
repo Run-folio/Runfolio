@@ -29,6 +29,10 @@ import {
   upsertIngestStateIncremental
 } from "@/lib/strava-sync/ingest-state";
 import {
+  STRAVA_SYNC_PERSIST_FAILURE_CAP,
+  type StravaPersistFailure
+} from "@/lib/strava-sync/persist-failure";
+import {
   getLatestSyncedStartDateIso,
   upsertStravaSummariesForUser,
   type SyncSummary
@@ -52,6 +56,13 @@ import { runfolioLog } from "@/lib/runfolio-log";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 const AFTER_OVERLAP_SEC = 7200;
+
+function appendPersistFailures(bucket: StravaPersistFailure[], incoming: StravaPersistFailure[]): void {
+  for (const f of incoming) {
+    if (bucket.length >= STRAVA_SYNC_PERSIST_FAILURE_CAP) return;
+    bucket.push(f);
+  }
+}
 
 type StravaListOpKind = "backfill" | "incremental";
 
@@ -248,6 +259,7 @@ async function runIncrementalSync(userId: string, supabaseClient?: SupabaseClien
   let totalErrors = 0;
   let totalSkippedInvalid = 0;
   let totalWriteAttempts = 0;
+  const totalPersistFailures: StravaPersistFailure[] = [];
   let requestsMade = 0;
   let stoppedForRateLimit = false;
   let retryAfterSec: number | null = null;
@@ -307,6 +319,7 @@ async function runIncrementalSync(userId: string, supabaseClient?: SupabaseClien
     totalErrors += result.errors;
     totalSkippedInvalid += result.skippedInvalid;
     totalWriteAttempts += result.writeAttempts;
+    appendPersistFailures(totalPersistFailures, result.persistFailures);
 
     const pageMax = maxStartEpochFromSummaries(batch);
     if (pageMax != null) {
@@ -324,6 +337,7 @@ async function runIncrementalSync(userId: string, supabaseClient?: SupabaseClien
       skippedInvalid: result.skippedInvalid,
       writeAttempts: result.writeAttempts,
       errors: result.errors,
+      persistFailureKinds: result.persistFailures.map((f) => f.kind).join(","),
       rateLimitedAfter: false
     });
 
@@ -364,6 +378,7 @@ async function runIncrementalSync(userId: string, supabaseClient?: SupabaseClien
     errors: totalErrors,
     skippedInvalid: totalSkippedInvalid,
     writeAttempts: totalWriteAttempts,
+    persistFailures: totalPersistFailures,
     requestsMade,
     stravaOauthRefreshCalls,
     stoppedForRateLimit,
@@ -428,6 +443,7 @@ async function runBackfillJumpScan(
   let totalErrors = 0;
   let totalSkippedInvalid = 0;
   let totalWriteAttempts = 0;
+  const totalPersistFailures: StravaPersistFailure[] = [];
   let totalRaw = 0;
   let totalEligible = 0;
   const allSummaries: StravaSummaryActivityJson[] = [];
@@ -502,6 +518,7 @@ async function runBackfillJumpScan(
     totalErrors += result.errors;
     totalSkippedInvalid += result.skippedInvalid;
     totalWriteAttempts += result.writeAttempts;
+    appendPersistFailures(totalPersistFailures, result.persistFailures);
 
     if (batch.length < PER_PAGE) break;
   }
@@ -536,6 +553,7 @@ async function runBackfillJumpScan(
     skippedInvalid: totalSkippedInvalid,
     writeAttempts: totalWriteAttempts,
     errors: totalErrors,
+    persistFailureSample: totalPersistFailures[0]?.kind,
     after: afterEpoch,
     before: beforeEpoch,
     stoppedForRateLimit
@@ -553,6 +571,7 @@ async function runBackfillJumpScan(
     errors: totalErrors,
     skippedInvalid: totalSkippedInvalid,
     writeAttempts: totalWriteAttempts,
+    persistFailures: totalPersistFailures,
     requestsMade,
     stravaOauthRefreshCalls,
     stoppedForRateLimit,
@@ -613,6 +632,7 @@ async function runBackfillStravaHistory(
   let totalErrors = 0;
   let totalSkippedInvalid = 0;
   let totalWriteAttempts = 0;
+  const totalPersistFailures: StravaPersistFailure[] = [];
   let totalRaw = 0;
   let totalEligible = 0;
   const allSummaries: StravaSummaryActivityJson[] = [];
@@ -717,6 +737,7 @@ async function runBackfillStravaHistory(
     totalErrors += result.errors;
     totalSkippedInvalid += result.skippedInvalid;
     totalWriteAttempts += result.writeAttempts;
+    appendPersistFailures(totalPersistFailures, result.persistFailures);
 
     if (isFirstEverBackfillBatch && page === 1) {
       runfolioLog.info("strava.backfill", "first_page_persisted", {
@@ -727,6 +748,7 @@ async function runBackfillStravaHistory(
         skippedInvalid: result.skippedInvalid,
         writeAttempts: result.writeAttempts,
         errors: result.errors,
+        persistFailureKinds: result.persistFailures.map((f) => f.kind).join(","),
         failurePhase: "after_first_list_ok"
       });
     }
@@ -741,7 +763,8 @@ async function runBackfillStravaHistory(
       skippedUnchanged: result.skippedUnchanged,
       skippedInvalid: result.skippedInvalid,
       writeAttempts: result.writeAttempts,
-      errors: result.errors
+      errors: result.errors,
+      persistFailureKinds: result.persistFailures.map((f) => f.kind).join(",")
     });
 
     if (batch.length < PER_PAGE) break;
@@ -779,6 +802,7 @@ async function runBackfillStravaHistory(
         errors: 0,
         skippedInvalid: 0,
         writeAttempts: 0,
+        persistFailures: [],
         backfillExhausted: false,
         rawFetched: 0,
         eligibleInBatch: 0,
@@ -802,6 +826,7 @@ async function runBackfillStravaHistory(
       errors: 0,
       skippedInvalid: 0,
       writeAttempts: 0,
+      persistFailures: [],
       backfillExhausted: true,
       rawFetched: 0,
       eligibleInBatch: 0,
@@ -848,6 +873,7 @@ async function runBackfillStravaHistory(
     errors: totalErrors,
     skippedInvalid: totalSkippedInvalid,
     writeAttempts: totalWriteAttempts,
+    persistFailures: totalPersistFailures,
     requestsMade,
     stravaOauthRefreshCalls,
     stoppedForRateLimit,

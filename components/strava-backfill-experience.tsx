@@ -23,6 +23,7 @@ import {
   PER_PAGE
 } from "@/lib/strava-sync/fetch-summaries";
 import { HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM } from "@/lib/strava-sync/import-scope";
+import type { StravaPersistFailure } from "@/lib/strava-sync/persist-failure";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -98,6 +99,7 @@ type BackfillBatchSummary = {
   errors: number;
   skippedInvalid: number;
   writeAttempts: number;
+  persistFailures: StravaPersistFailure[];
   eligibleInBatch: number;
   rawFetched: number;
   backfillExhausted: boolean;
@@ -186,6 +188,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           errors: res.errors,
           skippedInvalid: res.skippedInvalid,
           writeAttempts: res.writeAttempts,
+          persistFailures: res.persistFailures ?? [],
           eligibleInBatch: res.eligibleInBatch,
           rawFetched: res.rawFetched,
           backfillExhausted: res.backfillExhausted,
@@ -223,6 +226,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           errors: res.errors,
           skippedInvalid: res.skippedInvalid,
           writeAttempts: res.writeAttempts,
+          persistFailures: res.persistFailures ?? [],
           eligibleInBatch: res.eligibleInBatch,
           rawFetched: res.rawFetched,
           backfillExhausted: res.backfillExhausted,
@@ -486,9 +490,26 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             lastBatchSummary.errors > 0 ? (
               <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-950/35 px-3 py-2 text-[13px] leading-relaxed text-rose-100/95">
                 Activities passed the import filter but <strong className="font-medium text-white">no rows were saved</strong>
-                . Check server logs for <code className="rounded bg-black/30 px-1">stravaSync.persist</code> (insert/update
-                errors or <strong className="font-medium text-white">update_zero_rows</strong> — often RLS or session).
+                . Exact database diagnostics from this run are listed below (also logged as{" "}
+                <code className="rounded bg-black/30 px-1">stravaSync.persist</code>).
               </p>
+            ) : null}
+            {lastBatchSummary.persistFailures.length > 0 ? (
+              <details className="mt-4 rounded-lg border border-amber-400/25 bg-amber-950/20 p-3 text-left">
+                <summary className="cursor-pointer text-[12px] font-semibold text-amber-100/95">
+                  Database write diagnostics ({lastBatchSummary.persistFailures.length} entr
+                  {lastBatchSummary.persistFailures.length === 1 ? "y" : "ies"}, capped)
+                </summary>
+                <ul className="mt-3 space-y-3 text-[11px] leading-relaxed text-amber-50/90">
+                  {lastBatchSummary.persistFailures.map((f, i) => (
+                    <li key={`${f.kind}-${f.strava_activity_id ?? "batch"}-${i}`}>
+                      <pre className="overflow-x-auto whitespace-pre-wrap rounded-md border border-white/10 bg-black/40 p-2 font-mono text-[10px] text-amber-50/95">
+                        {JSON.stringify(f, null, 2)}
+                      </pre>
+                    </li>
+                  ))}
+                </ul>
+              </details>
             ) : null}
             <p className="mt-4 text-[13px] leading-relaxed text-white/65">
               <strong className="text-white/85">How selection works:</strong> Run / Trail Run / TrailRun / Race (and the
