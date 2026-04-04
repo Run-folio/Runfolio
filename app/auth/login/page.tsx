@@ -1,12 +1,15 @@
 import Link from "next/link";
+import { AuthEmailSignInForm } from "@/components/auth-email-sign-in-form";
 import { BACKEND_NOT_CONNECTED_USER_MESSAGE } from "@/lib/backend-config-messages";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 import { getStravaClientCredentials } from "@/lib/strava-env";
+
 type Props = {
   searchParams: Promise<{ next?: string; redirect?: string; supabase?: string; setup?: string; strava_error?: string }>;
 };
 
-function stravaErrorHint(raw: string | null | undefined): string | null {
+/** Optional second line when the user can act on the Strava outcome. */
+function stravaFailureDetail(raw: string | null | undefined): string | null {
   if (!raw?.trim()) return null;
   let u = raw.trim();
   try {
@@ -16,31 +19,16 @@ function stravaErrorHint(raw: string | null | undefined): string | null {
   }
   switch (u) {
     case "wrong_strava_account":
-      return "This Strava account does not match your Runfolio login. Use the same Strava you used when you first signed in.";
+      return "This Strava profile doesn’t match the account you used before. Use the same Strava, or sign in with email.";
     case "reconnect_requires_login":
-      return "Sign in with Strava first, then try reconnecting.";
-    case "server_misconfigured":
-    case "server_unavailable":
-      return "Sign-in isn’t available right now. Please try again later. If this keeps happening, contact support.";
+      return "Sign in first, then use Reconnect Strava from this page.";
+    case "strava_access_denied":
+      return "Strava didn’t approve the connection. Try again if you want to use Strava next time.";
     case "invalid_state":
     case "missing_code":
-      return "Strava login was interrupted. Try again.";
-    case "no_client":
-      return "Strava sign-in isn’t set up on this server yet.";
-    case "strava_access_denied":
-      return "Strava didn’t authorize access. Try again and approve the connection if prompted.";
-    case "token_exchange_failed":
-      return "We couldn’t finish connecting to Strava. Try signing in again.";
-    case "account_setup_failed":
-      return "We couldn’t finish setting up your account. Try again, or contact support if this continues.";
-    case "session_failed":
-      return "We couldn’t start your session after Strava. Try again, or contact support if this continues.";
-    case "callback_failed":
-    case "athlete_fetch_failed":
-    case "no_user":
-      return "Something went wrong finishing sign-in. Please try again.";
+      return "The Strava login flow was interrupted. You can retry Strava above or use email.";
     default:
-      return "Something went wrong. Please try again.";
+      return null;
   }
 }
 
@@ -51,9 +39,10 @@ export default async function LoginPage({ searchParams }: Props) {
     sp.supabase === "missing"
       ? BACKEND_NOT_CONNECTED_USER_MESSAGE
       : sp.setup
-        ? "You’re on the guided setup path — sign in with Strava to continue."
+        ? "Finish setup anytime — sign in below to continue."
         : null;
-  const stravaErr = stravaErrorHint(sp.strava_error);
+  const stravaFailure = Boolean(sp.strava_error?.trim());
+  const stravaDetail = stravaFailureDetail(sp.strava_error);
   const stravaConfigured = Boolean(getStravaClientCredentials());
 
   const startHref = `/api/strava/oauth/start?next=${encodeURIComponent(nextPath)}`;
@@ -68,11 +57,16 @@ export default async function LoginPage({ searchParams }: Props) {
             {setupWarning}
           </p>
         ) : null}
-        {stravaErr ? (
-          <p className="mb-4 rounded-lg border border-rose-500/40 bg-rose-950/30 px-3 py-2 text-sm text-rose-100/95" role="alert">
-            {stravaErr}
-          </p>
+        {stravaFailure ? (
+          <div
+            className="mb-6 rounded-lg border border-amber-500/35 bg-amber-500/[0.08] px-3 py-3 text-sm text-amber-100/95"
+            role="status"
+          >
+            <p>Strava sign-in didn’t complete. You can still sign in with email below.</p>
+            {stravaDetail ? <p className="mt-2 text-xs leading-relaxed text-amber-200/85">{stravaDetail}</p> : null}
+          </div>
         ) : null}
+
         {stravaConfigured ? (
           <a
             href={startHref}
@@ -81,17 +75,38 @@ export default async function LoginPage({ searchParams }: Props) {
             Continue with Strava
           </a>
         ) : (
-          <p className="text-sm text-muted">Strava sign-in is not configured on this server.</p>
+          <p className="text-center text-sm text-muted">Strava isn’t configured here — use email to sign in.</p>
         )}
-        <p className="mt-6 text-center text-[11px] text-muted leading-relaxed">
-          Already connected but sync stopped working?{" "}
+
+        <div className="my-6 flex items-center gap-3">
+          <span className="h-px flex-1 bg-border" aria-hidden />
+          <span className="text-[11px] font-medium uppercase tracking-[0.2em] text-muted">or</span>
+          <span className="h-px flex-1 bg-border" aria-hidden />
+        </div>
+
+        <AuthEmailSignInForm nextPath={nextPath} stravaFailed={stravaFailure} />
+
+        <p className="mt-6 text-center text-sm text-muted">
+          New to Runfolio?{" "}
           <Link
-            href={`/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(nextPath)}`}
+            href={`/auth/signup?next=${encodeURIComponent(nextPath)}`}
             className="font-semibold text-accent underline-offset-4 hover:underline"
           >
-            Reconnect Strava
+            Create an account
           </Link>
         </p>
+
+        {stravaConfigured ? (
+          <p className="mt-6 border-t border-border pt-6 text-center text-[11px] text-muted leading-relaxed">
+            Already connected but sync stopped?{" "}
+            <Link
+              href={`/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(nextPath)}`}
+              className="font-semibold text-accent underline-offset-4 hover:underline"
+            >
+              Reconnect Strava
+            </Link>
+          </p>
+        ) : null}
       </div>
     </main>
   );

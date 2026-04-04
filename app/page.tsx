@@ -24,6 +24,9 @@ export default function HomePage() {
             <Link href="/auth/login">
               <Button variant="secondary">Sign in</Button>
             </Link>
+            <Link href="/auth/signup">
+              <Button variant="secondary">Create account</Button>
+            </Link>
           </div>
         </div>
       </section>
