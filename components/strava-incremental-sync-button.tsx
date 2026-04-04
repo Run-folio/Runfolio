@@ -54,10 +54,22 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
             if ("ok" in res && res.ok) {
               const errPart =
                 res.errors && res.errors > 0
-                  ? ` ${res.errors} row(s) failed to save.`
+                  ? ` ${res.errors} row(s) failed to save (see server logs: stravaSync.persist).`
+                  : "";
+              const invalidPart =
+                res.skippedInvalid && res.skippedInvalid > 0
+                  ? ` ${res.skippedInvalid} skipped (invalid Strava payload — missing id or start_date).`
+                  : "";
+              const attemptPart =
+                res.writeAttempts && res.writeAttempts > 0
+                  ? ` ${res.writeAttempts} write attempt(s).`
                   : "";
               const zero =
-                res.upserted === 0 && res.skippedUnchanged === 0 && !res.errors && !res.stoppedForRateLimit
+                res.upserted === 0 &&
+                res.skippedUnchanged === 0 &&
+                !res.errors &&
+                !res.stoppedForRateLimit &&
+                !res.writeAttempts
                   ? " Nothing new since last sync."
                   : "";
               const ratePart =
@@ -65,7 +77,7 @@ export function StravaIncrementalSyncButton({ compact, className }: Props) {
                   ? ` ${res.rateLimitUserMessage}`
                   : "";
               setMsg(
-                `Saved or updated ${res.upserted} activit${res.upserted === 1 ? "y" : "ies"}${res.skippedUnchanged ? ` · ${res.skippedUnchanged} unchanged` : ""}.${errPart}${zero}${ratePart}`
+                `Saved or updated ${res.upserted} activit${res.upserted === 1 ? "y" : "ies"}${res.skippedUnchanged ? ` · ${res.skippedUnchanged} unchanged` : ""}.${attemptPart}${invalidPart}${errPart}${zero}${ratePart}`
               );
             }
             router.refresh();

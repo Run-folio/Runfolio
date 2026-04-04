@@ -16,6 +16,25 @@ function photosFromSummary(raw: StravaSummaryActivityJson): string[] {
   return collectStravaActivityPhotoUrls(raw.photos ?? null);
 }
 
+function safeInt(n: unknown): number | null {
+  if (n == null || n === "") return null;
+  const v = Number(n);
+  if (!Number.isFinite(v)) return null;
+  return Math.round(v);
+}
+
+/** Ensures integer columns match Postgres `integer` and `name` / `start_date` satisfy NOT NULL. */
+export function validateStravaSummaryForPersist(raw: StravaSummaryActivityJson): { ok: true } | { ok: false; reason: string } {
+  if (raw.id == null || !Number.isFinite(Number(raw.id))) {
+    return { ok: false, reason: "missing_activity_id" };
+  }
+  const start = raw.start_date?.trim();
+  if (!start) {
+    return { ok: false, reason: "missing_start_date" };
+  }
+  return { ok: true };
+}
+
 export function summaryToUpsertRow(
   userId: string,
   raw: StravaSummaryActivityJson,
@@ -26,17 +45,20 @@ export function summaryToUpsertRow(
   const potential = manualLinkOnly ? false : computePotentialRaceActivity(norm);
   const hash = hashStravaSummaryPayload(raw);
   const lat = raw.start_latlng;
+  const nameTrim = raw.name != null ? String(raw.name).trim() : "";
+  const moving = safeInt(raw.moving_time);
+  const elapsed = safeInt(raw.elapsed_time ?? raw.moving_time);
   return {
     user_id: userId,
     activity_source: "strava",
     strava_activity_id: String(raw.id),
-    name: raw.name,
+    name: nameTrim || "Strava activity",
     description: raw.description?.trim() ?? null,
     distance_m: raw.distance,
     distance_km: norm.distance_km,
     elevation_gain_m: norm.elevation_m,
-    moving_time_sec: raw.moving_time,
-    elapsed_time_sec: raw.elapsed_time ?? raw.moving_time,
+    moving_time_sec: moving,
+    elapsed_time_sec: elapsed ?? moving,
     start_date: raw.start_date,
     timezone: null,
     city: raw.location_city ?? null,
@@ -47,8 +69,8 @@ export function summaryToUpsertRow(
     photos: photosFromSummary(raw),
     sport_type: raw.sport_type ?? null,
     activity_type: raw.type ?? null,
-    kudos_count: raw.kudos_count ?? 0,
-    achievement_count: raw.achievement_count ?? 0,
+    kudos_count: safeInt(raw.kudos_count) ?? 0,
+    achievement_count: safeInt(raw.achievement_count) ?? 0,
     potential_race_activity: potential,
     manual_link_only: manualLinkOnly,
     payload_hash: hash,
@@ -56,7 +78,15 @@ export function summaryToUpsertRow(
   };
 }
 
-export type SyncSummary = { upserted: number; skippedUnchanged: number; errors: number };
+export type SyncSummary = {
+  upserted: number;
+  skippedUnchanged: number;
+  errors: number;
+  /** Rows that passed the import filter but failed validation (never sent to the DB). */
+  skippedInvalid: number;
+  /** insert/update calls we attempted after dedupe (excludes skippedUnchanged and skippedInvalid). */
+  writeAttempts: number;
+};
 
 export async function getLatestSyncedStartDateIso(
   supabase: SupabaseClient,
@@ -82,10 +112,24 @@ export async function upsertStravaSummariesForUser(
   let upserted = 0;
   let skippedUnchanged = 0;
   let errors = 0;
+  let skippedInvalid = 0;
+  let writeAttempts = 0;
 
   for (const { raw, manualLinkOnly } of summaries) {
     const hash = hashStravaSummaryPayload(raw);
     const sid = String(raw.id);
+
+    const validated = validateStravaSummaryForPersist(raw);
+    if (!validated.ok) {
+      skippedInvalid += 1;
+      runfolioLog.warn("stravaSync.persist", "skipped_invalid_payload", {
+        userId,
+        stravaActivityId: sid,
+        reason: validated.reason
+      });
+      continue;
+    }
+
     const { data: existing } = await supabase
       .from(TABLE)
       .select("id, payload_hash, manual_link_only")
@@ -100,36 +144,93 @@ export async function upsertStravaSummariesForUser(
     }
 
     const row = summaryToUpsertRow(userId, raw, now, manualLinkOnly);
+    const writePreview = {
+      user_id: userId,
+      strava_activity_id: sid,
+      start_date: String(row.start_date ?? ""),
+      distance_m: row.distance_m as number | null | undefined,
+      distance_km: row.distance_km as number | null | undefined,
+      sport_type: row.sport_type != null ? String(row.sport_type) : null,
+      activity_type: row.activity_type != null ? String(row.activity_type) : null,
+      manual_link_only: manualLinkOnly,
+      op: existing ? ("update" as const) : ("insert" as const)
+    };
+
+    runfolioLog.info("stravaSync.persist", "write_attempt", writePreview);
+    writeAttempts += 1;
+
     if (existing) {
-      const { error } = await supabase.from(TABLE).update(row).eq("id", (existing as { id: string }).id);
+      const rowId = (existing as { id: string }).id;
+      const { data: updatedRows, error } = await supabase.from(TABLE).update(row).eq("id", rowId).select("id");
       if (error) {
         errors += 1;
-        runfolioLog.warn("stravaSync.update", error.message, {
+        runfolioLog.warn("stravaSync.persist", "update_failed", {
           stravaId: sid,
+          rowId,
+          message: error.message,
           code: error.code,
           details: error.details,
           hint: error.hint
         });
+      } else if (!updatedRows?.length) {
+        errors += 1;
+        runfolioLog.warn("stravaSync.persist", "update_zero_rows", {
+          stravaId: sid,
+          rowId,
+          hint: "No row updated — often RLS, wrong id, or race. Confirm server action uses the same Supabase session as auth."
+        });
       } else {
         upserted += 1;
+        runfolioLog.info("stravaSync.persist", "update_ok", {
+          stravaId: sid,
+          rowId,
+          rowsReturned: updatedRows.length
+        });
       }
     } else {
-      const { error } = await supabase.from(TABLE).insert({ ...row, created_at: now });
+      const { data: insertedRows, error } = await supabase
+        .from(TABLE)
+        .insert({ ...row, created_at: now })
+        .select("id");
       if (error) {
         errors += 1;
-        runfolioLog.warn("stravaSync.insert", error.message, {
+        runfolioLog.warn("stravaSync.persist", "insert_failed", {
           stravaId: sid,
+          message: error.message,
           code: error.code,
           details: error.details,
           hint: error.hint
         });
+      } else if (!insertedRows?.length) {
+        errors += 1;
+        runfolioLog.warn("stravaSync.persist", "insert_zero_rows", {
+          stravaId: sid,
+          hint: "Insert returned no row — unexpected with returning select"
+        });
       } else {
         upserted += 1;
+        runfolioLog.info("stravaSync.persist", "insert_ok", {
+          stravaId: sid,
+          rowId: insertedRows[0]?.id,
+          rowsReturned: insertedRows.length
+        });
       }
     }
   }
 
-  return { upserted, skippedUnchanged, errors };
+  if (summaries.length > 0) {
+    runfolioLog.info("stravaSync.persist", "batch_summary", {
+      userId,
+      inputCount: summaries.length,
+      upserted,
+      skippedUnchanged,
+      skippedInvalid,
+      errors,
+      writeAttempts
+    });
+  }
+
+  return { upserted, skippedUnchanged, errors, skippedInvalid, writeAttempts };
 }
 
 export async function listSyncedActivitiesForUser(

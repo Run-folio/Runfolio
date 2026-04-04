@@ -205,13 +205,19 @@ export type IncrementalSyncResult =
 /**
  * Incremental only — Strava activities **after** stored high-water (or newest synced row for legacy users).
  * Empty sync table: user must run {@link backfillStravaHistoryForUserId} first.
+ *
+ * Pass `supabaseClient` from server actions (same session as `requireActionPersistence`) so RLS writes
+ * are not accidentally run with an unauthenticated client from a nested `createClient()`.
  */
-export async function syncStravaActivitiesForUserId(userId: string): Promise<IncrementalSyncResult> {
-  return enterStravaListOp(userId, "incremental", () => runIncrementalSync(userId));
+export async function syncStravaActivitiesForUserId(
+  userId: string,
+  supabaseClient?: SupabaseClient
+): Promise<IncrementalSyncResult> {
+  return enterStravaListOp(userId, "incremental", () => runIncrementalSync(userId, supabaseClient));
 }
 
-async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult> {
-  const supabase = await createClient();
+async function runIncrementalSync(userId: string, supabaseClient?: SupabaseClient): Promise<IncrementalSyncResult> {
+  const supabase = supabaseClient ?? (await createClient());
   const ingestTable = await getStravaIngestStateTableStatus(supabase);
   if (!ingestTable.ok) {
     return { ok: false, error: ingestTable.message };
@@ -240,6 +246,8 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
   let totalUpserted = 0;
   let totalSkipped = 0;
   let totalErrors = 0;
+  let totalSkippedInvalid = 0;
+  let totalWriteAttempts = 0;
   let requestsMade = 0;
   let stoppedForRateLimit = false;
   let retryAfterSec: number | null = null;
@@ -297,6 +305,8 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
     totalUpserted += result.upserted;
     totalSkipped += result.skippedUnchanged;
     totalErrors += result.errors;
+    totalSkippedInvalid += result.skippedInvalid;
+    totalWriteAttempts += result.writeAttempts;
 
     const pageMax = maxStartEpochFromSummaries(batch);
     if (pageMax != null) {
@@ -310,6 +320,10 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
       batchLen: batch.length,
       eligible: items.length,
       upserted: result.upserted,
+      skippedUnchanged: result.skippedUnchanged,
+      skippedInvalid: result.skippedInvalid,
+      writeAttempts: result.writeAttempts,
+      errors: result.errors,
       rateLimitedAfter: false
     });
 
@@ -348,6 +362,8 @@ async function runIncrementalSync(userId: string): Promise<IncrementalSyncResult
     upserted: totalUpserted,
     skippedUnchanged: totalSkipped,
     errors: totalErrors,
+    skippedInvalid: totalSkippedInvalid,
+    writeAttempts: totalWriteAttempts,
     requestsMade,
     stravaOauthRefreshCalls,
     stoppedForRateLimit,
@@ -389,7 +405,7 @@ export type BackfillSyncResult =
  */
 export async function backfillStravaHistoryForUserId(
   userId: string,
-  opts?: { maxPages?: number; jumpPreset?: StravaBackfillJumpPreset }
+  opts?: { maxPages?: number; jumpPreset?: StravaBackfillJumpPreset; supabase?: SupabaseClient }
 ): Promise<BackfillSyncResult> {
   return enterStravaListOp(userId, "backfill", () => runBackfillStravaHistory(userId, opts));
 }
@@ -399,9 +415,9 @@ export async function backfillStravaHistoryForUserId(
  */
 async function runBackfillJumpScan(
   userId: string,
-  window: { after: number; before: number }
+  window: { after: number; before: number },
+  supabase: SupabaseClient
 ): Promise<BackfillSyncResult> {
-  const supabase = await createClient();
   const ingestTable = await getStravaIngestStateTableStatus(supabase);
   if (!ingestTable.ok) {
     return { ok: false, error: ingestTable.message };
@@ -410,6 +426,8 @@ async function runBackfillJumpScan(
   let totalUpserted = 0;
   let totalSkipped = 0;
   let totalErrors = 0;
+  let totalSkippedInvalid = 0;
+  let totalWriteAttempts = 0;
   let totalRaw = 0;
   let totalEligible = 0;
   const allSummaries: StravaSummaryActivityJson[] = [];
@@ -482,6 +500,8 @@ async function runBackfillJumpScan(
     totalUpserted += result.upserted;
     totalSkipped += result.skippedUnchanged;
     totalErrors += result.errors;
+    totalSkippedInvalid += result.skippedInvalid;
+    totalWriteAttempts += result.writeAttempts;
 
     if (batch.length < PER_PAGE) break;
   }
@@ -510,7 +530,12 @@ async function runBackfillJumpScan(
   runfolioLog.info("strava.backfill", "jump_scan_done", {
     userId,
     rawFetched: totalRaw,
+    eligibleInBatch: totalEligible,
     upserted: totalUpserted,
+    skippedUnchanged: totalSkipped,
+    skippedInvalid: totalSkippedInvalid,
+    writeAttempts: totalWriteAttempts,
+    errors: totalErrors,
     after: afterEpoch,
     before: beforeEpoch,
     stoppedForRateLimit
@@ -526,6 +551,8 @@ async function runBackfillJumpScan(
     upserted: totalUpserted,
     skippedUnchanged: totalSkipped,
     errors: totalErrors,
+    skippedInvalid: totalSkippedInvalid,
+    writeAttempts: totalWriteAttempts,
     requestsMade,
     stravaOauthRefreshCalls,
     stoppedForRateLimit,
@@ -537,16 +564,16 @@ async function runBackfillJumpScan(
 
 async function runBackfillStravaHistory(
   userId: string,
-  opts?: { maxPages?: number; jumpPreset?: StravaBackfillJumpPreset }
+  opts?: { maxPages?: number; jumpPreset?: StravaBackfillJumpPreset; supabase?: SupabaseClient }
 ): Promise<BackfillSyncResult> {
-  const supabase = await createClient();
+  const supabase = opts?.supabase ?? (await createClient());
   const ingestTable = await getStravaIngestStateTableStatus(supabase);
   if (!ingestTable.ok) {
     return { ok: false, error: ingestTable.message };
   }
 
   if (opts?.jumpPreset) {
-    return runBackfillJumpScan(userId, epochWindowForJumpPreset(opts.jumpPreset));
+    return runBackfillJumpScan(userId, epochWindowForJumpPreset(opts.jumpPreset), supabase);
   }
 
   const state = await getIngestState(supabase, userId);
@@ -584,6 +611,8 @@ async function runBackfillStravaHistory(
   let totalUpserted = 0;
   let totalSkipped = 0;
   let totalErrors = 0;
+  let totalSkippedInvalid = 0;
+  let totalWriteAttempts = 0;
   let totalRaw = 0;
   let totalEligible = 0;
   const allSummaries: StravaSummaryActivityJson[] = [];
@@ -686,6 +715,8 @@ async function runBackfillStravaHistory(
     totalUpserted += result.upserted;
     totalSkipped += result.skippedUnchanged;
     totalErrors += result.errors;
+    totalSkippedInvalid += result.skippedInvalid;
+    totalWriteAttempts += result.writeAttempts;
 
     if (isFirstEverBackfillBatch && page === 1) {
       runfolioLog.info("strava.backfill", "first_page_persisted", {
@@ -693,6 +724,8 @@ async function runBackfillStravaHistory(
         qualifyingActivities: items.length,
         upserted: result.upserted,
         skippedUnchanged: result.skippedUnchanged,
+        skippedInvalid: result.skippedInvalid,
+        writeAttempts: result.writeAttempts,
         errors: result.errors,
         failurePhase: "after_first_list_ok"
       });
@@ -704,7 +737,11 @@ async function runBackfillStravaHistory(
       requestsMade,
       batchLen: batch.length,
       eligible: items.length,
-      upserted: result.upserted
+      upserted: result.upserted,
+      skippedUnchanged: result.skippedUnchanged,
+      skippedInvalid: result.skippedInvalid,
+      writeAttempts: result.writeAttempts,
+      errors: result.errors
     });
 
     if (batch.length < PER_PAGE) break;
@@ -740,6 +777,8 @@ async function runBackfillStravaHistory(
         upserted: 0,
         skippedUnchanged: 0,
         errors: 0,
+        skippedInvalid: 0,
+        writeAttempts: 0,
         backfillExhausted: false,
         rawFetched: 0,
         eligibleInBatch: 0,
@@ -761,6 +800,8 @@ async function runBackfillStravaHistory(
       upserted: 0,
       skippedUnchanged: 0,
       errors: 0,
+      skippedInvalid: 0,
+      writeAttempts: 0,
       backfillExhausted: true,
       rawFetched: 0,
       eligibleInBatch: 0,
@@ -805,6 +846,8 @@ async function runBackfillStravaHistory(
     upserted: totalUpserted,
     skippedUnchanged: totalSkipped,
     errors: totalErrors,
+    skippedInvalid: totalSkippedInvalid,
+    writeAttempts: totalWriteAttempts,
     requestsMade,
     stravaOauthRefreshCalls,
     stoppedForRateLimit,

@@ -95,6 +95,9 @@ function rateLimitedPhaseUI(kind: StravaRateLimitUxKind | null): (typeof PHASE_U
 type BackfillBatchSummary = {
   upserted: number;
   skippedUnchanged: number;
+  errors: number;
+  skippedInvalid: number;
+  writeAttempts: number;
   eligibleInBatch: number;
   rawFetched: number;
   backfillExhausted: boolean;
@@ -180,6 +183,9 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
         setLastBatchSummary({
           upserted: res.upserted,
           skippedUnchanged: res.skippedUnchanged,
+          errors: res.errors,
+          skippedInvalid: res.skippedInvalid,
+          writeAttempts: res.writeAttempts,
           eligibleInBatch: res.eligibleInBatch,
           rawFetched: res.rawFetched,
           backfillExhausted: res.backfillExhausted,
@@ -214,6 +220,9 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
         setLastBatchSummary({
           upserted: res.upserted,
           skippedUnchanged: res.skippedUnchanged,
+          errors: res.errors,
+          skippedInvalid: res.skippedInvalid,
+          writeAttempts: res.writeAttempts,
           eligibleInBatch: res.eligibleInBatch,
           rawFetched: res.rawFetched,
           backfillExhausted: res.backfillExhausted,
@@ -454,10 +463,33 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
                 <strong className="font-medium text-white/90">Already up to date:</strong> {lastBatchSummary.skippedUnchanged}
               </li>
               <li>
+                <strong className="font-medium text-white/90">DB write attempts:</strong> {lastBatchSummary.writeAttempts}{" "}
+                (after dedupe — excludes “already up to date”)
+              </li>
+              <li>
+                <strong className="font-medium text-white/90">Failed writes:</strong> {lastBatchSummary.errors}
+                {lastBatchSummary.skippedInvalid > 0 ? (
+                  <>
+                    {" "}
+                    · skipped invalid payload: {lastBatchSummary.skippedInvalid}
+                  </>
+                ) : null}
+              </li>
+              <li>
                 <strong className="font-medium text-white/90">Matched our historical rules:</strong>{" "}
                 {lastBatchSummary.eligibleInBatch} of {lastBatchSummary.rawFetched} Strava activities in this batch
               </li>
             </ul>
+            {lastBatchSummary.eligibleInBatch > 0 &&
+            lastBatchSummary.upserted === 0 &&
+            lastBatchSummary.skippedUnchanged === 0 &&
+            lastBatchSummary.errors > 0 ? (
+              <p className="mt-3 rounded-lg border border-rose-400/30 bg-rose-950/35 px-3 py-2 text-[13px] leading-relaxed text-rose-100/95">
+                Activities passed the import filter but <strong className="font-medium text-white">no rows were saved</strong>
+                . Check server logs for <code className="rounded bg-black/30 px-1">stravaSync.persist</code> (insert/update
+                errors or <strong className="font-medium text-white">update_zero_rows</strong> — often RLS or session).
+              </p>
+            ) : null}
             <p className="mt-4 text-[13px] leading-relaxed text-white/65">
               <strong className="text-white/85">How selection works:</strong> Run / Trail Run / TrailRun / Race (and the
               same distance rules for VirtualRun) are considered. By default we keep activities from{" "}

@@ -1122,7 +1122,7 @@ export async function syncStravaActivitiesAction() {
     const gate = await requireActionPersistence();
     if (!gate.ok) return { error: gate.error };
     const { user, supabase } = gate;
-    const res = await syncStravaActivitiesForUserId(user.id);
+    const res = await syncStravaActivitiesForUserId(user.id, supabase);
     if (!res.ok) {
       await revalidatePortfolioSurfaces(supabase, user.id, {
         alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/import/past-races"]
@@ -1143,6 +1143,9 @@ export async function syncStravaActivitiesAction() {
     runfolioLog.info("actions.stravaSync", "incremental_ok", {
       upserted: res.upserted,
       skipped: res.skippedUnchanged,
+      skippedInvalid: res.skippedInvalid,
+      writeAttempts: res.writeAttempts,
+      errors: res.errors,
       stoppedForRateLimit: res.stoppedForRateLimit,
       requestsMade: res.requestsMade,
       stravaOauthRefreshCalls: res.stravaOauthRefreshCalls
@@ -1153,6 +1156,8 @@ export async function syncStravaActivitiesAction() {
       upserted: res.upserted,
       skippedUnchanged: res.skippedUnchanged,
       errors: res.errors,
+      skippedInvalid: res.skippedInvalid,
+      writeAttempts: res.writeAttempts,
       stoppedForRateLimit: res.stoppedForRateLimit,
       retryAfterSec: res.retryAfterSec,
       requestsMade: res.requestsMade,
@@ -1179,7 +1184,8 @@ export async function backfillStravaHistoryAction(formData?: FormData) {
     const jumpRaw = formData?.get("jump_preset");
     const jumpPreset = parseStravaBackfillJumpPreset(typeof jumpRaw === "string" ? jumpRaw : null);
     const res = await backfillStravaHistoryForUserId(user.id, {
-      jumpPreset: jumpPreset ?? undefined
+      jumpPreset: jumpPreset ?? undefined,
+      supabase
     });
     if (!res.ok) {
       await revalidatePortfolioSurfaces(supabase, user.id, {
@@ -1198,6 +1204,9 @@ export async function backfillStravaHistoryAction(formData?: FormData) {
     runfolioLog.info("actions.stravaBackfill", "ok", {
       upserted: res.upserted,
       skipped: res.skippedUnchanged,
+      skippedInvalid: res.skippedInvalid,
+      writeAttempts: res.writeAttempts,
+      errors: res.errors,
       exhausted: res.backfillExhausted,
       rawFetched: res.rawFetched,
       eligibleInBatch: res.eligibleInBatch,
@@ -1211,6 +1220,8 @@ export async function backfillStravaHistoryAction(formData?: FormData) {
       upserted: res.upserted,
       skippedUnchanged: res.skippedUnchanged,
       errors: res.errors,
+      skippedInvalid: res.skippedInvalid,
+      writeAttempts: res.writeAttempts,
       backfillExhausted: res.backfillExhausted,
       rawFetched: res.rawFetched,
       eligibleInBatch: res.eligibleInBatch,
