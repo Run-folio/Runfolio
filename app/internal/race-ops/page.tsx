@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { raceOpsLoginAction } from "@/lib/races/internal/race-ops-actions";
 import { readRaceOpsSessionValid } from "@/lib/races/internal/race-ops-auth";
 
@@ -44,7 +45,7 @@ export default async function RaceOpsLoginPage({ searchParams }: Props) {
         </button>
       </form>
       <p className="mt-8 text-center text-[11px] text-muted">
-        <Link href="/dashboard" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
+        <Link href={OVERVIEW_PATH} className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
           ← Back to app
         </Link>
       </p>

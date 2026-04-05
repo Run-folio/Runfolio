@@ -3,6 +3,7 @@
 import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { ensurePublicUserRow } from "@/lib/ensure-public-user-row";
 import { getEnvPersistenceFailure } from "@/lib/persistence-readiness";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
@@ -37,8 +38,8 @@ export async function signInWithEmailAction(formData: FormData) {
 
     const email = String(formData.get("email") ?? "").trim();
     const password = String(formData.get("password") ?? "");
-    const nextRaw = String(formData.get("next") ?? "/dashboard");
-    const next = parseSafeRedirectPath(nextRaw) ?? "/dashboard";
+    const nextRaw = String(formData.get("next") ?? OVERVIEW_PATH);
+    const next = parseSafeRedirectPath(nextRaw) ?? OVERVIEW_PATH;
 
     if (!email || !password) {
       return { error: "Enter your email and password." };
@@ -97,8 +98,8 @@ export async function signUpWithEmailAction(formData: FormData) {
     const email = String(formData.get("email") ?? "").trim();
     const password = String(formData.get("password") ?? "");
     const name = String(formData.get("name") ?? "").trim();
-    const nextRaw = String(formData.get("next") ?? "/dashboard");
-    const next = parseSafeRedirectPath(nextRaw) ?? "/dashboard";
+    const nextRaw = String(formData.get("next") ?? OVERVIEW_PATH);
+    const next = parseSafeRedirectPath(nextRaw) ?? OVERVIEW_PATH;
 
     if (!email || !password) {
       return { error: "Enter your email and a password." };

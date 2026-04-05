@@ -15,6 +15,7 @@ import { DashboardFeaturedRaceSummary } from "@/components/dashboard-featured-ra
 import { Card } from "@/components/ui/card";
 import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
 import { getServerAuthUser } from "@/lib/auth-server";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { createClient } from "@/lib/supabase/server";
 import { demoUser, isSupabaseConfigured } from "@/lib/demo-mode";
 import { loadDevMatchDebugSnapshot } from "@/lib/dev-match-debug-snapshot";
@@ -47,12 +48,12 @@ export default async function DashboardPage() {
       <DataBackendSetupGate
         title="Overview"
         featureLabel="Your dashboard, bucket list, and Strava sync"
-        returnTo="/dashboard"
+        returnTo={OVERVIEW_PATH}
       />
     );
   }
 
-  await requirePersistenceReadyOrRedirect("/dashboard");
+  await requirePersistenceReadyOrRedirect(OVERVIEW_PATH);
 
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
@@ -63,7 +64,7 @@ export default async function DashboardPage() {
   let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];
   let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
   let canonicalStravaSuggestions: Awaited<ReturnType<typeof buildCanonicalStravaSuggestionsForUser>> = [];
-  let confirmReturnTo = "/dashboard";
+  let confirmReturnTo = OVERVIEW_PATH;
   let stravaOverview: Awaited<ReturnType<typeof loadUserStravaOverviewState>> | null = null;
   let stravaBackfillProgress: Awaited<ReturnType<typeof loadStravaBackfillProgress>> | null = null;
   let devMatchDebug: Awaited<ReturnType<typeof loadDevMatchDebugSnapshot>> | null = null;
@@ -88,7 +89,7 @@ export default async function DashboardPage() {
     canonicalCompleted = canon.completed;
     const profilePath = await resolveDefaultProfilePathForUser(supabase, user.id);
     confirmReturnTo =
-      profilePath === "/dashboard" ? "/dashboard" : `${profilePath}#profile-completed-races`;
+      profilePath === OVERVIEW_PATH ? OVERVIEW_PATH : `${profilePath}#profile-completed-races`;
     if (process.env.NODE_ENV === "development") {
       devMatchDebug = await loadDevMatchDebugSnapshot(
         supabase,
@@ -96,7 +97,7 @@ export default async function DashboardPage() {
         user,
         {
           page: "dashboard",
-          profileSlugFromUrl: profilePath !== "/dashboard" ? profilePath.replace(/^\//, "") : undefined
+          profileSlugFromUrl: profilePath !== OVERVIEW_PATH ? profilePath.replace(/^\//, "") : undefined
         },
         { portfolioRaces: races, stravaOverview }
       );

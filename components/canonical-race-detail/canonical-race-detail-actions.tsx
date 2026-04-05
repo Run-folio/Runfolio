@@ -9,6 +9,7 @@ import {
   removeCanonicalBucketGoalAction
 } from "@/lib/actions";
 import { usePersistence } from "@/components/persistence-context";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
 import { Button } from "@/components/ui/button";
@@ -129,13 +130,13 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
           </Link>
         ) : (
           <p className="text-sm text-white/65">
-            Finish saved on your bucket list{stravaLinked ? "" : " — link Strava anytime from the dashboard"}.
+            Finish saved on your bucket list{stravaLinked ? "" : " — link Strava anytime from Overview"}.
           </p>
         )}
         {!stravaLinked ? (
           <p className="text-sm text-white/55">
-            <Link href="/dashboard" className="font-medium text-teal underline-offset-4 hover:text-teal-hover hover:underline">
-              Open dashboard
+            <Link href={OVERVIEW_PATH} className="font-medium text-teal underline-offset-4 hover:text-teal-hover hover:underline">
+              Open Overview
             </Link>{" "}
             to attach a Strava activity.
           </p>
@@ -186,7 +187,7 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
             {pending ? "Saving…" : "Remove from bucket list"}
           </Button>
           <Link
-            href="/dashboard"
+            href={OVERVIEW_PATH}
             className={cn(
               "inline-flex items-center justify-center rounded-[12px] px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.08em] transition",
               "border border-white/15 text-muted hover:border-white/30 hover:text-white"
@@ -196,7 +197,7 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
           </Link>
         </div>
         <p className="text-[12px] text-white/45">
-          Mark complete when you cross the line — Strava is optional and can be added from the dashboard.
+          Mark complete when you cross the line — Strava is optional and can be added from Overview.
         </p>
         {msg ? (
           <p className="text-sm text-amber-200/90" role="alert">

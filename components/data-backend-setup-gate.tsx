@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AppNavbar } from "@/components/app-navbar";
 import { BACKEND_NOT_CONNECTED_USER_MESSAGE } from "@/lib/backend-config-messages";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { buildSetupUrl } from "@/lib/setup-url";
 
 type Props = {
@@ -11,7 +12,7 @@ type Props = {
   returnTo?: string;
 };
 
-export function DataBackendSetupGate({ title, featureLabel, returnTo = "/dashboard" }: Props) {
+export function DataBackendSetupGate({ title, featureLabel, returnTo = OVERVIEW_PATH }: Props) {
   const offlineDemo =
     process.env.RUNFOLIO_OFFLINE_DEMO?.trim().toLowerCase() === "1" ||
     process.env.RUNFOLIO_OFFLINE_DEMO?.trim().toLowerCase() === "true";
@@ -62,7 +63,7 @@ export function DataBackendSetupGate({ title, featureLabel, returnTo = "/dashboa
               Guided setup
             </Link>
             <Link
-              href="/dashboard"
+              href={OVERVIEW_PATH}
               className="inline-flex items-center justify-center rounded-[12px] border border-white/18 px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-muted transition hover:border-white/35 hover:text-white"
             >
               Overview

@@ -10,6 +10,7 @@ import { CANONICAL_SUGGESTED_HIGH_MIN_SCORE } from "@/lib/strava-canonical-match
 import type { CanonicalStravaSuggestion } from "@/lib/strava-canonical-match/suggestions";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { parseActivityPageId } from "@/lib/activity-route-id";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +24,7 @@ type Props = {
 
 export function CanonicalStravaMatchSuggestions({
   suggestions,
-  returnAfterConfirm = "/dashboard",
+  returnAfterConfirm = OVERVIEW_PATH,
   compact = false
 }: Props) {
   const router = useRouter();

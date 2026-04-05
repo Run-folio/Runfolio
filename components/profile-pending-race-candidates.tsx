@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import {
   confirmCustomMajorEffortAction,
   confirmKnownRaceMatchAction,
@@ -16,21 +16,17 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   candidates: ProfilePendingRaceCandidate[];
-  /** Safe relative path e.g. `/alice` */
-  profilePath: string;
+  /** `return_to` for server actions after confirm / dismiss / custom ultra */
+  returnTo: string;
 };
 
-function confidenceLabel(c: ProfilePendingRaceCandidate["confidence"]): string {
-  if (c === "high") return "High confidence";
-  if (c === "medium") return "Medium confidence";
-  if (c === "low") return "Low confidence";
-  return "Unmatched";
-}
+const compactBtn =
+  "min-h-8 shrink-0 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.06em] sm:min-h-9 sm:px-3 sm:text-[11px]";
 
 function buildConfirmFd(
   discoverRaceId: string,
   m: ProfilePendingRaceCandidate,
-  profilePath: string,
+  returnTo: string,
   completeBucket: boolean
 ): FormData {
   const fd = new FormData();
@@ -43,7 +39,7 @@ function buildConfirmFd(
   fd.set("time", m.movingTimeLabel);
   fd.set("location", m.location);
   fd.set("description", "");
-  fd.set("return_to", profilePath);
+  fd.set("return_to", returnTo);
   return fd;
 }
 
@@ -51,7 +47,7 @@ function buildConfirmFdFromCandidate(
   discoverRaceId: string,
   alt: RaceMatchCandidate,
   m: ProfilePendingRaceCandidate,
-  profilePath: string,
+  returnTo: string,
   completeBucket: boolean
 ): FormData {
   const fd = new FormData();
@@ -64,15 +60,11 @@ function buildConfirmFdFromCandidate(
   fd.set("time", m.movingTimeLabel);
   fd.set("location", m.location);
   fd.set("description", "");
-  fd.set("return_to", profilePath);
+  fd.set("return_to", returnTo);
   return fd;
 }
 
-function buildCustomMajorFd(
-  m: ProfilePendingRaceCandidate,
-  customName: string,
-  profilePath: string
-): FormData {
+function buildCustomMajorFd(m: ProfilePendingRaceCandidate, customName: string, returnTo: string): FormData {
   const fd = new FormData();
   fd.set("strava_activity_id", m.stravaId);
   fd.set("custom_name", customName.trim() || m.activityTitle || "Major trail / ultra effort");
@@ -81,12 +73,13 @@ function buildCustomMajorFd(
   fd.set("elevation_m", m.elevationM != null ? String(Math.round(m.elevationM)) : "");
   fd.set("time", m.movingTimeLabel);
   fd.set("location", m.location);
-  fd.set("return_to", profilePath);
+  fd.set("return_to", returnTo);
   return fd;
 }
 
-export function ProfilePendingRaceCandidates({ candidates: initial, profilePath }: Props) {
+export function ProfilePendingRaceCandidates({ candidates: initial, returnTo }: Props) {
   const router = useRouter();
+  const listLabelId = useId();
   const { persistenceAvailable, reason: persistenceReason } = usePersistence();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -127,7 +120,7 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
     setError(null);
     const fd = new FormData();
     fd.set("strava_activity_id", stravaId);
-    fd.set("return_to", profilePath);
+    fd.set("return_to", returnTo);
     startTransition(async () => {
       const res = await dismissStravaProfileCandidateAction(fd);
       if ("error" in res && res.error) {
@@ -139,102 +132,75 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
   };
 
   return (
-    <section className="border-x border-b border-amber-500/30 bg-gradient-to-b from-amber-950/25 to-[#080a0e] px-5 py-8 md:px-8 md:py-10">
-      <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-amber-200/90">Pending review</p>
-      <h2 className="type-section mt-2 text-lg text-white md:text-xl">Imported major race efforts</h2>
-      <p className="type-meta mt-2 max-w-2xl text-sm">
-        Approve what belongs on your public portfolio. Nothing here appears in Top Races or Race Journey until you confirm.
-        Dismiss efforts that aren&apos;t meaningful races for your story.
-      </p>
+    <section
+      id="catalog-pending-review"
+      data-section="catalog-pending-review"
+      aria-labelledby={listLabelId}
+      className="space-y-2"
+    >
+      <h2 id={listLabelId} className="sr-only">
+        Catalog matches to confirm for your profile
+      </h2>
       {!persistenceAvailable ? (
-        <p className="mt-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90" role="status">
+        <p
+          className="rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-100/90"
+          role="status"
+        >
           {persistenceReason ?? "Database not connected — confirm and dismiss actions are disabled."}
         </p>
       ) : null}
       {error ? (
-        <p className="mt-4 text-sm text-red-300" role="alert">
+        <p className="text-sm text-red-300" role="alert">
           {error}
         </p>
       ) : null}
 
-      <ul className="mt-6 space-y-5">
+      <ul className="space-y-1.5">
         {initial.map((m) => (
-          <li key={m.stravaId} className="border border-white/10 bg-black/40 p-4 md:p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span
-                className={cn(
-                  "border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider",
-                  m.confidence === "high"
-                    ? "border-green-500/45 bg-green-500/10 text-green-200"
-                    : m.confidence === "medium"
-                      ? "border-amber-500/45 bg-amber-500/10 text-amber-100"
-                      : m.confidence === "low"
-                        ? "border-white/20 text-muted"
-                        : "border-white/15 text-muted"
-                )}
-              >
-                {confidenceLabel(m.confidence)}
-              </span>
-              {m.suggestedDisplayTitle ? (
-                <span className="text-[10px] text-muted">
-                  Suggested: <span className="text-accent">{m.suggestedDisplayTitle}</span>
-                </span>
-              ) : (
-                <span className="text-[10px] text-muted">No automatic catalog match — pick a race below</span>
-              )}
-            </div>
-
-            <p className="mt-3 font-semibold text-white">{m.activityTitle}</p>
-            <dl className="mt-2 grid gap-1 text-[11px] text-slate-400 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <dt className="text-muted">Date</dt>
-                <dd className="text-white/90">{m.date}</dd>
-              </div>
-              <div>
-                <dt className="text-muted">Distance</dt>
-                <dd className="text-white/90">{m.distanceKm} km</dd>
-              </div>
-              <div>
-                <dt className="text-muted">Elevation</dt>
-                <dd className="text-white/90">{m.elevationM != null ? `${m.elevationM} m` : "—"}</dd>
-              </div>
-              <div>
-                <dt className="text-muted">Type</dt>
-                <dd className="text-white/90">{m.sportType ?? m.activityType ?? "—"}</dd>
-              </div>
-            </dl>
-            {m.reasons.length > 0 ? (
-              <ul className="mt-3 list-inside list-disc text-[11px] text-muted">
-                {m.reasons.slice(0, 5).map((r) => (
-                  <li key={r}>{r}</li>
-                ))}
-              </ul>
+          <li
+            key={m.stravaId}
+            className="rounded-lg border border-white/10 bg-black/30 px-2.5 py-2 sm:px-3 sm:py-2.5"
+          >
+            <p className="text-[13px] font-medium leading-snug text-white">{m.activityTitle}</p>
+            <p className="mt-0.5 text-[10px] tabular-nums leading-snug text-white/60">
+              <span>{m.date}</span>
+              <span className="text-white/30"> · </span>
+              <span>{m.distanceKm} km</span>
+              <span className="text-white/30"> · </span>
+              <span>{m.elevationM != null ? `${m.elevationM} m` : "—"}</span>
+              <span className="text-white/30"> · </span>
+              <span>{m.sportType ?? m.activityType ?? "—"}</span>
+            </p>
+            {m.suggestedDisplayTitle ? (
+              <p className="mt-1 text-[10px] leading-snug text-muted">
+                Suggested:&nbsp;
+                <span className="text-white/78">{m.suggestedDisplayTitle}</span>
+              </p>
             ) : null}
             {m.onUserBucketList ? (
-              <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-gold">On your bucket list</p>
+              <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wider text-gold">On bucket list</p>
             ) : null}
 
-            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <div className="mt-1.5 flex flex-wrap gap-1">
               {m.suggestedDiscoverId ? (
                 <>
                   {m.onUserBucketList && m.userRaceId ? (
                     <Button
                       type="button"
                       disabled={pending || !persistenceAvailable}
-                      className="bg-green-800 hover:bg-green-700"
-                      onClick={() =>
-                        runConfirm(buildConfirmFd(m.suggestedDiscoverId!, m, profilePath, true))
-                      }
+                      className={cn(compactBtn, "bg-green-800 hover:bg-green-700")}
+                      onClick={() => runConfirm(buildConfirmFd(m.suggestedDiscoverId!, m, returnTo, true))}
                     >
-                      Confirm for profile · complete bucket
+                      Confirm + bucket
                     </Button>
                   ) : null}
                   <Button
                     type="button"
                     disabled={pending || !persistenceAvailable}
-                    onClick={() => runConfirm(buildConfirmFd(m.suggestedDiscoverId!, m, profilePath, false))}
+                    className={cn(compactBtn, "bg-accent text-white hover:bg-gold-hover")}
+                    onClick={() => runConfirm(buildConfirmFd(m.suggestedDiscoverId!, m, returnTo, false))}
                   >
-                    Confirm for profile
+                    Confirm match
                   </Button>
                 </>
               ) : null}
@@ -242,6 +208,7 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
                 type="button"
                 variant="secondary"
                 disabled={pending || !persistenceAvailable}
+                className={compactBtn}
                 onClick={() => runDismiss(m.stravaId)}
               >
                 Not this race
@@ -250,41 +217,45 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
                 type="button"
                 variant="ghost"
                 disabled={pending || !persistenceAvailable}
+                className={cn(compactBtn, "text-white/85 hover:bg-white/[0.08]")}
                 onClick={() => setOpenAlt((prev) => (prev === m.stravaId ? null : m.stravaId))}
               >
-                {openAlt === m.stravaId ? "Hide options" : "Choose another race"}
+                Choose another race
               </Button>
               <Link
                 href={`/activities/${m.stravaId}`}
-                className="inline-flex items-center justify-center rounded-[12px] border border-white/15 px-4 py-2 text-[12px] font-semibold uppercase tracking-[0.08em] text-muted transition hover:border-white/30 hover:text-white"
+                className={cn(
+                  compactBtn,
+                  "inline-flex items-center justify-center rounded-[10px] border border-white/16 text-white/78 transition hover:border-white/28 hover:text-white"
+                )}
               >
                 View activity
               </Link>
             </div>
 
             {openAlt === m.stravaId && m.alternatives.length > 0 ? (
-              <div className="mt-4 border-t border-white/10 pt-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Other catalog matches</p>
-                <ul className="mt-3 space-y-2">
+              <div className="mt-1.5 border-t border-white/10 pt-1.5">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-muted">Other matches</p>
+                <ul className="mt-1 space-y-1">
                   {m.alternatives.map((alt) => (
                     <li
                       key={alt.discoverRaceId}
-                      className="flex flex-col gap-2 border border-white/10 bg-black/30 p-3 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-1 rounded-md border border-white/10 bg-black/25 px-2 py-1.5 sm:flex-row sm:items-center sm:justify-between"
                     >
-                      <div>
-                        <p className="font-medium text-white">{alt.title}</p>
-                        <p className="text-[10px] text-muted">
-                          {alt.confidence} · score {(alt.score * 100).toFixed(0)}%
+                      <div className="min-w-0">
+                        <p className="text-[12px] font-medium text-white">{alt.title}</p>
+                        <p className="text-[9px] text-muted">
+                          {alt.confidence} · {(alt.score * 100).toFixed(0)}%
                         </p>
                       </div>
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-1">
                         {alt.onUserBucketList && alt.userRaceId ? (
                           <Button
                             type="button"
                             disabled={pending || !persistenceAvailable}
-                            className="bg-green-800 px-3 py-1.5 text-[11px] hover:bg-green-700"
+                            className={cn(compactBtn, "bg-green-800 hover:bg-green-700")}
                             onClick={() =>
-                              runConfirm(buildConfirmFdFromCandidate(alt.discoverRaceId, alt, m, profilePath, true))
+                              runConfirm(buildConfirmFdFromCandidate(alt.discoverRaceId, alt, m, returnTo, true))
                             }
                           >
                             Confirm + bucket
@@ -293,12 +264,12 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
                         <Button
                           type="button"
                           disabled={pending || !persistenceAvailable}
-                          className="px-3 py-1.5 text-[11px]"
+                          className={compactBtn}
                           onClick={() =>
-                            runConfirm(buildConfirmFdFromCandidate(alt.discoverRaceId, alt, m, profilePath, false))
+                            runConfirm(buildConfirmFdFromCandidate(alt.discoverRaceId, alt, m, returnTo, false))
                           }
                         >
-                          Confirm for profile
+                          Confirm match
                         </Button>
                       </div>
                     </li>
@@ -308,48 +279,45 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
             ) : null}
 
             {openAlt === m.stravaId && m.alternatives.length === 0 ? (
-              <p className="mt-4 border-t border-white/10 pt-4 text-sm text-muted">
-                No catalog matches pass our threshold here. Try the{" "}
-                <Link href="/my-races" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
+              <p className="mt-1.5 border-t border-white/10 pt-1.5 text-[11px] leading-snug text-muted">
+                No other catalog matches.&nbsp;
+                <Link
+                  href="/my-races?tab=review"
+                  className="text-teal underline-offset-2 hover:text-teal-hover hover:underline"
+                >
                   My Races
-                </Link>{" "}
-                for verified races,{" "}
-                <Link href="/races/new" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
+                </Link>
+                ,{" "}
+                <Link href="/races/new" className="text-teal underline-offset-2 hover:text-teal-hover hover:underline">
                   Add race
-                </Link>{" "}
-                for a quick manual add, or browse the{" "}
-                <Link href="/races/find" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
-                  race library
+                </Link>
+                , or{" "}
+                <Link href="/races/find" className="text-teal underline-offset-2 hover:text-teal-hover hover:underline">
+                  Find a race
                 </Link>
                 .
               </p>
             ) : null}
 
             {m.distanceKm >= 50 ? (
-              <div className="mt-4 border-t border-white/10 pt-4">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-200/80">
-                  Not in the catalog?
-                </p>
-                <p className="mt-1 text-xs text-muted">
-                  Save this ≥50 km effort as a named finish without a catalog id — you can link a known race later.
-                </p>
-                <div className="mt-3 flex max-w-xl flex-col gap-2 sm:flex-row sm:items-end">
+              <div className="mt-1.5 border-t border-white/10 pt-1.5">
+                <p className="text-[9px] font-semibold uppercase tracking-wider text-white/48">Custom major (≥50 km)</p>
+                <div className="mt-1 flex max-w-lg flex-col gap-1 sm:flex-row sm:items-end">
                   <Input
                     value={
                       customUltraNames[m.stravaId] !== undefined
                         ? customUltraNames[m.stravaId]
                         : (m.activityTitle ?? "")
                     }
-                    onChange={(e) =>
-                      setCustomUltraNames((prev) => ({ ...prev, [m.stravaId]: e.target.value }))
-                    }
-                    placeholder="Display name (optional)"
-                    className="sm:flex-1"
+                    onChange={(e) => setCustomUltraNames((prev) => ({ ...prev, [m.stravaId]: e.target.value }))}
+                    placeholder="Display name"
+                    className="h-8 text-[13px] sm:flex-1"
                   />
                   <Button
                     type="button"
                     variant="secondary"
                     disabled={pending || !persistenceAvailable}
+                    className={compactBtn}
                     onClick={() =>
                       runCustomMajor(
                         buildCustomMajorFd(
@@ -357,7 +325,7 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
                           customUltraNames[m.stravaId] !== undefined
                             ? customUltraNames[m.stravaId]
                             : (m.activityTitle ?? ""),
-                          profilePath
+                          returnTo
                         )
                       )
                     }

@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { syncStravaActivitiesAction } from "@/lib/actions";
 import { usePersistence } from "@/components/persistence-context";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { buildSetupUrl } from "@/lib/setup-url";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,7 @@ type Props = {
  */
 export function StravaIncrementalSyncButton({ compact, subtle, syncLabel, className }: Props) {
   const router = useRouter();
-  const pathname = usePathname() ?? "/dashboard";
+  const pathname = usePathname() ?? OVERVIEW_PATH;
   const { persistenceAvailable, reason } = usePersistence();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
@@ -127,7 +128,7 @@ export function StravaIncrementalSyncButton({ compact, subtle, syncLabel, classN
         <p className="max-w-md text-[11px] text-amber-200/90" role="status">
           {reason}{" "}
           <Link
-            href={buildSetupUrl("/dashboard")}
+            href={buildSetupUrl(OVERVIEW_PATH)}
             className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
           >
             Open setup

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import {
   addCanonicalRaceToBucketListAction,
   addCatalogRaceToBucketListAction,
@@ -628,7 +629,7 @@ export function BucketListWorkflow({
                   rowPending={rowPending}
                   primaryAction={
                     unlinked
-                      ? { label: "Link finish", href: "/dashboard", variant: "link" }
+                      ? { label: "Link finish", href: OVERVIEW_PATH, variant: "link" }
                       : g.linked_strava_activity_id
                         ? {
                             label: "Activity",

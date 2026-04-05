@@ -3,6 +3,7 @@ import { STRAVA_OAUTH_NEXT_COOKIE, STRAVA_OAUTH_STATE_COOKIE } from "@/lib/strav
 import { getStravaClientCredentials, resolveStravaRedirectUri } from "@/lib/strava-env";
 import { stravaAuthorizeUrl } from "@/lib/strava-oauth";
 import { stravaOauthTrace } from "@/lib/strava-oauth-trace";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 import { createClient } from "@/lib/supabase/server";
 
@@ -33,8 +34,8 @@ export async function GET(request: Request) {
   }
 
   const reqUrl = new URL(request.url);
-  const nextParam = reqUrl.searchParams.get("next") ?? "/dashboard";
-  const nextPath = parseSafeRedirectPath(nextParam) ?? "/dashboard";
+  const nextParam = reqUrl.searchParams.get("next") ?? OVERVIEW_PATH;
+  const nextPath = parseSafeRedirectPath(nextParam) ?? OVERVIEW_PATH;
 
   const supabase = await createClient();
   const {

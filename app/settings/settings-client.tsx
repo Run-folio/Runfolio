@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { SUPPORTED_LOCALES, type Locale } from "@/lib/i18n";
 import { disconnectStravaAction } from "@/lib/strava-disconnect-action";
 import { signOutAction } from "@/lib/sign-out-action";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -178,7 +179,7 @@ export function SettingsClient({ email, displayName, stravaConnected, stravaOAut
             {t("settings.signOut")}
           </button>
         </form>
-        <Link href="/dashboard" className="text-[12px] font-medium text-teal underline-offset-4 hover:text-teal-hover hover:underline">
+        <Link href={OVERVIEW_PATH} className="text-[12px] font-medium text-teal underline-offset-4 hover:text-teal-hover hover:underline">
           {t("settings.backToApp")}
         </Link>
       </div>

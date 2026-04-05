@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { Race } from "@/types";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { formatRaceMonth } from "@/lib/format-race-date";
 import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
@@ -25,7 +26,7 @@ export function RunningProfileCompletedGrid({ races, isOwner }: Props) {
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/50">Completed races</p>
           <h2 className="font-display mt-3 text-2xl font-normal text-white">Your finishes belong here</h2>
           <p className="type-meta mt-4 text-sm leading-relaxed text-white/55">
-            Link a Strava activity to a race from the dashboard, then tap{" "}
+            Link a Strava activity to a race from Overview, then tap{" "}
             <span className="text-white/90">Show on profile</span> when you&apos;re ready. Nothing goes public until
             you say so.
           </p>
@@ -37,10 +38,10 @@ export function RunningProfileCompletedGrid({ races, isOwner }: Props) {
               My Races →
             </Link>
             <Link
-              href="/dashboard"
+              href={OVERVIEW_PATH}
               className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/50 hover:text-white/80"
             >
-              Dashboard →
+              Overview →
             </Link>
             <Link
               href="/races/find"

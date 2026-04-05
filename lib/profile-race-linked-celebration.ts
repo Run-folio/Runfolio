@@ -1,3 +1,5 @@
+import { OVERVIEW_PATH } from "@/lib/app-paths";
+
 /** Query flag appended to profile redirects after a successful Strava↔race confirm (client reads and strips). */
 export const RACE_LINKED_QUERY_KEY = "raceLinked";
 
@@ -9,13 +11,13 @@ function celebrationPathname(path: string): string {
 /** Whether to append `?raceLinked=1` for a post-confirm profile landing (skip app routes / bucket / new race). */
 export function shouldAppendRaceLinkedCelebration(path: string): boolean {
   const base = celebrationPathname(path);
-  if (!base || base === "/dashboard") return false;
+  if (!base || base === OVERVIEW_PATH) return false;
   if (base === "/bucket-list" || base.endsWith("/bucket-list")) return false;
   if (base.startsWith("/races/new")) return false;
   if (base.startsWith("/auth/")) return false;
   const seg = base.split("/").filter(Boolean)[0];
   const reserved = new Set([
-    "dashboard",
+    OVERVIEW_PATH.replace(/^\//, ""),
     "bucket-list",
     "races",
     "auth",

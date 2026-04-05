@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import type { StravaFeedActivity, StravaFeedStats } from "@/types";
 import { StravaActivityCard } from "@/components/strava-activity-card";
 import { StravaInsightsStrip } from "@/components/strava-insights-strip";
@@ -26,7 +27,7 @@ export function StravaRecentActivitiesSection({
   showInsights = true,
   stravaOAuthConfigured = false,
   emptyHint,
-  stravaOauthNext = "/dashboard"
+  stravaOauthNext = OVERVIEW_PATH
 }: Props) {
   const slice = activities.slice(0, limit);
 

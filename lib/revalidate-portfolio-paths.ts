@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { listTrophyCollectionSlugs } from "@/lib/collections/registry";
 import { collectProfileRevalidatePaths } from "@/lib/profile-path-server";
 import { runfolioLog } from "@/lib/runfolio-log";
@@ -14,7 +15,7 @@ export async function revalidatePortfolioSurfaces(
     alsoPaths?: string[];
   }
 ) {
-  revalidatePath("/dashboard");
+  revalidatePath(OVERVIEW_PATH);
   revalidatePath("/matches");
   revalidatePath("/my-races");
   revalidatePath("/bucket-list");

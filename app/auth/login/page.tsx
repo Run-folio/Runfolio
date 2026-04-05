@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AuthEmailSignInForm } from "@/components/auth-email-sign-in-form";
 import { BACKEND_NOT_CONNECTED_USER_MESSAGE } from "@/lib/backend-config-messages";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 
 type Props = {
@@ -44,7 +45,7 @@ function stravaConnectionHint(raw: string | null | undefined): string | null {
 
 export default async function LoginPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const nextPath = parseSafeRedirectPath(sp.next ?? sp.redirect ?? "") ?? "/dashboard";
+  const nextPath = parseSafeRedirectPath(sp.next ?? sp.redirect ?? "") ?? OVERVIEW_PATH;
   const setupWarning =
     sp.supabase === "missing"
       ? BACKEND_NOT_CONNECTED_USER_MESSAGE

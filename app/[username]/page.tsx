@@ -5,7 +5,6 @@ import { DevMatchDebugSummary } from "@/components/dev-match-debug-summary";
 import { ProfileRaceLinkedCelebration } from "@/components/profile-race-linked-celebration";
 import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { ProfileHero } from "@/components/profile-hero";
-import { ProfilePendingRaceCandidates } from "@/components/profile-pending-race-candidates";
 import { RunningProfileCompletedGrid } from "@/components/running-profile/running-profile-completed-grid";
 import { RunningProfileIdentityForm } from "@/components/running-profile/running-profile-identity-form";
 import { RunningProfilePublishQueue } from "@/components/running-profile/running-profile-publish-queue";
@@ -14,6 +13,7 @@ import { RunningProfileSelectedEfforts } from "@/components/running-profile/runn
 import { RunningProfileSpotlight } from "@/components/running-profile/running-profile-spotlight";
 import { RunningProfileRaceIdentitySection } from "@/components/running-profile/running-profile-race-identity";
 import { RunningProfileStatsRow } from "@/components/running-profile/running-profile-stats-row";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
@@ -26,7 +26,6 @@ import {
   deriveRunnerRaceIdentity
 } from "@/lib/race-identity/derive";
 import { loadDevMatchDebugSnapshot } from "@/lib/dev-match-debug-snapshot";
-import { buildProfilePendingRaceCandidates } from "@/lib/profile-pending-candidates";
 import { profileApprovedCompletedRaces } from "@/lib/portfolio-race";
 import { resolveProfileHeroPhoto } from "@/lib/profile-hero-asset";
 import { computeRunningProfileStats } from "@/lib/running-profile/stats";
@@ -44,7 +43,7 @@ import {
   filterStravaRaceCandidates
 } from "@/lib/strava-race-candidates";
 import { syncedRowToStravaFeedActivity } from "@/lib/strava-sync/synced-row-to-feed";
-import type { ProfilePendingRaceCandidate, Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
+import type { Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +70,6 @@ export default async function PublicProfilePage({ params }: Props) {
   } | null = null;
   let isOwnProfile = false;
   let stravaEnriched: StravaRaceCandidate[] = [];
-  let pendingCandidates: ProfilePendingRaceCandidate[] = [];
   let canonicalFuture: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["future"] = [];
   let canonicalCompleted: Awaited<ReturnType<typeof fetchCanonicalBucketGoalsForUser>>["completed"] = [];
   let pinnedSynced: StravaSyncedActivityRow[] = [];
@@ -111,13 +109,6 @@ export default async function PublicProfilePage({ params }: Props) {
 
       if (isOwnProfile && profileAuthUser && runner) {
         const supabase = await createClient();
-        const { data: dis, error: disErr } = await supabase
-          .from("strava_profile_dismissals")
-          .select("strava_activity_id")
-          .eq("user_id", profileAuthUser.id);
-        const dismissedIds =
-          disErr || !dis ? new Set<string>() : new Set(dis.map((d) => d.strava_activity_id));
-
         const feed = await getStravaConnectionStubFeed();
         const syncedForStrip = (await listSyncedActivitiesForUser(supabase, profileAuthUser.id)).filter(
           (r) => !r.manual_link_only && r.potential_race_activity
@@ -130,7 +121,6 @@ export default async function PublicProfilePage({ params }: Props) {
           matchedMajorDiscoverIds: dedupeHighConfidenceDiscoverIds(stravaEnriched),
           stravaOk: feed.ok || stripActs.length > 0
         };
-        pendingCandidates = buildProfilePendingRaceCandidates(stravaEnriched, allRaces, dismissedIds);
         const canon = await fetchCanonicalBucketGoalsForUser(supabase, profileAuthUser.id);
         canonicalFuture = canon.future;
         canonicalCompleted = canon.completed;
@@ -159,7 +149,6 @@ export default async function PublicProfilePage({ params }: Props) {
       runfolioLog.error("PublicProfile.supabase", e, { username });
       runner = null;
       allRaces = [];
-      pendingCandidates = [];
     }
   }
 
@@ -175,7 +164,7 @@ export default async function PublicProfilePage({ params }: Props) {
             {profileAuthUser ? (
               <>
                 Public lookup uses the name on your Runfolio account. Open{" "}
-                <Link href="/dashboard" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
+                <Link href={OVERVIEW_PATH} className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                   Overview
                 </Link>{" "}
                 to sync your display name with your profile link, or check the spelling in the address bar.
@@ -252,10 +241,6 @@ export default async function PublicProfilePage({ params }: Props) {
             </div>
           ) : null}
 
-          {isOwnProfile && pendingCandidates.length > 0 ? (
-            <ProfilePendingRaceCandidates candidates={pendingCandidates} profilePath={profilePath} />
-          ) : null}
-
           {isOwnProfile ? <RunningProfilePublishQueue allRaces={allRaces ?? []} /> : null}
 
           <RunningProfileRaceIdentitySection
@@ -287,9 +272,9 @@ export default async function PublicProfilePage({ params }: Props) {
 
           {ownProfileStrava && stravaOAuthConfigured ? (
             <p className="border-x border-b border-border bg-[#07080d] px-5 py-4 text-center text-[11px] text-white/45 md:px-8">
-              Strava long-run review and smart matches live on the{" "}
-              <Link href="/dashboard" className="text-gold hover:text-white">
-                dashboard
+              Strava long-run review and smart matches live on{" "}
+              <Link href={OVERVIEW_PATH} className="text-gold hover:text-white">
+                Overview
               </Link>
               .
             </p>

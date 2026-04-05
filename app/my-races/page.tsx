@@ -16,10 +16,18 @@ import { loadDevMatchDebugSnapshot } from "@/lib/dev-match-debug-snapshot";
 import { loadMatchHubBundle } from "@/lib/match-hub/service";
 import { loadStravaBackfillProgress } from "@/lib/strava-backfill-progress";
 import { loadUserStravaOverviewState } from "@/lib/strava-user-overview";
-import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
+import { resolveDefaultProfilePathForUser, resolveProfileHrefForSignedInNav } from "@/lib/profile-path-server";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
-import type { Race } from "@/types";
+import { buildProfilePendingRaceCandidates } from "@/lib/profile-pending-candidates";
+import {
+  filterStravaRaceCandidates,
+  enrichRaceCandidatesWithCatalogMatches
+} from "@/lib/strava-race-candidates";
+import { listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
+import { syncedRowToStravaFeedActivity } from "@/lib/strava-sync/synced-row-to-feed";
+import type { ProfilePendingRaceCandidate, Race } from "@/types";
 
 export const dynamic = "force-dynamic";
 
@@ -28,12 +36,17 @@ export const metadata: Metadata = {
   description: "Import runs from Strava, match finishes to the catalog, and manage linked races."
 };
 
-export default async function MyRacesPage() {
+type PageProps = { searchParams: Promise<{ tab?: string }> };
+
+export default async function MyRacesPage({ searchParams }: PageProps) {
   if (!isSupabaseConfigured()) {
     return <DataBackendSetupGate title="My Races" featureLabel="My Races" returnTo="/my-races" />;
   }
 
   await requirePersistenceReadyOrRedirect("/my-races");
+
+  const sp = await searchParams;
+  const initialTab = sp.tab === "review" ? "review" : "completed";
 
   const { user, authError } = await getServerAuthUser();
   if (authError || !user) {
@@ -50,10 +63,34 @@ export default async function MyRacesPage() {
     syncedRows: stravaOverview.syncedRows,
     collectDevCanonicalTraces: process.env.NODE_ENV === "development"
   });
+
+  const { data: profileDismissals, error: profileDisErr } = await supabase
+    .from("strava_profile_dismissals")
+    .select("strava_activity_id")
+    .eq("user_id", user.id);
+  const dismissedProfileIds =
+    profileDisErr || !profileDismissals
+      ? new Set<string>()
+      : new Set(profileDismissals.map((d) => d.strava_activity_id));
+
+  const syncedForCatalogPending = (await listSyncedActivitiesForUser(supabase, user.id)).filter(
+    (r) => !r.manual_link_only && r.potential_race_activity
+  );
+  const stripActs = filterStravaRaceCandidates(syncedForCatalogPending.map(syncedRowToStravaFeedActivity));
+  const stravaEnrichedCatalog = enrichRaceCandidatesWithCatalogMatches(stripActs, portfolioRaces);
+  const profilePendingCandidates: ProfilePendingRaceCandidate[] = buildProfilePendingRaceCandidates(
+    stravaEnrichedCatalog,
+    portfolioRaces,
+    dismissedProfileIds
+  );
+
   const profilePath = await resolveDefaultProfilePathForUser(supabase, user.id);
-  const profileHref = profilePath !== "/dashboard" ? profilePath : "/dashboard";
+  const profileHref = await resolveProfileHrefForSignedInNav(supabase, user.id, {
+    authDisplayName: typeof user.user_metadata?.name === "string" ? user.user_metadata.name : null,
+    emailLocalPart: user.email?.split("@")[0] ?? null
+  });
   const completedRacesHref =
-    profilePath !== "/dashboard" ? `${profilePath}#profile-completed-races` : "/dashboard";
+    profilePath !== OVERVIEW_PATH ? `${profilePath}#profile-completed-races` : OVERVIEW_PATH;
 
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
@@ -69,7 +106,7 @@ export default async function MyRacesPage() {
           user,
           {
             page: "my-races",
-            profileSlugFromUrl: profilePath !== "/dashboard" ? profilePath.replace(/^\//, "") : undefined
+            profileSlugFromUrl: profilePath !== OVERVIEW_PATH ? profilePath.replace(/^\//, "") : undefined
           },
           { portfolioRaces, stravaOverview, bundle }
         )
@@ -112,6 +149,9 @@ export default async function MyRacesPage() {
             profileHref={profileHref}
             completedRacesHref={completedRacesHref}
             stravaOAuthConfigured={stravaOAuthConfigured}
+            initialTab={initialTab}
+            profilePendingCandidates={profilePendingCandidates}
+            pendingReviewReturnTo="/my-races?tab=review"
           />
         </div>
       </main>

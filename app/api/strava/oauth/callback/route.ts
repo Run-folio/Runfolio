@@ -7,6 +7,7 @@ import {
 import { getStravaClientCredentials, resolveStravaRedirectUri } from "@/lib/strava-env";
 import { exchangeStravaCode } from "@/lib/strava-oauth";
 import { stravaOauthTrace } from "@/lib/strava-oauth-trace";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { createSupabaseRouteHandlerClient } from "@/lib/supabase/route-handler";
@@ -49,11 +50,11 @@ export async function GET(request: NextRequest) {
   if (err) {
     runfolioLog.error("strava.oauth.callback.denied", errDesc ?? err);
     stravaOauthTrace("oauth_aborted", { reason: "strava_error_param", redirect_uri: redirectUri });
-    return redirectWith(request, "/dashboard?strava_error=strava_access_denied");
+    return redirectWith(request, `${OVERVIEW_PATH}?strava_error=strava_access_denied`);
   }
   if (!code || !state) {
     stravaOauthTrace("oauth_aborted", { reason: "missing_code_or_state", redirect_uri: redirectUri });
-    return redirectWith(request, "/dashboard?strava_error=missing_code");
+    return redirectWith(request, `${OVERVIEW_PATH}?strava_error=missing_code`);
   }
 
   const stateCookie = request.cookies.get(STRAVA_OAUTH_STATE_COOKIE)?.value;
@@ -72,18 +73,18 @@ export async function GET(request: NextRequest) {
   const cred = getStravaClientCredentials();
   if (!cred) {
     stravaOauthTrace("oauth_aborted", { reason: "no_strava_client_env", redirect_uri: redirectUri });
-    return redirectWith(request, "/dashboard?strava_error=no_client");
+    return redirectWith(request, `${OVERVIEW_PATH}?strava_error=no_client`);
   }
 
   const admin = createServiceRoleClient();
   if (!admin) {
     runfolioLog.error("strava.oauth.callback", "admin_client_unavailable");
     stravaOauthTrace("session_create_failed", { reason: "service_role_missing", redirect_uri: redirectUri });
-    return redirectWith(request, "/dashboard?strava_error=server_unavailable");
+    return redirectWith(request, `${OVERVIEW_PATH}?strava_error=server_unavailable`);
   }
 
-  const nextRaw = request.cookies.get(STRAVA_OAUTH_NEXT_COOKIE)?.value ?? "/dashboard";
-  const nextPath = parseSafeRedirectPath(nextRaw) ?? "/dashboard";
+  const nextRaw = request.cookies.get(STRAVA_OAUTH_NEXT_COOKIE)?.value ?? OVERVIEW_PATH;
+  const nextPath = parseSafeRedirectPath(nextRaw) ?? OVERVIEW_PATH;
 
   let tokens;
   try {

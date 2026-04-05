@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { getRaceById } from "@/lib/get-race-by-id";
 import { formatRaceMonth } from "@/lib/format-race-date";
 import { getRaceLogoPath } from "@/lib/race-logos";
@@ -45,7 +46,7 @@ export default async function RaceActivityPage({ params }: Props) {
         <div className="hero-overlay" />
         <div className="hero-inner flex min-h-[280px] flex-col justify-end pb-10">
           <Link
-            href="/dashboard"
+            href={OVERVIEW_PATH}
             className="mb-6 w-fit text-[13px] font-medium text-white/70 transition hover:text-white"
           >
             ← Back

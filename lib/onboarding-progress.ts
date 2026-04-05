@@ -1,3 +1,4 @@
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import type { PersistenceReadiness, PersistenceReadinessStatus } from "@/lib/persistence-readiness";
 import { getEnvPersistenceFailure } from "@/lib/persistence-readiness";
 import { isOfflineDemoMode } from "@/lib/demo-mode";
@@ -114,7 +115,7 @@ export function buildOnboardingProgress(input: BuildInput): OnboardingProgress {
 
   switch (stage) {
     case "env":
-      primaryCta = { href: "/dashboard", label: "Overview" };
+      primaryCta = { href: OVERVIEW_PATH, label: "Overview" };
       secondaryCta = { href: "https://supabase.com/dashboard", label: "Open Supabase" };
       break;
     case "sign_in":
@@ -127,7 +128,7 @@ export function buildOnboardingProgress(input: BuildInput): OnboardingProgress {
       break;
     case "profile_record":
       primaryCta = { href: `/auth/login?next=${encodeURIComponent(loginNext)}`, label: "Sign in again" };
-      secondaryCta = { href: "/dashboard", label: "Overview" };
+      secondaryCta = { href: OVERVIEW_PATH, label: "Overview" };
       break;
     case "connect_strava":
       primaryCta = {
@@ -143,9 +144,9 @@ export function buildOnboardingProgress(input: BuildInput): OnboardingProgress {
     case "match_handoff":
       primaryCta = { href: "/my-races", label: "Open My Races" };
       secondaryCta =
-        safeNext && safeNext !== "/setup" && safeNext !== "/dashboard"
+        safeNext && safeNext !== "/setup" && safeNext !== OVERVIEW_PATH
           ? { href: safeNext, label: "Back where I was" }
-          : { href: "/dashboard", label: "Overview" };
+          : { href: OVERVIEW_PATH, label: "Overview" };
       break;
     default:
       break;

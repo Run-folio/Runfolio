@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { AuthEmailSignUpForm } from "@/components/auth-email-sign-up-form";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 
 type Props = {
@@ -8,7 +9,7 @@ type Props = {
 
 export default async function SignUpPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const nextPath = parseSafeRedirectPath(sp.next ?? "") ?? "/dashboard";
+  const nextPath = parseSafeRedirectPath(sp.next ?? "") ?? OVERVIEW_PATH;
 
   return (
     <main className="app-shell flex min-h-screen flex-col items-center justify-center px-4 pb-24 pt-16">

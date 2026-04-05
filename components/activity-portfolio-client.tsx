@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import type { ActivityPortfolioStravaEnrichment, ActivityPortfolioStravaView, Race } from "@/types";
 import {
   markStravaActivityNotRaceAction,
@@ -182,7 +183,7 @@ export function ActivityPortfolioClient({
         </div>
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/78 to-black/35" />
         <div className="relative z-10 mx-auto flex min-h-[340px] max-w-5xl flex-col justify-end px-5 pb-10 pt-24 md:px-8">
-          <Link href="/dashboard" className="mb-6 w-fit text-[13px] font-medium text-white/70 transition hover:text-white">
+          <Link href={OVERVIEW_PATH} className="mb-6 w-fit text-[13px] font-medium text-white/70 transition hover:text-white">
             ← Back
           </Link>
           <p className="type-tagline mb-2">Your race</p>

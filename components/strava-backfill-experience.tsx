@@ -11,6 +11,7 @@ import type {
 } from "@/lib/strava-backfill-model";
 import { hasServerRecordedStravaBackfillBatch } from "@/lib/strava-backfill-model";
 import { usePersistence } from "@/components/persistence-context";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { buildSetupUrl } from "@/lib/setup-url";
 import {
   STRAVA_BACKFILL_JUMP_OPTIONS,
@@ -661,8 +662,8 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           </section>
 
           <p className="text-center text-[11px] text-muted">
-            <Link href="/dashboard" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
-              ← Back to overview
+            <Link href={OVERVIEW_PATH} className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
+              ← Back to Overview
             </Link>
           </p>
         </>

@@ -15,16 +15,17 @@ import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
 import { ManualRaceLinkPanel } from "@/components/manual-race-link-panel";
 import { PortfolioRaceCard } from "@/components/my-races/portfolio-race-card";
 import { SuggestedRaceCard } from "@/components/my-races/race-card";
+import { ProfilePendingRaceCandidates } from "@/components/profile-pending-race-candidates";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { cn } from "@/lib/utils";
-import type { Race } from "@/types";
+import type { ProfilePendingRaceCandidate, Race } from "@/types";
 
 const RETURN_TO = "/my-races";
 
-type TabId = "all" | "completed" | "review";
+type TabId = "completed" | "review";
 
 type Props = {
   initialBundle: MatchHubBundle;
@@ -32,6 +33,9 @@ type Props = {
   profileHref: string;
   completedRacesHref: string;
   stravaOAuthConfigured: boolean;
+  initialTab: TabId;
+  profilePendingCandidates: ProfilePendingRaceCandidate[];
+  pendingReviewReturnTo: string;
 };
 
 function activityMeta(row: StravaSyncedActivityRow) {
@@ -57,13 +61,16 @@ export function MyRacesClient({
   portfolioRaces,
   profileHref,
   completedRacesHref,
-  stravaOAuthConfigured
+  stravaOAuthConfigured,
+  initialTab,
+  profilePendingCandidates,
+  pendingReviewReturnTo
 }: Props) {
   const router = useRouter();
   const [banner, setBanner] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [pending, start] = useTransition();
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(() => new Set());
-  const [tab, setTab] = useState<TabId>("all");
+  const [tab, setTab] = useState<TabId>(initialTab);
   const [search, setSearch] = useState("");
 
   const { suggestedHigh, unmatched, snoozed, totalSyncedCount } = initialBundle;
@@ -176,20 +183,33 @@ export function MyRacesClient({
 
   const queueCount = filteredHigh.length + filteredUnmatched.length + snoozed.length;
 
+  const hubStravaIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const x of suggestedHigh) s.add(x.stravaActivityId);
+    for (const u of unmatched) s.add(u.row.strava_activity_id);
+    for (const z of snoozed) s.add(z.row.strava_activity_id);
+    return s;
+  }, [suggestedHigh, unmatched, snoozed]);
+
+  const profilePendingOnly = useMemo(
+    () => profilePendingCandidates.filter((p) => !hubStravaIds.has(p.stravaId)),
+    [profilePendingCandidates, hubStravaIds]
+  );
+
+  const needsReviewBadgeCount = queueCount + profilePendingOnly.length;
+
   const sortedPortfolio = useMemo(() => sortRacesByDateDesc(portfolioRaces), [portfolioRaces]);
 
   const searchNeedle = search.trim().toLowerCase();
   const portfolioForTab = useMemo(() => {
-    const base =
-      tab === "completed" ? sortedPortfolio.filter((r) => r.is_completed) : sortedPortfolio;
+    const base = sortedPortfolio.filter((r) => r.is_completed);
     if (!searchNeedle) return base;
     return base.filter((r) => getPortfolioRaceLabel(r).toLowerCase().includes(searchNeedle));
-  }, [sortedPortfolio, tab, searchNeedle]);
+  }, [sortedPortfolio, searchNeedle]);
 
   const tabs: { id: TabId; label: string; count?: number }[] = [
-    { id: "all", label: "All" },
     { id: "completed", label: "Completed" },
-    { id: "review", label: "Needs Review", count: queueCount }
+    { id: "review", label: "Needs Review", count: needsReviewBadgeCount }
   ];
 
   return (
@@ -219,7 +239,11 @@ export function MyRacesClient({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2 border-b border-white/10 pb-3" role="tablist" aria-label="My Races views">
+      <div
+        className="flex w-full gap-2 border-b border-white/10 pb-3"
+        role="tablist"
+        aria-label="My Races views"
+      >
         {tabs.map((t) => (
           <button
             key={t.id}
@@ -227,15 +251,17 @@ export function MyRacesClient({
             role="tab"
             aria-selected={tab === t.id}
             className={cn(
-              "min-h-[40px] rounded-full px-4 text-[12px] font-semibold uppercase tracking-wider transition",
+              "min-h-[48px] min-w-0 flex-1 rounded-full px-3 text-[11px] font-semibold uppercase tracking-wider transition sm:px-4 sm:text-[12px]",
               tab === t.id ? "bg-white/[0.14] text-white" : "text-white/50 hover:text-white/75"
             )}
             onClick={() => setTab(t.id)}
           >
-            {t.label}
-            {t.count != null && t.count > 0 ? (
-              <span className="ml-1.5 tabular-nums text-white/60">({t.count})</span>
-            ) : null}
+            <span className="block truncate text-center">
+              {t.label}
+              {t.id === "review" && t.count != null && t.count > 0 ? (
+                <span className="ml-1 tabular-nums text-white/65">({t.count})</span>
+              ) : null}
+            </span>
           </button>
         ))}
       </div>
@@ -254,7 +280,7 @@ export function MyRacesClient({
         </p>
       ) : null}
 
-      {tab !== "review" ? (
+      {tab === "completed" ? (
         <div className="space-y-4">
           <Input
             value={search}
@@ -293,17 +319,12 @@ export function MyRacesClient({
                     </Link>
                   </div>
                 </>
-              ) : tab === "completed" ? (
+              ) : (
                 <>
                   <p className="font-medium text-white/90">No completed races here yet</p>
                   <p className="mt-2 text-sm text-white/50">
                     {searchNeedle ? "Try a different search." : "Finish a goal or link a Strava activity."}
                   </p>
-                </>
-              ) : (
-                <>
-                  <p className="font-medium text-white/90">No matches</p>
-                  <p className="mt-2 text-sm text-white/50">Try a different search.</p>
                 </>
               )}
             </Card>
@@ -311,7 +332,7 @@ export function MyRacesClient({
             <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {portfolioForTab.map((race) => (
                 <li key={race.id}>
-                  <PortfolioRaceCard race={race} achievementEmphasis={tab === "completed"} />
+                  <PortfolioRaceCard race={race} achievementEmphasis />
                 </li>
               ))}
             </ul>
@@ -320,11 +341,15 @@ export function MyRacesClient({
       ) : null}
 
       {tab === "review" ? (
-        <section id="my-races-queue" className="scroll-mt-24 space-y-4" aria-label="Activities to review">
-          {queueCount === 0 ? (
+        <section
+          id="needs-review"
+          data-section="needs-review"
+          className="scroll-mt-24 space-y-3"
+          aria-label="Races and activities to review"
+        >
+          {needsReviewBadgeCount === 0 ? (
             <Card className="border border-white/10 bg-panel/25 px-4 py-8 text-center">
-              <p className="font-medium text-white/90">All caught up</p>
-              <p className="mt-2 text-sm text-white/50">No activities need review right now.</p>
+              <p className="font-medium text-white/90">No pending races to review</p>
               <Link
                 href={completedRacesHref}
                 className="mt-5 inline-block min-h-[44px] text-[12px] font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
@@ -333,68 +358,76 @@ export function MyRacesClient({
               </Link>
             </Card>
           ) : (
-            <ul className="flex flex-col gap-4">
-              {filteredHigh.map((s) => (
-                <li key={s.stravaActivityId}>
-                  <SuggestedRaceCard
-                    suggestion={s}
-                    pending={pending}
-                    onConfirm={confirmMatch}
-                    onNotRace={notRace}
-                  />
-                </li>
-              ))}
-              {filteredUnmatched.map(({ row, softSuggestions }, idx) => (
-                <li
-                  key={row.strava_activity_id}
-                  id={idx === 0 ? "my-races-unmatched" : undefined}
-                  className={idx === 0 ? "scroll-mt-24" : undefined}
-                >
-                  <ManualRaceLinkPanel
-                    ctx={{
-                      stravaActivityId: row.strava_activity_id,
-                      activityTitle: row.name,
-                      startDateYmd: row.start_date.slice(0, 10),
-                      distanceKm: row.distance_km ?? 0,
-                      elevationM: row.elevation_gain_m ?? null
-                    }}
-                    softSuggestions={softSuggestions}
-                    pending={pending}
-                    onConfirm={confirmMatch}
-                    responseMode="hub"
-                    returnTo={RETURN_TO}
-                    onNotRace={() => notRace(row.strava_activity_id)}
-                    onSnooze={() => snooze(row.strava_activity_id)}
-                    compact
-                  />
-                </li>
-              ))}
-              {snoozed.map(({ row }) => {
-                const m = activityMeta(row);
-                return (
-                  <li key={row.strava_activity_id}>
-                    <Card className="flex flex-col gap-3 border border-white/10 bg-panel/30 p-4">
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Later</p>
-                      <div>
-                        <p className="font-medium text-white">{m.title}</p>
-                        <p className="mt-1 text-sm text-white/55">
-                          {m.date} · {m.km ? `${m.km} km` : "—"}
-                          {m.el != null && m.el > 0 ? ` · ${Math.round(m.el)} m` : ""}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        disabled={pending}
-                        className="min-h-[48px] w-full rounded-[12px] border border-border bg-panelAlt text-[12px] font-semibold uppercase tracking-wider text-white transition hover:bg-slate-800 disabled:opacity-60"
-                        onClick={() => unsnooze(row.strava_activity_id)}
-                      >
-                        Back to queue
-                      </button>
-                    </Card>
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="flex flex-col gap-3">
+              {profilePendingOnly.length > 0 ? (
+                <ProfilePendingRaceCandidates candidates={profilePendingOnly} returnTo={pendingReviewReturnTo} />
+              ) : null}
+
+              {queueCount > 0 ? (
+                <ul className="flex flex-col gap-2.5">
+                  {filteredHigh.map((s) => (
+                    <li key={s.stravaActivityId}>
+                      <SuggestedRaceCard
+                        suggestion={s}
+                        pending={pending}
+                        onConfirm={confirmMatch}
+                        onNotRace={notRace}
+                      />
+                    </li>
+                  ))}
+                  {filteredUnmatched.map(({ row, softSuggestions }, idx) => (
+                    <li
+                      key={row.strava_activity_id}
+                      id={idx === 0 ? "my-races-unmatched" : undefined}
+                      className={idx === 0 ? "scroll-mt-24" : undefined}
+                    >
+                      <ManualRaceLinkPanel
+                        ctx={{
+                          stravaActivityId: row.strava_activity_id,
+                          activityTitle: row.name,
+                          startDateYmd: row.start_date.slice(0, 10),
+                          distanceKm: row.distance_km ?? 0,
+                          elevationM: row.elevation_gain_m ?? null
+                        }}
+                        softSuggestions={softSuggestions}
+                        pending={pending}
+                        onConfirm={confirmMatch}
+                        responseMode="hub"
+                        returnTo={RETURN_TO}
+                        onNotRace={() => notRace(row.strava_activity_id)}
+                        onSnooze={() => snooze(row.strava_activity_id)}
+                        compact
+                      />
+                    </li>
+                  ))}
+                  {snoozed.map(({ row }) => {
+                    const m = activityMeta(row);
+                    return (
+                      <li key={row.strava_activity_id}>
+                        <Card className="flex flex-col gap-2 border border-white/10 bg-panel/30 p-3 sm:p-3.5">
+                          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted">Later</p>
+                          <div>
+                            <p className="text-[15px] font-medium text-white">{m.title}</p>
+                            <p className="mt-0.5 text-[12px] text-white/55">
+                              {m.date} · {m.km ? `${m.km} km` : "—"}
+                              {m.el != null && m.el > 0 ? ` · ${Math.round(m.el)} m` : ""}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={pending}
+                            className="min-h-[44px] w-full rounded-[12px] border border-border bg-panelAlt text-[11px] font-semibold uppercase tracking-wider text-white transition hover:bg-slate-800 disabled:opacity-60"
+                            onClick={() => unsnooze(row.strava_activity_id)}
+                          >
+                            Back to queue
+                          </button>
+                        </Card>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : null}
+            </div>
           )}
 
           {!stravaOAuthConfigured && totalSyncedCount === 0 && queueCount === 0 ? (

@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { AppNavbar } from "@/components/app-navbar";
 import { FindRacesExplorer } from "@/components/find-races-explorer";
 import { fetchCanonicalRaceIdsOnBucketList } from "@/lib/bucket-list-canonical/queries";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
 import { createClient } from "@/lib/supabase/server";
@@ -30,7 +31,7 @@ export default async function FindRacePage() {
         userRaces = (data as Race[]) ?? [];
         addedCanonicalRaceIds = [...(await fetchCanonicalRaceIdsOnBucketList(supabase, user.id))];
         const profilePath = await resolveDefaultProfilePathForUser(supabase, user.id);
-        if (profilePath !== "/dashboard") futureGoalsProfileHref = `${profilePath}#profile-future-goals`;
+        if (profilePath !== OVERVIEW_PATH) futureGoalsProfileHref = `${profilePath}#profile-future-goals`;
       }
     } catch {
       viewer = "guest";

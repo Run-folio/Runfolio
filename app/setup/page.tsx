@@ -5,6 +5,7 @@ import { SetupFlowContent } from "@/components/setup/setup-flow-content";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { buildOnboardingProgress } from "@/lib/onboarding-progress";
 import { getServerPersistenceReadiness } from "@/lib/persistence-readiness";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
 import { hasStravaConnection } from "@/lib/strava-access-server";
 import { createClient } from "@/lib/supabase/server";
@@ -21,7 +22,7 @@ type Props = { searchParams: Promise<{ next?: string }> };
 
 export default async function SetupPage({ searchParams }: Props) {
   const sp = await searchParams;
-  const safeNext = parseSafeRedirectPath(sp.next ?? "") ?? "/dashboard";
+  const safeNext = parseSafeRedirectPath(sp.next ?? "") ?? OVERVIEW_PATH;
 
   if (!isSupabaseConfigured()) {
     return (

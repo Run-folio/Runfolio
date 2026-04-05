@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { raceIsBucketListFutureGoal } from "@/lib/bucket-list-model";
 import { getDiscoverRaceDetail, isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 import { getDiscoverRaceById } from "@/lib/known-race-match";
@@ -75,7 +76,10 @@ async function linkedSnapshotForStravaConfirm(
   });
 }
 
-/** After a Strava↔race confirm, send runners to their profile by default (not a dead-end dashboard). */
+/**
+ * Resolves `return_to` after Strava↔race confirms. `OVERVIEW_PATH` (signed-in Overview home)
+ * is honored literally — it must not be rewritten to the public profile.
+ */
 async function resolveConfirmRedirectDestination(
   supabase: SupabaseClient,
   userId: string,
@@ -87,16 +91,13 @@ async function resolveConfirmRedirectDestination(
   const parsed =
     trimmed.startsWith("/") && !trimmed.startsWith("//") && !trimmed.includes("://") ? trimmed : null;
   if (!parsed) {
-    const p =
-      fallbackPath && fallbackPath !== "/dashboard"
-        ? fallbackPath
-        : await resolveDefaultProfilePathForUser(supabase, userId);
-    runfolioLog.info("actions.confirmRedirect", "missing return_to", { to: p });
-    return p;
-  }
-  if (parsed === "/dashboard") {
+    const fb = fallbackPath?.trim() ?? "";
+    if (fb.startsWith("/") && !fb.startsWith("//") && !fb.includes("://")) {
+      runfolioLog.info("actions.confirmRedirect", "missing return_to, using fallback", { to: fb });
+      return fb;
+    }
     const p = await resolveDefaultProfilePathForUser(supabase, userId);
-    runfolioLog.info("actions.confirmRedirect", "dashboard mapped to profile", { to: p });
+    runfolioLog.info("actions.confirmRedirect", "missing return_to", { to: p });
     return p;
   }
   return parsed;
@@ -138,9 +139,9 @@ export async function createRaceAction(formData: FormData) {
     if (error) return { error: dbErr(error) };
 
     await revalidatePortfolioSurfaces(supabase, user.id, {});
-    revalidatePath("/dashboard");
+    revalidatePath(OVERVIEW_PATH);
     revalidatePath("/bucket-list");
-    redirect("/dashboard");
+    redirect(OVERVIEW_PATH);
   } catch (e) {
     if (isDynamicServerError(e)) throw e;
     if (isRedirectError(e)) throw e;
@@ -966,7 +967,7 @@ export async function dismissStravaProfileCandidateAction(formData: FormData) {
     const returnTo =
       returnToRaw.startsWith("/") && !returnToRaw.startsWith("//") && !returnToRaw.includes("://")
         ? returnToRaw
-        : "/dashboard";
+        : OVERVIEW_PATH;
     const { error } = await supabase.from("strava_profile_dismissals").upsert({
       user_id: user.id,
       strava_activity_id: stravaId
@@ -1148,7 +1149,7 @@ export async function syncStravaActivitiesAction() {
     const res = await syncStravaActivitiesForUserId(user.id, supabase);
     if (!res.ok) {
       await revalidatePortfolioSurfaces(supabase, user.id, {
-        alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/my-races"]
+        alsoPaths: [OVERVIEW_PATH, "/bucket-list", "/races/find", "/my-races"]
       });
       if (res.needBackfill) {
         return { error: res.error, needBackfill: true as const };
@@ -1170,7 +1171,7 @@ export async function syncStravaActivitiesAction() {
       };
     }
     await revalidatePortfolioSurfaces(supabase, user.id, {
-      alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/my-races"]
+      alsoPaths: [OVERVIEW_PATH, "/bucket-list", "/races/find", "/my-races"]
     });
     runfolioLog.info("actions.stravaSync", "incremental_ok", {
       upserted: res.upserted,
@@ -1222,7 +1223,7 @@ export async function backfillStravaHistoryAction(formData?: FormData) {
     });
     if (!res.ok) {
       await revalidatePortfolioSurfaces(supabase, user.id, {
-        alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/my-races", "/matches"]
+        alsoPaths: [OVERVIEW_PATH, "/bucket-list", "/races/find", "/my-races", "/matches"]
       });
       if (res.needStravaReconnect) {
         return {
@@ -1241,7 +1242,7 @@ export async function backfillStravaHistoryAction(formData?: FormData) {
       };
     }
     await revalidatePortfolioSurfaces(supabase, user.id, {
-      alsoPaths: ["/dashboard", "/bucket-list", "/races/find", "/my-races", "/matches"]
+      alsoPaths: [OVERVIEW_PATH, "/bucket-list", "/races/find", "/my-races", "/matches"]
     });
     runfolioLog.info("actions.stravaBackfill", "ok", {
       upserted: res.upserted,
@@ -1371,7 +1372,7 @@ export async function dismissCanonicalStravaMatchAction(formData: FormData) {
     if (!stravaActivityId) return { error: "Missing activity." };
     const res = await dismissCanonicalMatchSuggestion(supabase, user.id, stravaActivityId);
     if (!res.ok) return { error: res.error };
-    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: ["/dashboard", "/my-races", "/matches"] });
+    await revalidatePortfolioSurfaces(supabase, user.id, { alsoPaths: [OVERVIEW_PATH, "/my-races", "/matches"] });
     return { ok: true as const };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;
@@ -1436,7 +1437,7 @@ export async function unlinkStravaCatalogFinishAction(formData: FormData) {
 
     await revalidatePortfolioSurfaces(supabase, user.id, {
       stravaActivityId,
-      alsoPaths: ["/my-races", "/matches", "/dashboard", `/activities/${stravaActivityId}`, "/bucket-list"]
+      alsoPaths: ["/my-races", "/matches", OVERVIEW_PATH, `/activities/${stravaActivityId}`, "/bucket-list"]
     });
     return { ok: true as const };
   } catch (e) {
@@ -1464,7 +1465,7 @@ export async function confirmCanonicalStravaMatchAction(formData: FormData) {
       });
       if (isJsonResponse) return { error: gate.error };
       if (gate.code === "auth_required") {
-        const loginNext = parseSafeRedirectPath(String(formData.get("return_to") ?? "")) ?? "/dashboard";
+        const loginNext = parseSafeRedirectPath(String(formData.get("return_to") ?? "")) ?? OVERVIEW_PATH;
         redirect(`/auth/login?next=${encodeURIComponent(loginNext)}`);
       }
       return { error: gate.error };
@@ -1846,7 +1847,7 @@ export async function setSyncedActivityProfileIncludeAction(formData: FormData) 
       .eq("user_id", user.id)
       .eq("strava_activity_id", stravaActivityId);
     if (error) return { error: dbErr(error) };
-    await revalidatePortfolioSurfaces(supabase, user.id, { stravaActivityId, alsoPaths: ["/dashboard"] });
+    await revalidatePortfolioSurfaces(supabase, user.id, { stravaActivityId, alsoPaths: [OVERVIEW_PATH] });
     return { ok: true as const };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;

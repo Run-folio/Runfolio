@@ -8,6 +8,7 @@ import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
 import { portfolioRaceHref } from "@/lib/profile-portfolio";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { cn } from "@/lib/utils";
 
@@ -70,7 +71,7 @@ export function StravaRacePortfolioSection({
             {!isProfile ? null : (
               <>
                 {" · "}
-                <Link href={buildSetupUrl("/dashboard")} className="font-semibold text-white/85 underline-offset-4 hover:underline">
+                <Link href={buildSetupUrl(OVERVIEW_PATH)} className="font-semibold text-white/85 underline-offset-4 hover:underline">
                   Setup
                 </Link>
                 {" · "}
@@ -82,7 +83,7 @@ export function StravaRacePortfolioSection({
           </p>
           {stravaOAuthConfigured ? (
             <Link
-              href="/api/strava/oauth/start?next=%2Fdashboard"
+              href={`/api/strava/oauth/start?next=${encodeURIComponent(OVERVIEW_PATH)}`}
               className="mt-4 inline-flex min-h-[44px] items-center justify-center text-sm font-semibold uppercase tracking-wider text-teal hover:text-teal-hover hover:underline"
             >
               Connect Strava

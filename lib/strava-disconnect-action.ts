@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { isDynamicServerError } from "next/dist/client/components/hooks-server-context";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { requireActionPersistence } from "@/lib/persistence-readiness";
 import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { runfolioLog } from "@/lib/runfolio-log";
@@ -43,7 +44,7 @@ export async function disconnectStravaAction(): Promise<DisconnectStravaResult> 
 
     revalidatePath("/settings");
     revalidatePath("/my-races");
-    revalidatePath("/dashboard");
+    revalidatePath(OVERVIEW_PATH);
     return { ok: true };
   } catch (e) {
     if (isDynamicServerError(e)) throw e;

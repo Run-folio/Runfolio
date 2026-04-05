@@ -14,17 +14,21 @@ import {
 } from "react";
 import { signOutAction } from "@/lib/sign-out-action";
 import { usePersistence } from "@/components/persistence-context";
+import { OVERVIEW_PATH } from "@/lib/app-paths";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-/** Primary destinations — same on mobile and desktop. */
-const primaryLinks = [
-  { href: "/dashboard", label: "Overview" },
-  { href: "/my-races", label: "My Races" },
-  { href: "/races/new", label: "Add Race" },
-  { href: "/bucket-list", label: "Bucket List" }
-] as const;
+/** Primary destinations — same on mobile and desktop. `profileHref` is the signed-in user’s public profile path. */
+function primaryNavLinks(profileHref: string) {
+  return [
+    { href: OVERVIEW_PATH, label: "Overview" },
+    { href: profileHref, label: "Profile" },
+    { href: "/my-races", label: "My Races" },
+    { href: "/races/new", label: "Add Race" },
+    { href: "/bucket-list", label: "Bucket List" }
+  ] as const;
+}
 
 /** Secondary — drawer only; keeps top bar minimal. */
 const secondaryLinks = [
@@ -37,7 +41,7 @@ const secondaryLinks = [
 function isNavActive(pathname: string | null, href: string) {
   if (!pathname) return false;
   if (pathname === href) return true;
-  if (href === "/dashboard") return pathname === "/dashboard";
+  if (href === OVERVIEW_PATH) return pathname === OVERVIEW_PATH;
   if (href === "/my-races") return pathname === "/my-races" || pathname.startsWith("/my-races/");
   if (href === "/bucket-list") return pathname === "/bucket-list" || pathname.startsWith("/bucket-list/");
   if (href === "/races/new") return pathname === "/races/new";
@@ -208,7 +212,7 @@ function UserAvatarMenu({
     >
       <div className="px-1.5 pb-1 pt-0.5" role="none">
         <Link href={profileHref} role="menuitem" className={menuLinkClass}>
-          My Profile
+          Profile
         </Link>
         <Link href="/settings" role="menuitem" className={menuLinkClass}>
           Settings
@@ -337,6 +341,8 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
       active ? "bg-accent/15 text-white md:border-b-2 md:border-accent md:bg-transparent" : "text-white/70 hover:bg-white/[0.06] hover:text-white md:hover:bg-transparent"
     );
 
+  const primary = primaryNavLinks(profileHref);
+
   return (
     <header className="sticky top-0 z-30 w-full border-b border-border bg-[#1e2029]/95 backdrop-blur">
       {showPersistenceBanner ? (
@@ -354,7 +360,7 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
       ) : null}
 
       <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-3 px-4 py-3 md:px-6 md:py-4">
-        <Link href="/dashboard" className="flex min-w-0 shrink items-center">
+        <Link href={OVERVIEW_PATH} className="flex min-w-0 shrink items-center">
           <Image
             src="/branding/runfolio-logo.png"
             alt="Runfolio"
@@ -366,7 +372,7 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex" aria-label="Primary">
-          {primaryLinks.map(({ href, label }) => {
+          {primary.map(({ href, label }) => {
             const active = isNavActive(pathname, href);
             return (
               <Link key={href} href={href} className={navLinkClass(active)}>
@@ -379,7 +385,7 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
         <div className="flex shrink-0 items-center gap-2 md:gap-3">
           {!canPersist && pathname !== "/setup" ? (
             <Link
-              href={buildSetupUrl(pathname && pathname !== "/" ? pathname : "/dashboard")}
+              href={buildSetupUrl(pathname && pathname !== "/" ? pathname : OVERVIEW_PATH)}
               className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-teal hover:text-teal-hover lg:inline"
             >
               Setup
@@ -456,7 +462,7 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
           </div>
 
           <nav className="flex flex-1 flex-col gap-1 overflow-y-auto p-3 pb-8" aria-label="Mobile primary">
-            {primaryLinks.map(({ href, label }) => {
+            {primary.map(({ href, label }) => {
               const active = isNavActive(pathname, href);
               return (
                 <Link key={href} href={href} className={navLinkClass(active)} onClick={() => setMenuOpen(false)}>
@@ -482,7 +488,7 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
 
             {!canPersist && pathname !== "/setup" ? (
               <Link
-                href={buildSetupUrl(pathname && pathname !== "/" ? pathname : "/dashboard")}
+                href={buildSetupUrl(pathname && pathname !== "/" ? pathname : OVERVIEW_PATH)}
                 className="mt-2 flex min-h-[48px] items-center rounded-xl border border-white/10 px-4 text-[13px] font-semibold text-teal hover:text-teal-hover"
                 onClick={() => setMenuOpen(false)}
               >
