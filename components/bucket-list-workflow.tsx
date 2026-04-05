@@ -436,7 +436,7 @@ export function BucketListWorkflow({
                 <span className="text-sm font-medium text-white">Results</span>
                 <button
                   type="button"
-                  className="text-sm text-accent"
+                  className="text-sm text-teal hover:text-teal-hover"
                   onClick={() => {
                     setSearchFocused(false);
                     inputRef.current?.blur();

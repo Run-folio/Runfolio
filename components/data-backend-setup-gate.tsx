@@ -57,7 +57,7 @@ export function DataBackendSetupGate({ title, featureLabel, returnTo = "/dashboa
           <div className="mt-10 flex flex-wrap gap-3">
             <Link
               href={buildSetupUrl(returnTo)}
-              className="inline-flex items-center justify-center rounded-[12px] bg-accent px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
+              className="inline-flex items-center justify-center rounded-[12px] bg-accent px-5 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-gold-hover"
             >
               Guided setup
             </Link>

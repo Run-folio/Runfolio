@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { Race, StravaFeedStats, StravaRaceCandidate } from "@/types";
+import { ProgressiveRevealGrid } from "@/components/progressive-reveal-grid";
 import { StravaActivityCard } from "@/components/strava-activity-card";
 import { StravaInsightsStrip } from "@/components/strava-insights-strip";
 import { Card } from "@/components/ui/card";
@@ -63,7 +64,7 @@ export function StravaRacePortfolioSection({
         <Card className="border-dashed border-white/20 bg-panel/40 p-5 text-center md:p-6">
           <p className="text-sm text-muted">
             {stravaFeedErrorMessage ? stravaFeedErrorMessage : "Strava isn’t connected or the feed couldn’t load."}{" "}
-            <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
+            <Link href="/my-races" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
               My Races
             </Link>
             {!isProfile ? null : (
@@ -82,7 +83,7 @@ export function StravaRacePortfolioSection({
           {stravaOAuthConfigured ? (
             <Link
               href="/api/strava/oauth/start?next=%2Fdashboard"
-              className="mt-4 inline-flex min-h-[44px] items-center justify-center text-sm font-semibold uppercase tracking-wider text-accent hover:underline"
+              className="mt-4 inline-flex min-h-[44px] items-center justify-center text-sm font-semibold uppercase tracking-wider text-teal hover:text-teal-hover hover:underline"
             >
               Connect Strava
             </Link>
@@ -120,7 +121,7 @@ export function StravaRacePortfolioSection({
               : "No qualifying efforts yet — sync Strava or use My Races."}
           </p>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
-            <Link href="/my-races" className="min-h-[44px] content-center text-sm font-semibold uppercase tracking-wider text-accent hover:underline">
+            <Link href="/my-races" className="min-h-[44px] content-center text-sm font-semibold uppercase tracking-wider text-teal hover:text-teal-hover hover:underline">
               My Races
             </Link>
             <Link href="/races/new" className="min-h-[44px] content-center text-sm font-semibold text-muted hover:text-white">
@@ -161,7 +162,7 @@ export function StravaRacePortfolioSection({
             <p className="type-meta mt-2 max-w-2xl text-sm">
               Long runs and race-type activities from Strava — matched against the Runfolio major-race catalog. Confirm
               matches on{" "}
-              <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">
+              <Link href="/races/new" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 Add race
               </Link>{" "}
               to log the story and complete bucket list goals.
@@ -170,7 +171,7 @@ export function StravaRacePortfolioSection({
         </div>
         <Link
           href="/races/new"
-          className="min-h-[44px] shrink-0 content-center text-[11px] font-semibold uppercase tracking-[0.2em] text-accent hover:underline sm:min-h-0"
+          className="min-h-[44px] shrink-0 content-center text-[11px] font-semibold uppercase tracking-[0.2em] text-teal hover:text-teal-hover hover:underline sm:min-h-0"
         >
           {dashOverview ? "Add race →" : "Confirm a match →"}
         </Link>
@@ -251,21 +252,25 @@ export function StravaRacePortfolioSection({
       ) : null}
 
       {!isProfile && raceCandidateStats.topByDistance.length > 0 ? (
-      <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold md:mb-3">Longest race candidates</p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3">
-            {raceCandidateStats.topByDistance.map((a) => {
+        <div>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-gold md:mb-3">
+            Longest race candidates
+          </p>
+          <ProgressiveRevealGrid
+            items={raceCandidateStats.topByDistance}
+            getKey={(a) => `top-${a.strava_id}`}
+            renderItem={(a) => {
               const full = candidates.find((c) => c.strava_id === a.strava_id);
               return (
                 <StravaActivityCard
-                  key={`top-${a.strava_id}`}
                   activity={a}
                   catalogSuggestion={full?.catalogSuggestion ?? null}
                   linkToPortfolio
                 />
               );
-            })}
-          </div>
+            }}
+            gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3"
+          />
         </div>
       ) : null}
 
@@ -273,16 +278,14 @@ export function StravaRacePortfolioSection({
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-muted md:mb-3">
           {isProfile ? "Top race efforts" : "All race candidates"}
         </p>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {(isProfile ? list : list.slice(0, 12)).map((a) => (
-            <StravaActivityCard
-              key={a.strava_id}
-              activity={a}
-              catalogSuggestion={a.catalogSuggestion}
-              linkToPortfolio
-            />
-          ))}
-        </div>
+        <ProgressiveRevealGrid
+          items={isProfile ? list : candidates}
+          getKey={(a) => a.strava_id}
+          renderItem={(a) => (
+            <StravaActivityCard activity={a} catalogSuggestion={a.catalogSuggestion} linkToPortfolio />
+          )}
+          gridClassName="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3"
+        />
       </div>
     </section>
   );

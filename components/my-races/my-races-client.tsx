@@ -274,7 +274,7 @@ export function MyRacesClient({
                     {stravaOAuthConfigured ? (
                       <Link
                         href="#import-strava"
-                        className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-accent px-4 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-[#f08a4d]"
+                        className="inline-flex min-h-[48px] items-center justify-center rounded-xl bg-accent px-4 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-gold-hover"
                       >
                         Import from Strava
                       </Link>
@@ -287,7 +287,7 @@ export function MyRacesClient({
                     </Link>
                     <Link
                       href={buildSetupUrl(RETURN_TO)}
-                      className="text-[12px] font-medium text-accent underline-offset-4 hover:underline"
+                      className="text-[12px] font-medium text-teal underline-offset-4 hover:text-teal-hover hover:underline"
                     >
                       Setup Strava
                     </Link>
@@ -327,7 +327,7 @@ export function MyRacesClient({
               <p className="mt-2 text-sm text-white/50">No activities need review right now.</p>
               <Link
                 href={completedRacesHref}
-                className="mt-5 inline-block min-h-[44px] text-[12px] font-semibold text-accent underline-offset-4 hover:underline"
+                className="mt-5 inline-block min-h-[44px] text-[12px] font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
               >
                 View completed on profile
               </Link>
@@ -399,7 +399,7 @@ export function MyRacesClient({
 
           {!stravaOAuthConfigured && totalSyncedCount === 0 && queueCount === 0 ? (
             <p className="text-center text-sm text-white/45">
-              <Link href={buildSetupUrl(RETURN_TO)} className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href={buildSetupUrl(RETURN_TO)} className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 Setup
               </Link>{" "}
               Strava to import activities.

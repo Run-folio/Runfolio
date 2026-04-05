@@ -25,7 +25,7 @@ export function FindRaceCardActions({ discoverId, state }: Props) {
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/5 pt-3">
         <Link
           href={`/auth/login?next=${encodeURIComponent(`/races/find`)}`}
-          className="text-[10px] font-semibold uppercase tracking-[0.14em] text-accent hover:underline"
+          className="text-[10px] font-semibold uppercase tracking-[0.14em] text-teal hover:text-teal-hover hover:underline"
         >
           Sign in to track
         </Link>
@@ -96,7 +96,7 @@ export function FindRaceCardActions({ discoverId, state }: Props) {
       </div>
       {!persistenceAvailable ? (
         <p className="text-[11px] text-white/55">
-          <Link href={buildSetupUrl("/races/find")} className="font-semibold text-accent underline-offset-4 hover:underline">
+          <Link href={buildSetupUrl("/races/find")} className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
             Finish setup
           </Link>{" "}
           to save goals and sync Strava.

@@ -21,7 +21,7 @@ export default async function RaceOpsSearchPage({ searchParams }: Props) {
     <main className="mx-auto max-w-3xl px-5 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl text-white">Races</h1>
-        <Link href="/internal/race-ops/dashboard" className="text-[12px] text-accent hover:underline">
+        <Link href="/internal/race-ops/dashboard" className="text-[12px] text-teal hover:text-teal-hover hover:underline">
           ← Hub
         </Link>
       </div>
@@ -71,7 +71,7 @@ export default async function RaceOpsSearchPage({ searchParams }: Props) {
                 <div>
                   <Link
                     href={`/internal/race-ops/races/${r.id}`}
-                    className="font-medium text-accent hover:underline"
+                    className="font-medium text-teal hover:text-teal-hover hover:underline"
                   >
                     {r.name}
                   </Link>

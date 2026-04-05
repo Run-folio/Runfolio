@@ -310,15 +310,15 @@ export function ProfilePendingRaceCandidates({ candidates: initial, profilePath 
             {openAlt === m.stravaId && m.alternatives.length === 0 ? (
               <p className="mt-4 border-t border-white/10 pt-4 text-sm text-muted">
                 No catalog matches pass our threshold here. Try the{" "}
-                <Link href="/my-races" className="text-accent underline-offset-4 hover:underline">
+                <Link href="/my-races" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                   My Races
                 </Link>{" "}
                 for verified races,{" "}
-                <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">
+                <Link href="/races/new" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                   Add race
                 </Link>{" "}
                 for a quick manual add, or browse the{" "}
-                <Link href="/races/find" className="text-accent underline-offset-4 hover:underline">
+                <Link href="/races/find" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                   race library
                 </Link>
                 .

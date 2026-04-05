@@ -9,7 +9,7 @@ export default async function RaceOpsDuplicatesPage() {
     <main className="mx-auto max-w-3xl px-5 py-10">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl text-white">Duplicate candidates</h1>
-        <Link href="/internal/race-ops/races" className="text-[12px] text-accent hover:underline">
+        <Link href="/internal/race-ops/races" className="text-[12px] text-teal hover:text-teal-hover hover:underline">
           All races
         </Link>
       </div>
@@ -28,7 +28,7 @@ export default async function RaceOpsDuplicatesPage() {
           ) : (
             rows.map((r) => (
               <li key={r.id} className="px-4 py-3">
-                <Link href={`/internal/race-ops/races/${r.id}`} className="font-medium text-accent hover:underline">
+                <Link href={`/internal/race-ops/races/${r.id}`} className="font-medium text-teal hover:text-teal-hover hover:underline">
                   {r.name}
                 </Link>
                 <p className="text-[12px] text-white/55">

@@ -105,7 +105,7 @@ export function ActivityPhotoGalleryEditor({
         onClick={() => inputRef.current?.click()}
         className={cn(
           "cursor-pointer rounded-lg border border-dashed px-4 py-8 text-center transition",
-          dragOver ? "border-accent/60 bg-accent/5" : "border-white/15 bg-white/[0.02] hover:border-white/25"
+          dragOver ? "border-teal/50 bg-teal/5" : "border-white/15 bg-white/[0.02] hover:border-white/25"
         )}
       >
         <input

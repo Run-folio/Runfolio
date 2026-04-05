@@ -83,7 +83,7 @@ export function ActivityFileImportPanel({ className }: Props) {
         onChange={onFile}
       />
       <div className="rounded-xl border border-white/10 bg-[#0a0c12] p-6 md:p-8">
-        <p className="type-eyebrow text-accent">Without Strava</p>
+        <p className="type-eyebrow">Without Strava</p>
         <h2 className="mt-2 font-display text-2xl font-normal tracking-tight text-white md:text-3xl">
           Import activity file
         </h2>
@@ -92,7 +92,7 @@ export function ActivityFileImportPanel({ className }: Props) {
           <strong className="font-medium text-white/85">.gpx</strong>, or{" "}
           <strong className="font-medium text-white/85">.tcx</strong> file. We parse distance, time, elevation, and
           route when present, save it like a synced activity, and you can use{" "}
-          <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
+          <Link href="/my-races" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
             My Races
           </Link>{" "}
           to link the effort to a verified race — same flow as Strava imports.
@@ -105,7 +105,7 @@ export function ActivityFileImportPanel({ className }: Props) {
         <div className="mt-6 flex flex-wrap items-center gap-3">
           <Button
             type="button"
-            className="min-h-[48px] rounded-[14px] bg-accent px-8 text-[12px] font-semibold uppercase tracking-[0.1em] text-white hover:bg-[#f08a4d]"
+            className="min-h-[48px] rounded-[14px] bg-accent px-8 text-[12px] font-semibold uppercase tracking-[0.1em] text-white hover:bg-gold-hover"
             disabled={pending}
             aria-busy={pending}
             onClick={pickFile}

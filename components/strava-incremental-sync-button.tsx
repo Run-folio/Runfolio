@@ -116,7 +116,7 @@ export function StravaIncrementalSyncButton({ compact, subtle, syncLabel, classN
           {showReconnect ? (
             <Link
               href={`/api/strava/oauth/start?next=${encodeURIComponent(pathname)}`}
-              className="font-semibold text-accent underline-offset-4 hover:underline"
+              className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
             >
               Reconnect Strava
             </Link>
@@ -128,7 +128,7 @@ export function StravaIncrementalSyncButton({ compact, subtle, syncLabel, classN
           {reason}{" "}
           <Link
             href={buildSetupUrl("/dashboard")}
-            className="font-semibold text-accent underline-offset-4 hover:underline"
+            className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
           >
             Open setup
           </Link>

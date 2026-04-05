@@ -40,7 +40,7 @@ function StravaOAuthResultBannerInner() {
     >
       <p>{text}</p>
       <div className="mt-3 flex flex-wrap gap-3">
-        <button type="button" className="text-[12px] font-semibold text-accent underline-offset-2 hover:underline" onClick={clear}>
+        <button type="button" className="text-[12px] font-semibold text-teal underline-offset-2 hover:text-teal-hover hover:underline" onClick={clear}>
           Dismiss
         </button>
         <Link href="/settings" className="text-[12px] font-semibold text-white/80 underline-offset-2 hover:underline">

@@ -25,7 +25,7 @@ export default async function RaceOpsDashboardPage() {
         <li>
           <Link
             href="/internal/race-ops/races"
-            className="block rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 font-medium text-accent hover:bg-white/[0.07]"
+            className="block rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 font-medium text-teal hover:bg-white/[0.07] hover:text-teal-hover"
           >
             Search &amp; edit races →
           </Link>
@@ -33,7 +33,7 @@ export default async function RaceOpsDashboardPage() {
         <li>
           <Link
             href="/internal/race-ops/duplicates"
-            className="block rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 font-medium text-accent hover:bg-white/[0.07]"
+            className="block rounded-lg border border-white/10 bg-white/[0.04] px-4 py-3 font-medium text-teal hover:bg-white/[0.07] hover:text-teal-hover"
           >
             Duplicate candidates →
           </Link>

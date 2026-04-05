@@ -65,7 +65,7 @@ const PHASE_UI: Record<
     title: "Last import didn’t finish",
     description:
       "Something went wrong on the last batch. Review the message below and try again when ready.",
-    badgeClass: "border-orange-400/40 bg-orange-500/12 text-orange-50"
+    badgeClass: "border-teal/40 bg-teal/12 text-teal"
   }
 };
 
@@ -257,7 +257,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
         <h2 className="sr-only">Import from Strava</h2>
       ) : (
         <header className="space-y-4">
-          <p className="type-eyebrow text-accent">Strava · Race history</p>
+          <p className="type-eyebrow">Strava · Race history</p>
           <h1 className="font-display text-4xl font-normal tracking-tight text-white md:text-5xl">
             Import past race efforts
           </h1>
@@ -289,11 +289,11 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             </li>
             <li>
               You can still <strong className="text-white/90">link any saved activity</strong> from a{" "}
-              <Link href="/races/find" className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href="/races/find" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 verified race page
               </Link>{" "}
               (broader distance rules than backfill) or use{" "}
-              <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href="/races/new" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 Add race
               </Link>{" "}
               with a Strava URL. <strong className="text-white/90">Sync new activities</strong> also uses a wider import bar
@@ -314,7 +314,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
       {!persistenceAvailable && reason ? (
         <p className="text-sm text-amber-200/90">
           {reason}{" "}
-          <Link href={buildSetupUrl("/my-races")} className="font-semibold text-accent underline-offset-4 hover:underline">
+          <Link href={buildSetupUrl("/my-races")} className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
             Open setup
           </Link>
         </p>
@@ -391,7 +391,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
               </p>
             ) : null}
             {initialProgress.phase === "needs_attention" && initialProgress.lastError ? (
-              <p className="mt-3 rounded-lg border border-orange-400/30 bg-orange-950/40 px-3 py-2 text-sm text-orange-100/90">
+              <p className="mt-3 rounded-lg border border-teal/30 bg-teal/10 px-3 py-2 text-sm text-teal">
                 {initialProgress.lastError}
               </p>
             ) : null}
@@ -501,7 +501,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             role="status"
             aria-label="Last backfill batch summary"
           >
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-accent">Last batch summary</h3>
+            <h3 className="text-[11px] font-semibold uppercase tracking-[0.18em] text-gold">Last batch summary</h3>
             {lastBatchSummary.jumpScan ? (
               <p className="mt-2 text-[12px] leading-relaxed text-sky-200/90">
                 One-time <strong className="font-medium text-sky-100">date-window</strong> scan — your sequential import
@@ -576,11 +576,11 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
               <p className="mt-3 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-[13px] leading-relaxed text-white/70">
                 This batch pulled Strava rows, but <strong className="text-white/85">none met the historical bar</strong>.
                 That is normal for older training blocks—continue with the next batch or use{" "}
-                <Link href="/races/find" className="font-semibold text-accent underline-offset-4 hover:underline">
+                <Link href="/races/find" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                   Find a race
                 </Link>{" "}
                 /{" "}
-                <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
+                <Link href="/races/new" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                   Add race
                 </Link>{" "}
                 for a specific finish.
@@ -600,7 +600,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             {showBackfillReconnect ? (
               <Link
                 href={`/api/strava/oauth/start?next=${encodeURIComponent(pathname)}`}
-                className="font-semibold text-accent underline-offset-4 hover:underline"
+                className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
               >
                 Reconnect Strava
               </Link>
@@ -613,7 +613,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
         <>
           <section className="max-w-2xl space-y-3 text-sm leading-relaxed text-white/65">
             <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">What we import (historical backfill)</h2>
-            <ul className="list-inside list-disc space-y-1.5 marker:text-accent">
+            <ul className="list-inside list-disc space-y-1.5 marker:text-gold">
               <li>
                 Types: Run, Trail Run / TrailRun, Race, and VirtualRun under the same distance / title / catalog rules.
               </li>
@@ -645,7 +645,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             <h2 className="text-xs font-semibold uppercase tracking-[0.2em] text-muted">Looking for one specific race?</h2>
             <p className="mt-2 text-sm leading-relaxed text-white/70">
               Open a race in{" "}
-              <Link href="/races/find" className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href="/races/find" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 Find a race
               </Link>{" "}
               and use <strong className="text-white/85">Link to Strava activity</strong>. That picker uses{" "}
@@ -653,7 +653,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
               <strong className="text-white/85">per-race distance window</strong>—broader than the{" "}
               {HISTORICAL_BACKFILL_MIN_HIGH_SIGNAL_KM} km backfill default—so half marathons and similar finishes can appear
               when they&apos;re synced. If an effort was never imported, use{" "}
-              <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href="/races/new" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 Add race
               </Link>{" "}
               with the Strava activity link.
@@ -661,7 +661,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
           </section>
 
           <p className="text-center text-[11px] text-muted">
-            <Link href="/dashboard" className="font-semibold text-accent underline-offset-4 hover:underline">
+            <Link href="/dashboard" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
               ← Back to overview
             </Link>
           </p>

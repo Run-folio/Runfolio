@@ -129,7 +129,7 @@ export function DashboardFeaturedRaceSummary({ races }: Props) {
                   className={cn(
                     "relative h-14 w-[4.5rem] shrink-0 overflow-hidden rounded-md transition duration-200 ease-out ring-2",
                     "hover:z-10 hover:scale-[1.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[#05070c]",
-                    active ? "ring-accent shadow-[0_0_0_1px_rgba(232,122,61,0.45)]" : "ring-white/15 hover:ring-accent/45"
+                    active ? "ring-accent shadow-[0_0_0_1px_rgba(212,175,55,0.45)]" : "ring-white/15 hover:ring-accent/45"
                   )}
                   aria-label={`Show ${getPortfolioRaceLabel(race)}`}
                   aria-pressed={active}

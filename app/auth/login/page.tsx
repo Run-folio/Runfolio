@@ -90,7 +90,7 @@ export default async function LoginPage({ searchParams }: Props) {
           New to Runfolio?{" "}
           <Link
             href={`/auth/signup?next=${encodeURIComponent(nextPath)}`}
-            className="font-semibold text-accent underline-offset-4 hover:underline"
+            className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
           >
             Create an account
           </Link>

@@ -52,7 +52,7 @@ export function ActivityRouteMap({ encodedPolyline, className }: Props) {
   if (!pathD) return null;
 
   return (
-    <div className={cn("w-full text-accent", className)}>
+    <div className={cn("w-full text-teal", className)}>
       <svg viewBox="0 0 1000 420" className="h-auto w-full" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Route shape">
         <path
           d={pathD}

@@ -38,7 +38,7 @@ export function SetupCallout({
       )}
     >
       {eyebrow ? (
-        <p className="type-eyebrow text-accent/90">{eyebrow}</p>
+        <p className="type-eyebrow text-gold/90">{eyebrow}</p>
       ) : null}
       <h2 className="font-display mt-2 text-2xl font-normal tracking-tight text-white md:text-3xl">{title}</h2>
       <div className="type-meta mt-4 space-y-3 text-base leading-relaxed text-white/72">{children}</div>
@@ -48,14 +48,14 @@ export function SetupCallout({
             primary.external ? (
               <a
                 href={primary.href}
-                className="inline-flex min-h-[48px] items-center justify-center rounded-[14px] bg-accent px-6 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-[#f08a4d]"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-[14px] bg-accent px-6 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-gold-hover"
               >
                 {primary.label}
               </a>
             ) : (
               <Link
                 href={primary.href}
-                className="inline-flex min-h-[48px] items-center justify-center rounded-[14px] bg-accent px-6 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-[#f08a4d]"
+                className="inline-flex min-h-[48px] items-center justify-center rounded-[14px] bg-accent px-6 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-gold-hover"
               >
                 {primary.label}
               </Link>

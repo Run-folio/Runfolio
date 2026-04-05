@@ -154,7 +154,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
             <Link href="/races/find" className="mb-6 w-fit text-[13px] font-medium text-white/80 transition hover:text-white">
               ← Find a race
             </Link>
-            <p className="type-eyebrow text-accent">Runfolio race library</p>
+            <p className="type-eyebrow">Runfolio race library</p>
             <h1 className="type-display mt-3 max-w-4xl">{detail.displayTitle}</h1>
             <p className="type-tagline mt-4 max-w-2xl text-white/85">{detail.location}</p>
             <div className="mt-6 flex flex-wrap gap-2">
@@ -268,7 +268,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
                         {parseActivityPageId(userMatch.strava_activity_id)?.kind === "file_import" ? null : (
                           <a
                             href={`https://www.strava.com/activities/${userMatch.strava_activity_id}`}
-                            className="font-semibold text-accent hover:underline"
+                            className="font-semibold text-teal hover:text-teal-hover hover:underline"
                             target="_blank"
                             rel="noreferrer"
                           >
@@ -313,7 +313,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
             <div className="mx-auto max-w-2xl space-y-4 text-center">
               <p className="type-meta text-sm">
                 Haven&apos;t logged this one yet?{" "}
-                <Link href={`/races/new?discover=${encodeURIComponent(raceId)}`} className="text-accent hover:underline">
+                <Link href={`/races/new?discover=${encodeURIComponent(raceId)}`} className="text-teal hover:text-teal-hover hover:underline">
                   Start from this race template
                 </Link>
                 .

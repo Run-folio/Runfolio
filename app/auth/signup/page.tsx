@@ -25,7 +25,7 @@ export default async function SignUpPage({ searchParams }: Props) {
           Already have an account?{" "}
           <Link
             href={`/auth/login?next=${encodeURIComponent(nextPath)}`}
-            className="font-semibold text-accent underline-offset-4 hover:underline"
+            className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
           >
             Sign in
           </Link>

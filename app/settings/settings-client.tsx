@@ -75,7 +75,7 @@ export function SettingsClient({ email, displayName, stravaConnected, stravaOAut
           <select
             value={locale}
             onChange={(e) => setLocale(e.target.value as Locale)}
-            className="mt-2 min-h-[48px] w-full rounded-xl border border-white/12 bg-[#12151c] px-3 text-[14px] text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="mt-2 min-h-[48px] w-full rounded-xl border border-white/12 bg-[#12151c] px-3 text-[14px] text-white focus-visible:outline focus-visible:ring-2 focus-visible:ring-teal/45"
             aria-label={t("settings.languageSection")}
           >
             {SUPPORTED_LOCALES.map((loc) => (
@@ -94,7 +94,7 @@ export function SettingsClient({ email, displayName, stravaConnected, stravaOAut
                 type="button"
                 onClick={() => setDistanceUnits(u)}
                 className={cn(
-                  "min-h-[48px] flex-1 rounded-xl border text-[13px] font-semibold transition focus-visible:outline focus-visible:ring-2 focus-visible:ring-accent/50",
+                  "min-h-[48px] flex-1 rounded-xl border text-[13px] font-semibold transition focus-visible:outline focus-visible:ring-2 focus-visible:ring-teal/45",
                   distanceUnits === u
                     ? "border-accent/60 bg-accent/15 text-white"
                     : "border-white/12 bg-white/[0.04] text-white/75 hover:border-white/20"
@@ -178,7 +178,7 @@ export function SettingsClient({ email, displayName, stravaConnected, stravaOAut
             {t("settings.signOut")}
           </button>
         </form>
-        <Link href="/dashboard" className="text-[12px] font-medium text-accent underline-offset-4 hover:underline">
+        <Link href="/dashboard" className="text-[12px] font-medium text-teal underline-offset-4 hover:text-teal-hover hover:underline">
           {t("settings.backToApp")}
         </Link>
       </div>

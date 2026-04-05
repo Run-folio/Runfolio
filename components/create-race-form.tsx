@@ -313,7 +313,7 @@ export function CreateRaceForm({
             <p className="text-sm text-white/90">Connect Strava to import real activities.</p>
             <Link
               href="/api/strava/oauth/start?next=%2Fraces%2Fnew"
-              className="mt-3 inline-flex text-sm font-semibold text-accent underline-offset-4 hover:underline"
+              className="mt-3 inline-flex text-sm font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
             >
               Connect Strava
             </Link>
@@ -412,7 +412,7 @@ export function CreateRaceForm({
               placeholder="Write about the race, the highs and lows, the emotions..."
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="mt-3 min-h-44 w-full rounded-md border border-border bg-[#070b12] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-accent"
+              className="mt-3 min-h-44 w-full rounded-md border border-border bg-[#070b12] px-3 py-2 text-sm leading-relaxed text-white placeholder:text-muted focus:outline-none focus:ring-1 focus:ring-teal/50"
             />
             <div className="mt-3 flex flex-wrap gap-2">
               {["The build up", "The hardest moment", "What surprised you", "How it felt at the finish"].map((prompt) => (
@@ -448,7 +448,7 @@ export function CreateRaceForm({
                 hasRoutePreview
                   ? {
                       backgroundImage:
-                        "linear-gradient(145deg, rgba(232,122,61,0.15) 0%, rgba(5,7,12,0.95) 45%, #05070c 100%)"
+                        "linear-gradient(145deg, rgba(212,175,55,0.15) 0%, rgba(5,7,12,0.95) 45%, #05070c 100%)"
                     }
                   : { backgroundImage: "url('/reference/hero-3.png')" }
               }
@@ -472,7 +472,7 @@ export function CreateRaceForm({
                     ? `https://www.strava.com/search/results?q=${encodeURIComponent(form.name)}`
                     : "https://www.strava.com"
                 }
-                className="text-accent hover:underline"
+                className="text-teal hover:text-teal-hover hover:underline"
                 target="_blank"
                 rel="noreferrer"
               >

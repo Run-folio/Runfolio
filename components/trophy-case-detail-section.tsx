@@ -61,7 +61,7 @@ export function TrophyCaseDetailSection({ slots }: Props) {
               <div className="flex flex-col gap-2 md:items-end md:justify-center">
                 <Link
                   href={catalogHref}
-                  className="whitespace-nowrap text-center text-[11px] font-semibold uppercase tracking-[0.15em] text-accent hover:underline"
+                  className="whitespace-nowrap text-center text-[11px] font-semibold uppercase tracking-[0.15em] text-teal hover:text-teal-hover hover:underline"
                 >
                   Race page
                 </Link>

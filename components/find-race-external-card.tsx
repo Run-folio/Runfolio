@@ -29,7 +29,7 @@ export function FindRaceExternalCard({ race }: Props) {
     <li
       className={cn(
         "flex flex-col rounded-lg border border-white/10 bg-[#0d0d0f] p-4 transition hover:border-accent/25",
-        "ring-1 ring-transparent focus-within:ring-accent/30"
+        "ring-1 ring-transparent focus-within:ring-teal/30"
       )}
     >
       <div className="flex flex-wrap items-center gap-2">

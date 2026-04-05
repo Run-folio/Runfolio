@@ -106,7 +106,7 @@ export default async function TrophyCollectionPage({ params }: Props) {
                 {nextTarget && completed < total ? (
                   <p className="text-xs text-muted">
                     Next open slot:{" "}
-                    <Link href={`/races/${nextTarget.discoverId}`} className="text-accent hover:underline">
+                    <Link href={`/races/${nextTarget.discoverId}`} className="text-teal hover:text-teal-hover hover:underline">
                       {nextTarget.displayTitle}
                     </Link>
                   </p>

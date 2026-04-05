@@ -60,7 +60,7 @@ export default async function SetupPage({ searchParams }: Props) {
       <main className="min-h-screen bg-[#05070c] pb-24">
         <header className="border-b border-white/[0.06] bg-[#070a10] px-5 py-10 md:px-10 md:py-14">
           <div className="app-shell mx-auto max-w-[720px] text-center">
-            <p className="type-eyebrow text-accent">Welcome in</p>
+            <p className="type-eyebrow">Welcome in</p>
             <h1 className="font-display mt-3 text-4xl font-normal tracking-tight text-white md:text-[2.75rem]">
               Get set up
             </h1>

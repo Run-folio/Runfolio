@@ -16,7 +16,7 @@ export function RacePreviewCard(props: Props) {
       <div className="absolute inset-0 bg-cover bg-center opacity-25" style={{ backgroundImage: "url('/reference/hero-3.png')" }} />
       <div className="absolute inset-0 bg-gradient-to-b from-transparent to-[#04070d]" />
       <div className="relative p-6">
-      <p className="text-xs uppercase tracking-widest text-accent">Live Preview</p>
+      <p className="text-xs uppercase tracking-widest text-gold">Live Preview</p>
       <h3 className="mt-3 text-3xl font-semibold">{props.name || "Your race name"}</h3>
       <p className="mt-1 text-sm text-muted">{props.location || "Location pending"}</p>
       <div className="mt-6 grid grid-cols-2 gap-3 text-sm">

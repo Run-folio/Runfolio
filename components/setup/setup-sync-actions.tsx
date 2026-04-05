@@ -19,7 +19,7 @@ export function SetupSyncActions() {
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         <Link
           href="/my-races#import-strava"
-          className="inline-flex min-h-[48px] items-center justify-center rounded-[14px] bg-accent px-8 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-[#f08a4d]"
+          className="inline-flex min-h-[48px] items-center justify-center rounded-[14px] bg-accent px-8 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-gold-hover"
         >
           Import past race efforts
         </Link>
@@ -70,7 +70,7 @@ export function SetupSyncActions() {
           {showReconnect ? (
             <Link
               href={`/api/strava/oauth/start?next=${encodeURIComponent(pathname)}`}
-              className="inline-flex font-semibold text-accent underline-offset-4 hover:underline"
+              className="inline-flex font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
             >
               Reconnect Strava
             </Link>

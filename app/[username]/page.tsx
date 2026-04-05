@@ -175,7 +175,7 @@ export default async function PublicProfilePage({ params }: Props) {
             {profileAuthUser ? (
               <>
                 Public lookup uses the name on your Runfolio account. Open{" "}
-                <Link href="/dashboard" className="font-semibold text-accent underline-offset-4 hover:underline">
+                <Link href="/dashboard" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                   Overview
                 </Link>{" "}
                 to sync your display name with your profile link, or check the spelling in the address bar.

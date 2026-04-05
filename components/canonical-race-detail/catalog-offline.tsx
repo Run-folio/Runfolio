@@ -12,7 +12,7 @@ export function CanonicalRaceCatalogOffline({ message }: { message: string }) {
           <p className="type-meta mt-4 text-sm leading-relaxed text-white/60">{message}</p>
           <Link
             href="/races/find"
-            className="mt-8 inline-block text-[13px] font-semibold uppercase tracking-[0.12em] text-accent hover:underline"
+            className="mt-8 inline-block text-[13px] font-semibold uppercase tracking-[0.12em] text-teal hover:text-teal-hover hover:underline"
           >
             ← Back to Find a race
           </Link>

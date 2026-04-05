@@ -8,7 +8,7 @@ function TierGlow({ tier }: { tier: RunnerAchievement["tier"] }) {
   if (tier === "silver") {
     return "border-slate-400/30 bg-gradient-to-br from-slate-400/[0.08] to-[#06080c]";
   }
-  return "border-orange-200/20 bg-gradient-to-br from-orange-200/[0.06] to-[#06080c]";
+  return "border-gold/20 bg-gradient-to-br from-gold/[0.07] to-[#06080c]";
 }
 
 function AchievementCard({
@@ -64,7 +64,7 @@ export function RunningProfileRaceIdentitySection({
   return (
     <div className="border-x border-b border-border bg-[#070910]">
       <div className="mx-auto max-w-[1400px] px-5 py-10 md:px-8 md:py-12">
-        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-accent/90">Runner story</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-gold/90">Runner story</p>
         <h2 className="font-display mt-4 text-3xl font-normal tracking-tight text-white md:text-4xl">
           {presentation.headline}
         </h2>

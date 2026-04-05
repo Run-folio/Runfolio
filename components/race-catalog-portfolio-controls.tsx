@@ -34,7 +34,7 @@ function SubmitButton({
       ? `${base} border border-red-500/45 text-red-200 hover:bg-red-950/40`
       : variant === "muted"
         ? `${base} border border-white/12 text-muted hover:border-white/25 hover:text-white`
-        : `${base} border border-white/18 text-white hover:border-accent/40 hover:text-accent`;
+        : `${base} border border-white/18 text-white hover:border-teal/40 hover:text-teal-hover`;
   return (
     <button type="submit" disabled={pending} className={cls}>
       {pending ? "…" : label}

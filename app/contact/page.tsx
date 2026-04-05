@@ -15,13 +15,13 @@ export default function ContactPage() {
       <div className="mx-auto max-w-lg px-5 pb-24 pt-10 md:px-8 md:pt-14">
         <Link
           href="/"
-          className="inline-flex text-[12px] font-semibold uppercase tracking-[0.14em] text-white/50 transition hover:text-accent"
+          className="inline-flex text-[12px] font-semibold uppercase tracking-[0.14em] text-white/50 transition hover:text-teal-hover"
         >
           ← Home
         </Link>
 
         <header className="mt-14 text-center md:mt-20">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-accent">Contact</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-gold">Contact</p>
           <h1 className="font-display mt-5 text-[clamp(2.25rem,6vw,3.25rem)] font-normal leading-tight tracking-tight text-white md:mt-6">
             Get in touch
           </h1>
@@ -39,7 +39,7 @@ export default function ContactPage() {
               <div className="min-w-0 flex-1 text-center sm:text-left">
                 <a
                   href={`mailto:${CONTACT_EMAIL}`}
-                  className="break-all text-xl font-medium tracking-tight text-accent underline-offset-4 transition hover:underline md:text-2xl"
+                  className="break-all text-xl font-medium tracking-tight text-teal underline-offset-4 transition hover:text-teal-hover hover:underline md:text-2xl"
                 >
                   {CONTACT_EMAIL}
                 </a>

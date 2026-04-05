@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useShellPreferences } from "@/components/shell/shell-preferences-context";
 import { resolveMessage, SUPPORTED_LOCALES, type Locale } from "@/lib/i18n";
 const linkClass =
-  "inline-flex min-h-[44px] items-center rounded-lg px-2 text-[13px] font-medium text-white/75 underline-offset-4 hover:text-white hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+  "inline-flex min-h-[44px] items-center rounded-lg px-2 text-[13px] font-medium text-white/75 underline-offset-4 hover:text-white hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal";
 
 export function SiteFooter() {
   const { locale, setLocale, messages } = useShellPreferences();
@@ -37,7 +37,7 @@ export function SiteFooter() {
             <select
               value={locale}
               onChange={(e) => setLocale(e.target.value as Locale)}
-              className="min-h-[44px] min-w-[10rem] rounded-xl border border-white/15 bg-[#151820] px-3 py-2 text-[13px] text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="min-h-[44px] min-w-[10rem] rounded-xl border border-white/15 bg-[#151820] px-3 py-2 text-[13px] text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
               aria-label={t("footer.language")}
             >
               {SUPPORTED_LOCALES.map((loc) => (

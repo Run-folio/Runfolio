@@ -47,7 +47,7 @@ export function StravaRecentActivitiesSection({
           {stravaOAuthConfigured ? (
             <Link
               href={`/api/strava/oauth/start?next=${encodeURIComponent(stravaOauthNext)}`}
-              className="mt-4 inline-block text-sm font-semibold uppercase tracking-wider text-accent hover:underline"
+              className="mt-4 inline-block text-sm font-semibold uppercase tracking-wider text-teal hover:text-teal-hover hover:underline"
             >
               Connect Strava
             </Link>
@@ -65,13 +65,13 @@ export function StravaRecentActivitiesSection({
           <h2 className="type-section mt-2 text-lg md:text-xl">{title}</h2>
           <p className="type-meta mt-2 max-w-2xl text-sm">
             Newest first — pulled from your connected Strava account. Add a story on{" "}
-            <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">
+            <Link href="/races/new" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
               Add race
             </Link>
             .
           </p>
         </div>
-        <Link href="/races/new" className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent hover:underline">
+        <Link href="/races/new" className="text-[11px] font-semibold uppercase tracking-[0.2em] text-teal hover:text-teal-hover hover:underline">
           Turn activity into race →
         </Link>
       </div>

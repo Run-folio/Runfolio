@@ -44,7 +44,7 @@ export default async function RaceOpsLoginPage({ searchParams }: Props) {
         </button>
       </form>
       <p className="mt-8 text-center text-[11px] text-muted">
-        <Link href="/dashboard" className="text-accent underline-offset-4 hover:underline">
+        <Link href="/dashboard" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
           ← Back to app
         </Link>
       </p>

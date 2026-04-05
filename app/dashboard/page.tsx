@@ -172,7 +172,7 @@ export default async function DashboardPage() {
         <div className="hero-inner flex flex-col gap-8 pb-4 md:flex-row md:items-end md:justify-between md:gap-10 md:pb-8">
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:gap-10">
             <div
-              className="h-24 w-24 shrink-0 rounded-full border-2 border-accent bg-cover bg-center shadow-[0_0_0_1px_rgba(232,122,61,0.35)] sm:h-28 sm:w-28"
+              className="h-24 w-24 shrink-0 rounded-full border-2 border-accent bg-cover bg-center shadow-[0_0_0_1px_rgba(212,175,55,0.35)] sm:h-28 sm:w-28"
               style={{ backgroundImage: "url('/photos/placeholders/8.png')" }}
               role="img"
               aria-label="Profile"
@@ -201,7 +201,7 @@ export default async function DashboardPage() {
           <div className="flex w-full shrink-0 flex-col gap-2 sm:flex-row sm:flex-wrap md:w-auto md:flex-col md:items-end">
             <Link
               href="/my-races"
-              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[12px] bg-accent px-4 py-2 text-center text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d] sm:flex-1 md:w-full md:min-w-[12rem]"
+              className="inline-flex min-h-[48px] w-full items-center justify-center rounded-[12px] bg-accent px-4 py-2 text-center text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-gold-hover sm:flex-1 md:w-full md:min-w-[12rem]"
             >
               My Races
             </Link>
@@ -215,7 +215,8 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <div className="mx-auto w-full max-w-[1400px] px-6 pt-5 md:px-8 md:pt-6">
+      <div className="mx-auto w-full max-w-[1400px] space-y-6 px-6 pt-6 md:space-y-8 md:px-8 md:pt-8">
+        {featured ? <DashboardFeaturedRaceSummary races={completedSorted.slice(0, 6)} /> : null}
         <section className="grid grid-cols-2 gap-x-3 gap-y-5 border border-border bg-panel/50 p-5 sm:grid-cols-3 sm:gap-4 md:p-6 lg:grid-cols-6">
           <div className="min-w-0">
             <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">
@@ -262,7 +263,7 @@ export default async function DashboardPage() {
         </section>
       </div>
 
-      <main className="app-shell space-y-16">
+      <main className="mx-auto w-full max-w-[1400px] space-y-16 px-6 pb-10 pt-8 md:px-8 md:pt-10">
         <StravaOAuthResultBanner />
         <section>
           <div className="mb-5 flex flex-col justify-between gap-3 sm:mb-6 sm:flex-row sm:items-end">
@@ -272,7 +273,7 @@ export default async function DashboardPage() {
             </div>
             <Link
               href="/races/new"
-              className="min-h-[44px] shrink-0 content-center text-[11px] font-semibold uppercase tracking-[0.2em] text-accent sm:min-h-0"
+              className="min-h-[44px] shrink-0 content-center text-[11px] font-semibold uppercase tracking-[0.2em] text-teal hover:text-teal-hover hover:underline sm:min-h-0"
             >
               View all →
             </Link>
@@ -287,7 +288,7 @@ export default async function DashboardPage() {
                 <div className="mt-5 flex flex-wrap justify-center gap-4">
                   <Link
                     href="/my-races"
-                    className="inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-accent hover:underline"
+                    className="inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-teal hover:text-teal-hover hover:underline"
                   >
                     My Races →
                   </Link>
@@ -304,7 +305,7 @@ export default async function DashboardPage() {
                 const href = portfolioRaceHref(race);
                 const isExternal = href.startsWith("http");
                 const lift =
-                  "transition duration-200 group-hover:-translate-y-1 group-hover:shadow-[0_20px_50px_-18px_rgba(232,122,61,0.5)] group-hover:ring-1 group-hover:ring-accent/30";
+                  "transition duration-200 group-hover:-translate-y-1 group-hover:shadow-[0_20px_50px_-18px_rgba(212,175,55,0.5)] group-hover:ring-1 group-hover:ring-accent/30";
                 const cardShell = cn("overflow-hidden p-0", lift, i === 0 ? "border-accent ring-1 ring-accent/40" : "");
                 const inner = (
                   <>
@@ -340,14 +341,14 @@ export default async function DashboardPage() {
           <section
             className={cn(
               "rounded-[14px] border border-white/10 bg-panel/30 p-4 md:p-5",
-              showFirstTimeStravaBackfill && "border-accent/35 shadow-[0_0_0_1px_rgba(232,122,61,0.2)]"
+              showFirstTimeStravaBackfill && "border-accent/35 shadow-[0_0_0_1px_rgba(212,175,55,0.2)]"
             )}
           >
             <h2 className="sr-only">Strava import and sync</h2>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               <Link
                 href="/my-races#import-strava"
-                className="inline-flex min-h-[48px] w-full flex-1 items-center justify-center rounded-[12px] bg-accent px-4 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-[#f08a4d] sm:max-w-xs"
+                className="inline-flex min-h-[48px] w-full flex-1 items-center justify-center rounded-[12px] bg-accent px-4 text-[12px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-gold-hover sm:max-w-xs"
               >
                 Import from Strava
               </Link>
@@ -404,8 +405,6 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
-
-        {featured ? <DashboardFeaturedRaceSummary races={completedSorted.slice(0, 6)} /> : null}
       </main>
       {devMatchDebug ? <DevMatchDebugSummary snapshot={devMatchDebug} /> : null}
     </>

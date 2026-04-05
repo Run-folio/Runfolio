@@ -51,7 +51,7 @@ export default function CollectionsIndexPage() {
                     <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gold/90">{c.eyebrow}</p>
                     <h2 className="mt-2 font-display text-2xl text-white md:text-3xl">{c.title}</h2>
                     <p className="type-meta mt-2 max-w-lg text-sm text-white/70">{c.subtitle}</p>
-                    <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">
+                    <p className="mt-4 text-[11px] font-semibold uppercase tracking-[0.2em] text-gold">
                       Open trophy case →
                     </p>
                   </div>

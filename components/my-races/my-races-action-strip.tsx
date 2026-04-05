@@ -13,7 +13,7 @@ export function MyRacesActionStrip({ stravaOAuthConfigured }: Props) {
     <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-stretch">
       <Link
         href="#import-strava"
-        className="inline-flex min-h-[48px] w-full flex-1 items-center justify-center rounded-xl bg-accent px-4 text-[12px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-[#f08a4d] sm:min-w-0"
+        className="inline-flex min-h-[48px] w-full flex-1 items-center justify-center rounded-xl bg-accent px-4 text-[12px] font-semibold uppercase tracking-[0.12em] text-white transition hover:bg-gold-hover sm:min-w-0"
       >
         Import from Strava
       </Link>

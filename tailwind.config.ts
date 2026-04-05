@@ -31,9 +31,20 @@ const config: Config = {
         panel: "#0a0f17",
         panelAlt: "#0f1621",
         border: "#212a37",
-        accent: "#e87a3d",
+        /** Primary (gold) — fills, key emphasis; alias `accent` for legacy classes */
+        gold: {
+          DEFAULT: "#D4AF37",
+          hover: "#E6C65C",
+          muted: "#8C7423"
+        },
+        /** Secondary (teal) — text links, subtle hovers, secondary actions */
+        teal: {
+          DEFAULT: "#2EC4B6",
+          hover: "#3ED8C9",
+          muted: "#1E8F85"
+        },
+        accent: "#D4AF37",
         green: "#22c55e",
-        gold: "#c9a06b",
         muted: "#95a1b4"
       },
       boxShadow: {

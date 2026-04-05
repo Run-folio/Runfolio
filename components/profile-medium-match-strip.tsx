@@ -50,7 +50,7 @@ export function ProfileMediumMatchStrip({ matches: initialMatches, profilePath }
       <h2 className="type-section mt-2 text-base text-white md:text-lg">Possible major races from Strava</h2>
       <p className="type-meta mt-2 max-w-2xl text-sm">
         Medium-confidence matches stay suggestions until you confirm. Nothing is written to your bucket list or portfolio automatically — use the buttons below or confirm on{" "}
-        <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">
+        <Link href="/races/new" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
           Add race
         </Link>
         .

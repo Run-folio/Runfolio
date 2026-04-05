@@ -89,7 +89,7 @@ export default async function MyRacesPage() {
 
           {!stravaOAuthConfigured && bundle.totalSyncedCount === 0 ? (
             <p className="mb-6 text-sm text-white/55">
-              <Link href={buildSetupUrl("/my-races")} className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href={buildSetupUrl("/my-races")} className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 Setup
               </Link>{" "}
               Strava, or add races from Find / Add race.

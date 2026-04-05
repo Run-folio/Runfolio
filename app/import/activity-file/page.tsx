@@ -46,11 +46,11 @@ export default async function ImportActivityFilePage() {
           <ActivityFileImportPanel />
           <p className="type-meta mt-10 text-center text-[11px] leading-relaxed text-white/45">
             Prefer Strava?{" "}
-            <Link href="/my-races#import-strava" className="font-semibold text-accent underline-offset-4 hover:underline">
+            <Link href="/my-races#import-strava" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
               Import past race efforts
             </Link>{" "}
             ·{" "}
-            <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
+            <Link href="/my-races" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
               My Races
             </Link>
           </p>

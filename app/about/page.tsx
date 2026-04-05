@@ -36,13 +36,13 @@ export default function AboutPage() {
       <div className="mx-auto max-w-6xl px-5 pb-28 pt-10 md:px-8 md:pt-14">
         <Link
           href="/"
-          className="inline-flex text-[12px] font-semibold uppercase tracking-[0.14em] text-white/50 transition hover:text-accent"
+          className="inline-flex text-[12px] font-semibold uppercase tracking-[0.14em] text-white/50 transition hover:text-teal-hover"
         >
           ← Home
         </Link>
 
         <header className="mx-auto mt-16 max-w-3xl text-center md:mt-24">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-accent">Runfolio</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-gold">Runfolio</p>
           <h1 className="font-display mt-6 text-[clamp(2.75rem,8vw,4.75rem)] font-normal leading-[1.05] tracking-tight text-white">
             Your race portfolio.
           </h1>
@@ -71,7 +71,7 @@ export default function AboutPage() {
                 key={r.label}
                 className={cn(
                   "group overflow-hidden rounded-2xl border border-white/[0.09] bg-[#0b0f18] shadow-[0_24px_60px_-28px_rgba(0,0,0,0.75)] transition duration-300 hover:border-white/[0.14]",
-                  idx === 1 && "sm:translate-y-4 sm:shadow-[0_32px_70px_-24px_rgba(232,122,61,0.12)]"
+                  idx === 1 && "sm:translate-y-4 sm:shadow-[0_32px_70px_-24px_rgba(212,175,55,0.12)]"
                 )}
               >
                 <div className="relative aspect-[16/10] overflow-hidden">
@@ -99,7 +99,7 @@ export default function AboutPage() {
         <div className="mx-auto mt-28 flex flex-col items-center md:mt-36">
           <Link
             href="/auth/signup"
-            className="inline-flex min-h-[52px] items-center justify-center rounded-2xl bg-accent px-8 text-[13px] font-semibold uppercase tracking-[0.12em] text-white shadow-[0_16px_40px_-12px_rgba(232,122,61,0.55)] transition hover:bg-[#f08a4d]"
+            className="inline-flex min-h-[52px] items-center justify-center rounded-2xl bg-accent px-8 text-[13px] font-semibold uppercase tracking-[0.12em] text-white shadow-[0_16px_40px_-12px_rgba(212,175,55,0.55)] transition hover:bg-gold-hover"
           >
             Start building your race story
           </Link>

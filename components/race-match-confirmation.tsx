@@ -92,7 +92,7 @@ export function RaceMatchConfirmation({
         "p-0",
         compact
           ? "border border-white/12 bg-[#0a0a0a] shadow-none"
-          : "border-accent/40 bg-gradient-to-b from-accent/10 via-[#0a0c12] to-[#070910] shadow-[0_0_0_1px_rgba(232,122,61,0.15)]"
+          : "border-accent/40 bg-gradient-to-b from-accent/10 via-[#0a0c12] to-[#070910] shadow-[0_0_0_1px_rgba(212,175,55,0.15)]"
       )}
     >
       <div className={cn("border-b border-white/10", compact ? "px-4 py-4" : "px-5 py-4 md:px-6")}>

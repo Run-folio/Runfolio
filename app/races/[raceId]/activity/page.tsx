@@ -93,7 +93,7 @@ export default async function RaceActivityPage({ params }: Props) {
           {race.strava_activity_id?.trim() ? (
             <Link
               href={`/activities/${race.strava_activity_id.trim()}`}
-              className="font-semibold text-accent underline-offset-4 hover:underline"
+              className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
             >
               Full race portfolio (Strava + story)
             </Link>

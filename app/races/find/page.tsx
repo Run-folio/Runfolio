@@ -50,7 +50,7 @@ export default async function FindRacePage() {
           <p className="type-tagline mt-4 max-w-2xl">
             Major marathons, UTMB World Series events, and epic ultras — search and filter, add goals straight to your
             bucket list, or open a race to link a Strava finish. Refine the story anytime from{" "}
-            <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">
+            <Link href="/races/new" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
               Add race
             </Link>
             .

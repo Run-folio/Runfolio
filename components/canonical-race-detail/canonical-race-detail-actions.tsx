@@ -27,7 +27,7 @@ type Props = {
 
 const linkBtnClass = cn(
   "inline-flex items-center justify-center rounded-[12px] px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.08em] transition",
-  "bg-accent text-white hover:bg-[#f08a4d]"
+  "bg-accent text-white hover:bg-gold-hover"
 );
 
 export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, bucketGoal, primaryFinish }: Props) {
@@ -134,7 +134,7 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
         )}
         {!stravaLinked ? (
           <p className="text-sm text-white/55">
-            <Link href="/dashboard" className="font-medium text-accent underline-offset-4 hover:underline">
+            <Link href="/dashboard" className="font-medium text-teal underline-offset-4 hover:text-teal-hover hover:underline">
               Open dashboard
             </Link>{" "}
             to attach a Strava activity.
@@ -142,7 +142,7 @@ export function CanonicalRaceDetailActions({ canonicalRaceId, slug, authed, buck
         ) : (
           <a
             href={`https://www.strava.com/activities/${stravaLinked}`}
-            className="inline-block text-[13px] font-semibold text-accent underline-offset-4 hover:underline"
+            className="inline-block text-[13px] font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
             target="_blank"
             rel="noreferrer"
           >

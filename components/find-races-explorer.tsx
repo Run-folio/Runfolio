@@ -166,7 +166,7 @@ export function FindRacesExplorer({
             id="find-race-distance"
             value={distance}
             onChange={(e) => setDistance(e.target.value as DistanceFilterId)}
-            className="mt-2 w-full min-w-[200px] rounded-[12px] border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-accent focus:ring-1 focus:ring-accent/40"
+            className="mt-2 w-full min-w-[200px] rounded-[12px] border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-teal/60 focus:ring-1 focus:ring-teal/35"
           >
             {DISTANCE_OPTIONS.map((o) => (
               <option key={o.id} value={o.id} className="bg-[#1e2029]">
@@ -183,7 +183,7 @@ export function FindRacesExplorer({
             id="find-race-surface"
             value={surface}
             onChange={(e) => setSurface(e.target.value as SurfaceFilterId)}
-            className="mt-2 w-full min-w-[160px] rounded-[12px] border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-accent focus:ring-1 focus:ring-accent/40"
+            className="mt-2 w-full min-w-[160px] rounded-[12px] border border-white/15 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-teal/60 focus:ring-1 focus:ring-teal/35"
           >
             {SURFACE_OPTIONS.map((o) => (
               <option key={o.id} value={o.id} className="bg-[#1e2029]">
@@ -207,7 +207,7 @@ export function FindRacesExplorer({
             No races match these filters.{" "}
             <button
               type="button"
-              className="text-accent underline-offset-4 hover:underline"
+              className="text-teal underline-offset-4 hover:text-teal-hover hover:underline"
               onClick={() => {
                 setQuery("");
                 setDistance("any");
@@ -224,7 +224,7 @@ export function FindRacesExplorer({
         <section className="space-y-3 rounded-[14px] border border-white/10 bg-black/25 p-4 md:p-5" aria-busy={registryLoading}>
           <div className="flex flex-wrap items-end justify-between gap-2">
             <div>
-              <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-accent">From registries</h2>
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.2em] text-gold">From registries</h2>
               <p className="type-meta mt-1 max-w-xl text-xs">
                 Live results from RunSignup{INGEST_MOCK ? " and mock data" : ""}, matched to your filters. Add-to-bucket for
                 these rows is coming next.
@@ -287,7 +287,7 @@ export function FindRacesExplorer({
                       key={race.id}
                       className="flex flex-col rounded-lg border border-white/10 bg-[#0d0d0f] p-4 transition hover:border-white/20"
                     >
-                      <Link href={`/races/${race.id}`} className="font-semibold text-white hover:text-accent">
+                      <Link href={`/races/${race.id}`} className="font-semibold text-white hover:text-teal-hover">
                         {race.name}
                       </Link>
                       <p className="type-meta mt-1 text-xs">{race.location}</p>

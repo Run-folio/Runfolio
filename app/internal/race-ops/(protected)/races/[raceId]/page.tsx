@@ -88,7 +88,7 @@ export default async function RaceOpsRaceDetailPage({ params }: Props) {
           <p className="mt-1 font-mono text-[12px] text-white/50">{r.id}</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Link href="/internal/race-ops/races" className="text-[12px] text-accent hover:underline">
+          <Link href="/internal/race-ops/races" className="text-[12px] text-teal hover:text-teal-hover hover:underline">
             ← Search
           </Link>
           <Link href={`/races/${r.slug}`} className="text-[12px] text-white/45 hover:text-white/75" target="_blank">

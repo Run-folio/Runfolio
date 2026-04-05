@@ -105,12 +105,12 @@ export function StravaActivityCard({
         type="button"
         onClick={onSelect}
         className={cn(
-          "w-full border border-border bg-[#0d0d0f] p-4 text-left transition hover:border-accent/40 hover:bg-black/50",
+          "w-full border border-border bg-[#0d0d0f] p-4 text-left transition hover:border-teal/35 hover:bg-black/50",
           className
         )}
       >
         {inner}
-        <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-accent">Use for race →</p>
+        <p className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-teal">Use for race →</p>
       </button>
     );
   }
@@ -125,7 +125,7 @@ export function StravaActivityCard({
       >
         <Link
           href={`/activities/${encodeURIComponent(activity.strava_id)}`}
-          className="block p-4 pb-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="block p-4 pb-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal"
           aria-label={`${activity.name}, view activity`}
         >
           {inner}
@@ -136,7 +136,7 @@ export function StravaActivityCard({
               href={activity.strava_url}
               target="_blank"
               rel="noreferrer"
-              className="inline-flex min-h-[40px] items-center text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
+              className="inline-flex min-h-[40px] items-center text-[10px] font-semibold uppercase tracking-wider text-teal hover:text-teal-hover hover:underline"
             >
               Strava
             </a>
@@ -157,7 +157,7 @@ export function StravaActivityCard({
         {isStrava && activity.strava_url.startsWith("http") ? (
           <Link
             href={activity.strava_url}
-            className="text-[10px] font-semibold uppercase tracking-wider text-accent hover:underline"
+            className="text-[10px] font-semibold uppercase tracking-wider text-teal hover:text-teal-hover hover:underline"
             target="_blank"
             rel="noreferrer"
           >

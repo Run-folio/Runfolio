@@ -123,7 +123,7 @@ export function SetupFlowContent({ persistence, progress, safeNext }: Props) {
           {!stravaOAuthConfigured ? (
             <p className="text-amber-100/85">
               One-click Strava isn&apos;t enabled on this server yet (missing OAuth keys). You can still{" "}
-              <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href="/races/new" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 add races manually
               </Link>{" "}
               — or ask your host to add Strava credentials.
@@ -174,11 +174,11 @@ export function SetupFlowContent({ persistence, progress, safeNext }: Props) {
           ) : !stravaOAuthConfigured ? (
             <p className="text-white/60">
               Without automatic Strava, add finishes from{" "}
-              <Link href="/races/find" className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href="/races/find" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 Find a race
               </Link>{" "}
               or{" "}
-              <Link href="/races/new" className="font-semibold text-accent underline-offset-4 hover:underline">
+              <Link href="/races/new" className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline">
                 New race
               </Link>
               .

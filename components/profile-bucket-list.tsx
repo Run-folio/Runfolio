@@ -74,7 +74,7 @@ function BucketRaceCard({
       {variant === "completed" && race.discover_race_id ? (
         <Link
           href={`/races/${race.discover_race_id}`}
-          className="border-t border-white/10 px-3 py-2 text-center text-[9px] font-semibold uppercase tracking-wider text-accent transition hover:bg-white/5"
+          className="border-t border-white/10 px-3 py-2 text-center text-[9px] font-semibold uppercase tracking-wider text-teal transition hover:bg-white/5 hover:text-teal-hover"
         >
           Major race in library →
         </Link>
@@ -145,7 +145,7 @@ function CanonicalBucketStripCard({ goal, variant }: { goal: CanonicalBucketGoal
       </Link>
       <Link
         href="/bucket-list"
-        className="border-t border-white/10 px-3 py-2 text-center text-[9px] font-semibold uppercase tracking-wider text-accent transition hover:bg-white/5"
+        className="border-t border-white/10 px-3 py-2 text-center text-[9px] font-semibold uppercase tracking-wider text-teal transition hover:bg-white/5 hover:text-teal-hover"
       >
         Manage on bucket list →
       </Link>

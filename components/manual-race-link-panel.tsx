@@ -339,7 +339,7 @@ export function ManualRaceLinkPanel({
         <Link
           href="/races/find"
           className={cn(
-            "inline-flex min-h-[44px] items-center justify-center text-[11px] font-semibold uppercase tracking-wider text-accent hover:underline",
+            "inline-flex min-h-[44px] items-center justify-center text-[11px] font-semibold uppercase tracking-wider text-teal hover:text-teal-hover hover:underline",
             compact ? "w-full" : ""
           )}
         >

@@ -100,7 +100,7 @@ export function RaceDiscoverPortfolioActions({
         </p>
         <Link
           href={`/auth/login?next=${encodeURIComponent(returnTo)}`}
-          className="flex w-full items-center justify-center rounded-[12px] bg-accent px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d]"
+          className="flex w-full items-center justify-center rounded-[12px] bg-accent px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-gold-hover"
         >
           Sign in to track
         </Link>
@@ -175,7 +175,7 @@ export function RaceDiscoverPortfolioActions({
           disabled={pending || !persistenceAvailable}
           title={!persistenceAvailable ? persistenceReason ?? undefined : undefined}
           onClick={runBucketAdd}
-          className="flex w-full items-center justify-center rounded-[12px] bg-accent px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-[#f08a4d] disabled:opacity-50"
+          className="flex w-full items-center justify-center rounded-[12px] bg-accent px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-gold-hover disabled:opacity-50"
         >
           {pending ? "Saving…" : "Add to bucket list"}
         </button>
@@ -199,7 +199,7 @@ export function RaceDiscoverPortfolioActions({
             setLinkOpen(true);
             setMsg(null);
           }}
-          className="flex w-full items-center justify-center rounded-[12px] border border-white/18 px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:border-accent/40 hover:text-accent disabled:opacity-50"
+          className="flex w-full items-center justify-center rounded-[12px] border border-white/18 px-4 py-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:border-teal/40 hover:text-teal-hover disabled:opacity-50"
         >
           Link to Strava activity
         </button>

@@ -184,7 +184,7 @@ export function StravaActivityMatchModal({
                   Run <strong className="text-white/75">Import past race efforts</strong> (or{" "}
                   <strong className="text-white/75">Sync new activities</strong>) first so efforts land in your account.
                   Historical backfill only keeps high-signal efforts by design. For one specific activity on Strava, use{" "}
-                  <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link> with
+                  <Link href="/races/new" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">Add race</Link> with
                   the activity URL.
                 </p>
               </>
@@ -201,7 +201,7 @@ export function StravaActivityMatchModal({
                   Strava typed it outside run-like sports, it&apos;s outside this event&apos;s distance range, or it&apos;s
                   already linked elsewhere. Try <strong className="text-white/75">Sync new</strong> / another import
                   batch, or use{" "}
-                  <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link> with
+                  <Link href="/races/new" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">Add race</Link> with
                   the Strava URL for a direct path.
                 </p>
               </>
@@ -212,7 +212,7 @@ export function StravaActivityMatchModal({
                   Filters or scoring for this catalog race may have left the list empty even though you have synced runs—that
                   can happen and isn&apos;t Strava &quot;broken.&quot; Use search when items appear, run another import if
                   the finish might be unsaved, or link with{" "}
-                  <Link href="/races/new" className="text-accent underline-offset-4 hover:underline">Add race</Link>.
+                  <Link href="/races/new" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">Add race</Link>.
                 </p>
               </>
             )}
@@ -328,7 +328,7 @@ export function StravaActivityMatchModal({
                       }
                       setConfirming(c);
                     }}
-                    className="mt-4 w-full rounded-[10px] border border-white/18 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white transition hover:border-accent/40 hover:text-accent disabled:opacity-50"
+                    className="mt-4 w-full rounded-[10px] border border-white/18 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-white transition hover:border-teal/40 hover:text-teal-hover disabled:opacity-50"
                   >
                     Choose this activity
                   </button>

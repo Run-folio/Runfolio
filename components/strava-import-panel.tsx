@@ -13,7 +13,7 @@ export function StravaImportPanel({ activities, onSelect }: Props) {
   return (
     <Card className="space-y-4 bg-panelAlt/95">
       <div>
-        <p className="text-xs uppercase tracking-widest text-accent">Import from Strava</p>
+        <p className="text-xs uppercase tracking-widest text-gold">Import from Strava</p>
         <h3 className="mt-1 text-lg font-semibold">Select an activity to auto-fill</h3>
       </div>
       <div className="space-y-3">

@@ -112,7 +112,7 @@ export function CanonicalRaceDetailView({
           <Link href="/races/find" className="text-[13px] font-medium text-white/55 transition hover:text-white">
             ← Find a race
           </Link>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-accent/90">Verified course</p>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.28em] text-gold/90">Verified course</p>
         </div>
         <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,380px)] lg:gap-14">
           <div className="space-y-10">
@@ -268,7 +268,7 @@ export function CanonicalRaceDetailView({
                       <li>
                         <a
                           href={race.officialUrl.trim()}
-                          className="text-accent underline-offset-2 hover:underline"
+                          className="text-teal underline-offset-2 hover:text-teal-hover hover:underline"
                           target="_blank"
                           rel="noreferrer"
                         >
@@ -280,7 +280,7 @@ export function CanonicalRaceDetailView({
                       <li>
                         <a
                           href={race.registrationUrl.trim()}
-                          className="text-accent underline-offset-2 hover:underline"
+                          className="text-teal underline-offset-2 hover:text-teal-hover hover:underline"
                           target="_blank"
                           rel="noreferrer"
                         >

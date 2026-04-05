@@ -65,7 +65,7 @@ export default async function CompareRunnersPage({ searchParams }: Props) {
       <main className="min-h-screen bg-[#05070c] pb-24">
         <header className="border-b border-white/10 bg-[#070a10] px-5 py-10 md:px-8 md:py-12">
           <div className="app-shell mx-auto max-w-[1100px]">
-            <p className="type-eyebrow text-accent">Race-first · No feed</p>
+            <p className="type-eyebrow">Race-first · No feed</p>
             <h1 className="font-display mt-3 text-3xl font-normal tracking-tight text-white md:text-4xl">
               Compare runners
             </h1>
@@ -193,7 +193,7 @@ function RunnerCompareCard({
 }) {
   return (
     <div className="rounded-2xl border border-white/10 bg-gradient-to-b from-panel/40 to-[#06080c] p-6">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-accent/90">{label}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gold/90">{label}</p>
       <h3 className="mt-2 font-display text-2xl text-white">{name}</h3>
       {href ? (
         <Link href={href} className="mt-2 inline-block text-[12px] font-semibold text-gold hover:underline">

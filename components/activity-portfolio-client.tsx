@@ -185,7 +185,7 @@ export function ActivityPortfolioClient({
           <Link href="/dashboard" className="mb-6 w-fit text-[13px] font-medium text-white/70 transition hover:text-white">
             ← Back
           </Link>
-          <p className="type-tagline mb-2 text-accent">Your race</p>
+          <p className="type-tagline mb-2">Your race</p>
 
           <div className="max-w-4xl">
             {titleEditing ? (
@@ -306,7 +306,7 @@ export function ActivityPortfolioClient({
                 href={stravaView.strava_url}
                 target="_blank"
                 rel="noreferrer"
-                className="inline-flex items-center border border-white/25 bg-black/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-white transition hover:border-accent/50 hover:text-accent"
+                className="inline-flex items-center border border-white/25 bg-black/50 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-white transition hover:border-teal/50 hover:text-teal-hover"
               >
                 Open in Strava
               </a>
@@ -314,14 +314,14 @@ export function ActivityPortfolioClient({
             {canonicalHref ? (
               <Link
                 href={canonicalHref}
-                className="inline-flex items-center border border-accent/40 bg-accent/15 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-accent transition hover:bg-accent/25"
+                className="inline-flex items-center border border-teal/40 bg-teal/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-teal transition hover:bg-teal/20"
               >
                 Verified race · catalog
               </Link>
             ) : effectiveDiscoverId ? (
               <Link
                 href={`/races/${effectiveDiscoverId}`}
-                className="inline-flex items-center border border-accent/40 bg-accent/15 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-accent transition hover:bg-accent/25"
+                className="inline-flex items-center border border-teal/40 bg-teal/10 px-4 py-2 text-[11px] font-semibold uppercase tracking-[0.15em] text-teal transition hover:bg-teal/20"
               >
                 {getCatalogDisplayTitle(effectiveDiscoverId)} · catalog
               </Link>
@@ -440,7 +440,7 @@ export function ActivityPortfolioClient({
                 runPatch({ description: next || null });
               }}
               rows={Math.min(18, Math.max(6, Math.ceil(storyDraft.length / 88) + 4))}
-              className="w-full resize-y rounded-lg border border-white/10 bg-black/40 px-4 py-3 text-[15px] leading-relaxed text-white/90 placeholder:text-muted focus:border-accent/40 focus:outline-none"
+              className="w-full resize-y rounded-lg border border-white/10 bg-black/40 px-4 py-3 text-[15px] leading-relaxed text-white/90 placeholder:text-muted focus:border-teal/50 focus:outline-none focus:ring-1 focus:ring-teal/30"
               placeholder="How did the day feel? What happened out there?"
             />
           </div>
@@ -611,7 +611,7 @@ export function ActivityPortfolioClient({
                 </div>
                 {isStravaSource && stravaView.strava_url ? (
                   <p className="mt-3 text-sm text-white/65">
-                    <a href={stravaView.strava_url} className="font-semibold text-accent underline-offset-4 hover:underline" target="_blank" rel="noreferrer">
+                    <a href={stravaView.strava_url} className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline" target="_blank" rel="noreferrer">
                       Open full map on Strava →
                     </a>
                   </p>
@@ -626,7 +626,7 @@ export function ActivityPortfolioClient({
                       Map on{" "}
                       <a
                         href={stravaView.strava_url}
-                        className="font-semibold text-accent underline-offset-4 hover:underline"
+                        className="font-semibold text-teal underline-offset-4 hover:text-teal-hover hover:underline"
                         target="_blank"
                         rel="noreferrer"
                       >

@@ -4,11 +4,19 @@
 
 :root {
   color-scheme: dark;
+  /* Brand palette (mirrors tailwind.config theme.extend.colors) */
+  --runfolio-gold: #d4af37;
+  --runfolio-gold-hover: #e6c65c;
+  --runfolio-gold-muted: #8c7423;
+  --runfolio-teal: #2ec4b6;
+  --runfolio-teal-hover: #3ed8c9;
+  --runfolio-teal-muted: #1e8f85;
 }
 
 body {
   @apply bg-background font-sans text-[15px] leading-relaxed text-white antialiased;
-  background-image: radial-gradient(circle at 20% -10%, rgba(201, 160, 107, 0.06), transparent 45%);
+  background-image: radial-gradient(circle at 20% -10%, rgba(212, 175, 55, 0.05), transparent 42%),
+    radial-gradient(circle at 85% 0%, rgba(46, 196, 182, 0.04), transparent 40%);
 }
 
 /* Scalable base text (Settings → Display) — scales rem-based UI */
@@ -43,7 +51,7 @@ html[data-reduce-motion="on"] *::after {
 }
 
 :focus-visible {
-  outline: 2px solid rgb(232 122 61);
+  outline: 2px solid rgb(212 175 55);
   outline-offset: 2px;
 }
 
@@ -98,7 +106,7 @@ html[data-reduce-motion="on"] *::after {
 }
 
 .type-tagline {
-  @apply text-base italic text-accent md:text-lg;
+  @apply text-base italic text-teal md:text-lg;
 }
 
 .type-section {

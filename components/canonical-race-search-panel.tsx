@@ -271,7 +271,7 @@ export function CanonicalRaceSearchPanel({
 
       {viewer === "guest" ? (
         <p className="text-sm text-muted">
-          <Link href="/auth/login" className="text-accent underline-offset-4 hover:underline">
+          <Link href="/auth/login" className="text-teal underline-offset-4 hover:text-teal-hover hover:underline">
             Sign in
           </Link>{" "}
           to add verified races to your bucket list.
@@ -294,7 +294,7 @@ export function CanonicalRaceSearchPanel({
         <p className="text-[13px] text-white/65">
           <Link
             href={futureGoalsHref.trim()}
-            className="font-medium text-accent underline-offset-4 transition hover:text-white hover:underline"
+            className="font-medium text-teal underline-offset-4 transition hover:text-teal-hover hover:underline"
           >
             View Future Goals →
           </Link>

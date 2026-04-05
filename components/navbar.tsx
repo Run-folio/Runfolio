@@ -55,7 +55,7 @@ type NavbarProps = {
 };
 
 const menuLinkClass =
-  "flex w-full items-center rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-white/90 transition hover:bg-white/[0.07] focus-visible:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1e2029]";
+  "flex w-full items-center rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-white/90 transition hover:bg-white/[0.07] focus-visible:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1e2029]";
 
 const HOVER_MENU_LEAVE_MS = 160;
 
@@ -119,6 +119,7 @@ function UserAvatarMenu({
   const [navPending, startNavTransition] = useTransition();
   const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const avatarButtonRef = useRef<HTMLButtonElement | null>(null);
   const size = "h-10 w-10";
 
   const clearLeaveTimer = useCallback(() => {
@@ -143,22 +144,36 @@ function UserAvatarMenu({
     setOpen(false);
   }, [pathname]);
 
+  /** Outside tap/click closes menu (all platforms); capture so it runs consistently on touch. */
   useEffect(() => {
-    if (hoverPlatform || !open) return;
-    const onDoc = (ev: globalThis.MouseEvent) => {
+    if (!open) return;
+    const onPointerDown = (ev: PointerEvent) => {
       if (!containerRef.current?.contains(ev.target as Node)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [open, hoverPlatform]);
+    document.addEventListener("pointerdown", onPointerDown, true);
+    return () => document.removeEventListener("pointerdown", onPointerDown, true);
+  }, [open]);
 
   useEffect(() => {
-    if (!open || hoverPlatform) return;
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") {
+        setOpen(false);
+        avatarButtonRef.current?.focus();
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  /** Touch / click-toggle: move focus into the menu for keyboard users. Skip hover-desktop so mouse hover does not steal focus. */
+  useEffect(() => {
+    if (!open || hoverPlatform) return;
+    const id = window.requestAnimationFrame(() => {
+      const first = containerRef.current?.querySelector<HTMLElement>('[role="menuitem"]');
+      first?.focus();
+    });
+    return () => window.cancelAnimationFrame(id);
   }, [open, hoverPlatform]);
 
   const onAvatarClick = useCallback(() => {
@@ -183,6 +198,7 @@ function UserAvatarMenu({
       id={menuId}
       role="menu"
       aria-orientation="vertical"
+      aria-hidden={!open}
       className={cn(
         "w-[min(calc(100vw-2rem),15.5rem)] origin-top-right rounded-xl border border-white/12 bg-[#161821] py-2 shadow-xl shadow-black/50 ring-1 ring-white/5 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
         open ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-1 opacity-0"
@@ -246,10 +262,11 @@ function UserAvatarMenu({
       onMouseLeave={hoverPlatform ? scheduleClose : undefined}
     >
       <button
+        ref={avatarButtonRef}
         type="button"
         className={avatarClass}
         title={hoverPlatform ? "Profile" : "Account menu"}
-        aria-label={hoverPlatform ? "Open your public profile or account menu" : "Open account menu"}
+        aria-label={hoverPlatform ? "Go to your public profile (tap for account menu on mobile)" : "Open account menu"}
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
@@ -258,7 +275,14 @@ function UserAvatarMenu({
       >
         <AvatarFace profileInitial={profileInitial} profileImageUrl={profileImageUrl} />
       </button>
-      <div className="absolute right-0 top-full z-50 flex justify-end pt-1.5">{panel}</div>
+      <div
+        className={cn(
+          "absolute right-0 top-full z-[60] flex justify-end pt-1.5",
+          !open && "pointer-events-none"
+        )}
+      >
+        {panel}
+      </div>
     </div>
   );
 }
@@ -356,7 +380,7 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
           {!canPersist && pathname !== "/setup" ? (
             <Link
               href={buildSetupUrl(pathname && pathname !== "/" ? pathname : "/dashboard")}
-              className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-accent hover:text-white lg:inline"
+              className="hidden text-[10px] font-semibold uppercase tracking-[0.18em] text-teal hover:text-teal-hover lg:inline"
             >
               Setup
             </Link>
@@ -403,7 +427,10 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
       >
         <button
           type="button"
-          className={cn("absolute inset-0 bg-black/65 transition-opacity", menuOpen ? "opacity-100" : "opacity-0")}
+          className={cn(
+            "absolute inset-0 bg-black/65 transition-opacity",
+            menuOpen ? "opacity-100" : "pointer-events-none opacity-0"
+          )}
           aria-label="Close menu"
           tabIndex={menuOpen ? 0 : -1}
           onClick={() => setMenuOpen(false)}
@@ -411,7 +438,7 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
         <div
           className={cn(
             "absolute right-0 top-0 flex h-full w-[min(100vw,20rem)] flex-col border-l border-border bg-[#1a1c24] shadow-2xl transition-transform duration-200 ease-out",
-            menuOpen ? "translate-x-0" : "translate-x-full"
+            menuOpen ? "translate-x-0" : "pointer-events-none translate-x-full"
           )}
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-3">
@@ -456,7 +483,7 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
             {!canPersist && pathname !== "/setup" ? (
               <Link
                 href={buildSetupUrl(pathname && pathname !== "/" ? pathname : "/dashboard")}
-                className="mt-2 flex min-h-[48px] items-center rounded-xl border border-white/10 px-4 text-[13px] font-semibold text-accent"
+                className="mt-2 flex min-h-[48px] items-center rounded-xl border border-white/10 px-4 text-[13px] font-semibold text-teal hover:text-teal-hover"
                 onClick={() => setMenuOpen(false)}
               >
                 Setup
