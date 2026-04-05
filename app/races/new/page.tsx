@@ -12,9 +12,6 @@ import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-rea
 import { runfolioLog } from "@/lib/runfolio-log";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { hasStravaConnection } from "@/lib/strava-access-server";
-import { listSyncedActivitiesForUser } from "@/lib/strava-sync/repository";
-import { syncedRowToStravaFeedActivity } from "@/lib/strava-sync/synced-row-to-feed";
-import type { StravaFeedActivity } from "@/types";
 import { isDiscoverCatalogRaceId } from "@/lib/discover-race-details";
 
 export const dynamic = "force-dynamic";
@@ -42,15 +39,12 @@ export default async function NewRacePage({ searchParams }: PageProps) {
     (await hasStravaConnection()) || q.strava === "connected";
 
   let existingRaces: Race[] = [];
-  let recentStravaActivities: StravaFeedActivity[] = [];
   if (isSupabaseConfigured()) {
     try {
       const { user, authError } = await getServerAuthUser();
       if (authError) throw new Error(authError);
       if (!user) redirect(buildSetupUrl("/races/new"));
       const supabase = await createClient();
-      const synced = await listSyncedActivitiesForUser(supabase, user.id);
-      recentStravaActivities = synced.map(syncedRowToStravaFeedActivity);
       const result = await supabase.from("races").select("*").eq("user_id", user.id);
       if (result.error) {
         runfolioLog.warn("RacesNew.races", result.error.message ?? "query error");
@@ -69,24 +63,13 @@ export default async function NewRacePage({ searchParams }: PageProps) {
   return (
     <>
       <AppNavbar />
-      <section className="hero-full min-h-[240px]">
-        <div className="hero-bg" style={{ backgroundImage: "url('/reference/hero-1.png')" }} />
-        <div className="hero-overlay" />
-        <div className="hero-inner flex min-h-[200px] flex-col justify-end pb-8 md:min-h-[240px] md:pb-10">
-          <h1 className="type-display max-w-4xl text-3xl md:text-4xl">Add Race</h1>
-          <p className="type-tagline mt-3 hidden max-w-2xl md:mt-4 md:block">
-            Every race tells a story—we&apos;ll handle the details.
-          </p>
-        </div>
-      </section>
-
-      <main className="app-shell space-y-6 pb-16">
+      <main className="app-shell space-y-8 pb-16 pt-6 md:pt-8">
+        <h1 className="type-display text-3xl md:text-4xl">Add Race</h1>
         <CreateRaceForm
           existingRaces={existingRaces}
           stravaOAuthConfigured={stravaOAuthConfigured}
           stravaConnected={stravaConnected}
           stravaError={q.strava_error ? decodeURIComponent(q.strava_error) : undefined}
-          recentStravaActivities={recentStravaActivities}
           initialDiscoverRaceId={initialDiscoverRaceId}
         />
       </main>

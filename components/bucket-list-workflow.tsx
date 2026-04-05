@@ -3,7 +3,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition } from "react";
 import {
   addCanonicalRaceToBucketListAction,
   addCatalogRaceToBucketListAction,
@@ -83,7 +84,10 @@ export function BucketListWorkflow({
 }: Props) {
   const router = useRouter();
   const searchWrapRef = useRef<HTMLDivElement>(null);
+  const searchPanelRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [searchPanelMounted, setSearchPanelMounted] = useState(false);
+  const [dropdownAnchor, setDropdownAnchor] = useState<{ top: number; left: number; width: number } | null>(null);
 
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -163,8 +167,15 @@ export function BucketListWorkflow({
   }, [highlightKey]);
 
   useEffect(() => {
+    setSearchPanelMounted(true);
+  }, []);
+
+  useEffect(() => {
     function onDocClick(e: MouseEvent) {
-      if (!searchWrapRef.current?.contains(e.target as Node)) setSearchFocused(false);
+      const t = e.target as Node;
+      if (searchWrapRef.current?.contains(t)) return;
+      if (searchPanelRef.current?.contains(t)) return;
+      setSearchFocused(false);
     }
     document.addEventListener("click", onDocClick);
     return () => document.removeEventListener("click", onDocClick);
@@ -186,6 +197,36 @@ export function BucketListWorkflow({
   }, [discoverHits, canonicalHits]);
 
   const showSearchPanel = searchFocused && debouncedQuery.length >= 2;
+
+  useLayoutEffect(() => {
+    if (!showSearchPanel) {
+      setDropdownAnchor(null);
+      return;
+    }
+    const mm = window.matchMedia("(min-width: 768px)");
+    const sync = () => {
+      if (!mm.matches) {
+        setDropdownAnchor(null);
+        return;
+      }
+      const el = searchWrapRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      const pad = 8;
+      const width = Math.min(r.width, window.innerWidth - pad * 2);
+      const left = Math.min(Math.max(pad, r.left), window.innerWidth - width - pad);
+      setDropdownAnchor({ top: r.bottom + 6, left, width });
+    };
+    sync();
+    mm.addEventListener("change", sync);
+    window.addEventListener("resize", sync);
+    window.addEventListener("scroll", sync, true);
+    return () => {
+      mm.removeEventListener("change", sync);
+      window.removeEventListener("resize", sync);
+      window.removeEventListener("scroll", sync, true);
+    };
+  }, [showSearchPanel]);
 
   const bumpAdded = useCallback(
     (key: string, message: string) => {
@@ -352,7 +393,7 @@ export function BucketListWorkflow({
 
       <div
         ref={searchWrapRef}
-        className="sticky top-14 z-40 -mx-4 border-b border-white/10 bg-[#060606]/95 px-4 py-3 backdrop-blur-md md:static md:top-0 md:mx-0 md:rounded-xl md:border md:border-white/10 md:bg-black/40 md:py-3 md:backdrop-blur"
+        className="sticky top-14 z-40 -mx-4 overflow-visible border-b border-white/10 bg-[#060606]/95 px-4 py-3 backdrop-blur-md md:static md:top-0 md:z-50 md:mx-0 md:rounded-xl md:border md:border-white/10 md:bg-black/40 md:py-3 md:backdrop-blur"
       >
         <label className="sr-only" htmlFor="bucket-global-search">
           Search races
@@ -367,100 +408,124 @@ export function BucketListWorkflow({
           autoComplete="off"
           className="h-12 border-white/18 bg-black/50 text-base text-white placeholder:text-white/35 md:h-11 md:text-sm"
         />
-        {showSearchPanel ? (
-          <div
-            className={cn(
-              "fixed inset-x-0 bottom-0 top-0 z-50 flex flex-col bg-[#070707] pt-[max(5rem,env(safe-area-inset-top))] md:absolute md:inset-x-0 md:top-[calc(100%+6px)] md:z-50 md:max-h-[min(420px,70vh)] md:rounded-xl md:border md:border-white/12 md:bg-[#0a0a0a] md:pt-0 md:shadow-xl"
-            )}
-          >
-            <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 md:hidden">
-              <span className="text-sm font-medium text-white">Results</span>
-              <button
-                type="button"
-                className="text-sm text-accent"
-                onClick={() => {
-                  setSearchFocused(false);
-                  inputRef.current?.blur();
-                }}
-              >
-                Close
-              </button>
-            </div>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-8 md:max-h-[min(400px,65vh)] md:py-2">
-              {canSearchLoading && discoverHits.length === 0 && mergedSearchRows.length === 0 ? (
-                <ul className="space-y-2 p-2">
-                  {Array.from({ length: 6 }).map((_, i) => (
-                    <li key={i} className="flex gap-3 rounded-lg bg-white/[0.04] p-3">
-                      <div className="h-14 w-14 shrink-0 animate-pulse rounded-md bg-white/10" />
-                      <div className="flex flex-1 flex-col justify-center gap-2">
-                        <div className="h-3 w-[55%] animate-pulse rounded bg-white/10" />
-                        <div className="h-2 w-[40%] animate-pulse rounded bg-white/10" />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              ) : mergedSearchRows.length === 0 ? (
-                <p className="px-4 py-8 text-center text-sm text-muted">No matches</p>
-              ) : (
-                <ul className="space-y-1 md:space-y-0">
-                  {mergedSearchRows.map((row) => {
-                    const k = row.kind === "discover" ? `disc-${row.race.id}` : `can-${row.race.id}`;
-                    const title = row.kind === "discover" ? row.race.name : row.race.name;
-                    const loc = row.kind === "discover" ? row.race.location : row.race.locationLabel;
-                    const dist =
-                      row.kind === "discover"
-                        ? formatDiscoverDistance(row.race.distance_km, row.race.multi_day)
-                        : formatCanonKm(row.race.distanceKm);
-                    const thumb =
-                      row.kind === "discover" ? (
-                        <Image
-                          src={discoverImage(row.race)}
-                          alt=""
-                          width={56}
-                          height={56}
-                          className="h-14 w-14 rounded-md object-cover"
-                        />
-                      ) : (
-                        <SearchThumb canon={row.race} />
-                      );
-                    const added =
-                      row.kind === "discover"
-                        ? discoverGoalIds.has(row.race.id)
-                        : canonicalGoalIds.has(row.race.id);
-                    return (
-                      <li key={k}>
-                        <button
-                          type="button"
-                          disabled={addPending || added}
-                          onClick={() => pickSearchRow(row)}
-                          className={cn(
-                            "flex w-full gap-3 rounded-xl p-3 text-left transition hover:bg-white/[0.06] active:bg-white/[0.08]",
-                            added && "opacity-45"
-                          )}
-                        >
-                          {thumb}
-                          <div className="min-w-0 flex-1">
-                            <p className="font-semibold text-white">{title}</p>
-                            <p className="mt-0.5 text-xs text-muted">
-                              {dist} · {loc}
-                            </p>
-                            {row.kind === "canonical" ? (
-                              <span className="mt-1 inline-block rounded bg-accent/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent">
-                                Verified
-                              </span>
-                            ) : null}
-                          </div>
-                          <span className="self-center text-sm font-medium text-accent">{added ? "✓" : "＋"}</span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
-          </div>
-        ) : null}
       </div>
+
+      {showSearchPanel && searchPanelMounted
+        ? createPortal(
+            <div
+              ref={searchPanelRef}
+              className={cn(
+                "z-[500] flex flex-col bg-[#070707] shadow-xl",
+                dropdownAnchor
+                  ? "fixed max-h-[min(420px,calc(100vh-16px))] rounded-xl border border-white/12 bg-[#0a0a0a]"
+                  : "fixed inset-0 pt-[max(5rem,env(safe-area-inset-top))]"
+              )}
+              style={
+                dropdownAnchor
+                  ? {
+                      top: dropdownAnchor.top,
+                      left: dropdownAnchor.left,
+                      width: dropdownAnchor.width
+                    }
+                  : undefined
+              }
+              role="region"
+              aria-label="Search results"
+            >
+              <div className="flex items-center justify-between border-b border-white/10 px-4 py-3 md:hidden">
+                <span className="text-sm font-medium text-white">Results</span>
+                <button
+                  type="button"
+                  className="text-sm text-accent"
+                  onClick={() => {
+                    setSearchFocused(false);
+                    inputRef.current?.blur();
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+              <div
+                className={cn(
+                  "min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-8",
+                  dropdownAnchor ? "max-h-[min(400px,calc(100vh-24px))] py-2" : ""
+                )}
+              >
+                {canSearchLoading && discoverHits.length === 0 && mergedSearchRows.length === 0 ? (
+                  <ul className="space-y-2 p-2">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <li key={i} className="flex gap-3 rounded-lg bg-white/[0.04] p-3">
+                        <div className="h-14 w-14 shrink-0 animate-pulse rounded-md bg-white/10" />
+                        <div className="flex flex-1 flex-col justify-center gap-2">
+                          <div className="h-3 w-[55%] animate-pulse rounded bg-white/10" />
+                          <div className="h-2 w-[40%] animate-pulse rounded bg-white/10" />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ) : mergedSearchRows.length === 0 ? (
+                  <p className="px-4 py-8 text-center text-sm text-muted">No matches</p>
+                ) : (
+                  <ul className="space-y-1 md:space-y-0">
+                    {mergedSearchRows.map((row) => {
+                      const k = row.kind === "discover" ? `disc-${row.race.id}` : `can-${row.race.id}`;
+                      const title = row.kind === "discover" ? row.race.name : row.race.name;
+                      const loc = row.kind === "discover" ? row.race.location : row.race.locationLabel;
+                      const dist =
+                        row.kind === "discover"
+                          ? formatDiscoverDistance(row.race.distance_km, row.race.multi_day)
+                          : formatCanonKm(row.race.distanceKm);
+                      const thumb =
+                        row.kind === "discover" ? (
+                          <Image
+                            src={discoverImage(row.race)}
+                            alt=""
+                            width={56}
+                            height={56}
+                            className="h-14 w-14 rounded-md object-cover"
+                          />
+                        ) : (
+                          <SearchThumb canon={row.race} />
+                        );
+                      const added =
+                        row.kind === "discover"
+                          ? discoverGoalIds.has(row.race.id)
+                          : canonicalGoalIds.has(row.race.id);
+                      return (
+                        <li key={k}>
+                          <button
+                            type="button"
+                            disabled={addPending || added}
+                            onClick={() => pickSearchRow(row)}
+                            className={cn(
+                              "flex w-full gap-3 rounded-xl p-3 text-left transition hover:bg-white/[0.06] active:bg-white/[0.08]",
+                              added && "opacity-45"
+                            )}
+                          >
+                            {thumb}
+                            <div className="min-w-0 flex-1">
+                              <p className="font-semibold text-white">{title}</p>
+                              <p className="mt-0.5 text-xs text-muted">
+                                {dist} · {loc}
+                              </p>
+                              {row.kind === "canonical" ? (
+                                <span className="mt-1 inline-block rounded bg-accent/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-accent">
+                                  Verified
+                                </span>
+                              ) : null}
+                            </div>
+                            <span className="self-center text-sm font-medium text-accent">{added ? "✓" : "＋"}</span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            </div>,
+            document.body
+          )
+        : null}
 
       <section className="mt-10 space-y-4">
         <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/50">Popular</h2>
@@ -682,36 +747,54 @@ function FeaturedDiscoverCard({
   onAdd: () => void;
 }) {
   const img = discoverImage(race);
+  const detailHref = `/races/${race.id}`;
   return (
     <article
       className={cn(
-        "group relative overflow-hidden rounded-2xl border border-white/10 bg-black shadow-lg transition",
+        "group relative overflow-hidden rounded-2xl border border-white/10 bg-black shadow-lg transition duration-300",
+        "hover:-translate-y-1 hover:shadow-2xl hover:shadow-black/45",
         highlight && "ring-2 ring-accent ring-offset-2 ring-offset-[#060606]"
       )}
     >
-      <div className="relative aspect-[4/5] w-full">
-        <Image
-          src={img}
-          alt=""
-          fill
-          className="object-cover transition duration-500 group-hover:scale-[1.03]"
-          sizes="(max-width:640px) 100vw, 33vw"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/15" />
-        <div className="absolute inset-x-0 bottom-0 p-4 md:p-5">
-          <span className="mb-2 inline-block rounded-full border border-white/25 bg-black/35 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-white/95 backdrop-blur-sm">
-            {formatDiscoverDistance(race.distance_km, race.multi_day)}
-          </span>
-          <h3 className="mt-2 text-lg font-bold leading-tight text-white md:text-xl">{race.name}</h3>
-          <p className="mt-1 text-sm text-white/75">{race.location}</p>
-          <Button
-            type="button"
-            disabled={added || adding}
-            onClick={onAdd}
-            className="mt-4 w-full border border-white/20 bg-white/10 text-[12px] font-semibold uppercase tracking-wide text-white backdrop-blur hover:bg-white/20"
-          >
-            {added ? "On your list" : adding ? "…" : "+ Add"}
-          </Button>
+      <Link
+        href={detailHref}
+        className={cn(
+          "absolute inset-0 z-0 rounded-2xl cursor-pointer outline-none",
+          "focus-visible:z-[5] focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-[#060606]"
+        )}
+        aria-label={`View ${race.name}`}
+      />
+      <div className="relative z-10 pointer-events-none">
+        <div className="relative aspect-[4/5] w-full">
+          <Image
+            src={img}
+            alt=""
+            fill
+            className="object-cover transition duration-500 group-hover:scale-[1.03]"
+            sizes="(max-width:640px) 100vw, 33vw"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/55 to-black/15" />
+          <div className="absolute inset-x-0 bottom-0 p-4 md:p-5">
+            <span className="mb-2 inline-block rounded-full border border-white/25 bg-black/35 px-2.5 py-1 text-[11px] font-semibold tabular-nums text-white/95 backdrop-blur-sm">
+              {formatDiscoverDistance(race.distance_km, race.multi_day)}
+            </span>
+            <h3 className="mt-2 text-lg font-bold leading-tight text-white md:text-xl">{race.name}</h3>
+            <p className="mt-1 text-sm text-white/75">{race.location}</p>
+            <div className="pointer-events-auto mt-4">
+              <Button
+                type="button"
+                disabled={added || adding}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onAdd();
+                }}
+                className="w-full cursor-pointer border border-white/20 bg-white/10 text-[12px] font-semibold uppercase tracking-wide text-white backdrop-blur hover:bg-white/20"
+              >
+                {added ? "On your list" : adding ? "…" : "+ Add"}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
     </article>

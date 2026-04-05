@@ -1,32 +1,51 @@
 "use client";
 
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import type { Activity, ActivityMatchInput, CatalogRaceSuggestion, Race, StravaFeedActivity } from "@/types";
+import type { Activity, ActivityMatchInput, Race } from "@/types";
 import { confirmCustomMajorEffortAction, createRaceAction } from "@/lib/actions";
-import { stravaFeedToActivity } from "@/lib/strava-feed-to-activity";
-import { StravaActivityCard } from "@/components/strava-activity-card";
 import { RaceMatchConfirmation } from "@/components/race-match-confirmation";
 import { asFormAction } from "@/lib/server-action-form";
 import { suggestRaceMatch } from "@/lib/match-races";
-import {
-  getDiscoverRaceById,
-  isUnmatchedMajorEffortCandidate,
-  RACE_MATCH_HIGH_SCORE,
-  rankKnownRaceMatches
-} from "@/lib/known-race-match";
+import { getDiscoverRaceById, isUnmatchedMajorEffortCandidate, rankKnownRaceMatches } from "@/lib/known-race-match";
 import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
+function InfoHint({ label, text }: { label: string; text: string }) {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-white/15 bg-white/[0.04] text-xs font-bold text-muted transition hover:border-white/30 hover:text-white"
+      aria-label={label}
+      title={text.replace(/\s+/g, " ").trim()}
+    >
+      ?
+    </button>
+  );
+}
+
+function StepIcon({ children, done }: { children: ReactNode; done?: boolean }) {
+  return (
+    <div
+      className={cn(
+        "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-sm font-semibold",
+        done ? "border-accent/50 bg-accent/15 text-accent" : "border-white/15 bg-black/30 text-white/80"
+      )}
+    >
+      {children}
+    </div>
+  );
+}
 
 type Props = {
   existingRaces: Race[];
   stravaOAuthConfigured?: boolean;
   stravaConnected?: boolean;
   stravaError?: string;
-  /** Strava activities from Runfolio sync (high-signal + manual-link cache — no live Strava list here). */
-  recentStravaActivities?: StravaFeedActivity[];
   /** Prefill from Find a Race → catalog detail. */
   initialDiscoverRaceId?: string;
 };
@@ -36,7 +55,6 @@ export function CreateRaceForm({
   stravaOAuthConfigured = false,
   stravaConnected = false,
   stravaError,
-  recentStravaActivities = [],
   initialDiscoverRaceId
 }: Props) {
   const [form, setForm] = useState({
@@ -49,10 +67,12 @@ export function CreateRaceForm({
     description: "",
     is_completed: true
   });
-  const [url, setUrl] = useState("https://www.strava.com/activities/123456789");
+  const [url, setUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [showStravaConnectHint, setShowStravaConnectHint] = useState(false);
+  const [activityImported, setActivityImported] = useState(false);
   const [hasRoutePreview, setHasRoutePreview] = useState(false);
   const [pendingMatchInput, setPendingMatchInput] = useState<ActivityMatchInput | null>(null);
   const [matchDismissedForStravaId, setMatchDismissedForStravaId] = useState<string | null>(null);
@@ -75,26 +95,6 @@ export function CreateRaceForm({
       location: prev.location || disc.location
     }));
   }, [initialDiscoverRaceId]);
-
-  const raceEffortsWithHints = useMemo(() => {
-    return recentStravaActivities.map((a) => {
-      const ranked = rankKnownRaceMatches(toMatchInputFromFeed(a), existingRaces, 0.28);
-      const top = ranked[0];
-      if (!top || top.score < RACE_MATCH_HIGH_SCORE || top.confidence !== "high") {
-        return { activity: a, catalogSuggestion: null as CatalogRaceSuggestion | null };
-      }
-      const catalogSuggestion: CatalogRaceSuggestion = {
-        discoverRaceId: top.discoverRaceId,
-        displayTitle: getCatalogDisplayTitle(top.discoverRaceId),
-        confidence: top.confidence,
-        score: top.score,
-        reasons: top.reasons,
-        onUserBucketList: top.onUserBucketList,
-        userRaceId: top.userRaceId
-      };
-      return { activity: a, catalogSuggestion };
-    });
-  }, [recentStravaActivities, existingRaces]);
 
   const match = useMemo(() => {
     if (!form.distance_km || !form.date) return null;
@@ -140,20 +140,6 @@ export function CreateRaceForm({
     };
   }
 
-  function toMatchInputFromFeed(feed: StravaFeedActivity): ActivityMatchInput {
-    return {
-      strava_id: feed.strava_id,
-      name: feed.name,
-      distance_km: feed.distance_km,
-      date: feed.start_date.slice(0, 10),
-      elevation_m: feed.elevation_m,
-      location_city: feed.location_city,
-      location_country: feed.location_country,
-      sport_type: feed.sport_type,
-      type: feed.type
-    };
-  }
-
   function openMatcher(input: ActivityMatchInput) {
     if (!input.strava_id?.trim()) {
       setPendingMatchInput(null);
@@ -189,21 +175,10 @@ export function CreateRaceForm({
     }));
   };
 
-  const applyFromStravaFeed = (feed: StravaFeedActivity) => {
-    const act = stravaFeedToActivity(feed);
-    applyActivity(act);
-    const loc = [feed.location_city, feed.location_country].filter(Boolean).join(", ");
-    if (loc) {
-      setForm((prev) => ({ ...prev, location: prev.location || loc }));
-    }
-    setImportNotice(`Loaded “${feed.name}” from your Strava activities.`);
-    setImportError(null);
-    openMatcher(toMatchInputFromFeed(feed));
-  };
-
   const handleStravaImport = async () => {
     setImportError(null);
     setImportNotice(null);
+    setShowStravaConnectHint(false);
     setImporting(true);
     try {
       const res = await fetch("/api/strava/import", {
@@ -218,17 +193,27 @@ export function CreateRaceForm({
         source?: string;
       };
       if (!res.ok) {
-        setImportError(data.error ?? `Import failed (${res.status})`);
+        const msg = data.error ?? `Import failed (${res.status})`;
+        setImportError(msg);
+        if (/strava|token|connect|401|unauthorized|sign in|not connected/i.test(msg)) {
+          setShowStravaConnectHint(true);
+        }
         return;
+      }
+      if (data.source === "mock") {
+        setShowStravaConnectHint(true);
+      } else {
+        setShowStravaConnectHint(false);
       }
       if (data.activity) {
         applyActivity(data.activity);
         openMatcher(toMatchInputFromActivity(data.activity));
+        setActivityImported(true);
       }
       if (data.warning) setImportNotice(data.warning);
-      else if (data.source === "strava") setImportNotice("Imported from Strava.");
+      else if (data.source === "strava") setImportNotice(null);
     } catch {
-      setImportError("Network error while contacting Strava.");
+      setImportError("Could not reach import service.");
     } finally {
       setImporting(false);
     }
@@ -271,121 +256,127 @@ export function CreateRaceForm({
     });
   };
 
+  const matchStepActive = Boolean(pendingMatchInput && matchCandidates.length > 0);
+
   return (
     <>
-      {stravaOAuthConfigured ? (
-        <Card className="mb-5 border border-amber-400/25 bg-amber-950/20 p-4">
-          <p className="text-sm leading-relaxed text-white/85">
-            <span className="font-semibold text-amber-100/95">Batch Strava race review?</span> The{" "}
-            <Link href="/my-races" className="font-semibold text-accent underline-offset-4 hover:underline">
-              My Races
-            </Link>{" "}
-            page is the main place to confirm smart matches, clear rejects, and manually link verified events. Use this
-            page for a one-off add.
+      <form action={asFormAction(createRaceAction)} className="space-y-10">
+      <div className="mx-auto w-full max-w-xl space-y-8 md:max-w-lg">
+        <div className="space-y-4">
+          <div className="flex items-start gap-3">
+            <Input
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="Paste your Strava activity"
+              aria-label="Paste your Strava activity"
+              className="h-12 flex-1 text-base"
+            />
+            <div className="flex shrink-0 items-center gap-2 pt-1">
+              <InfoHint
+                label="How import works"
+                text="Paste a Strava activity URL. We read distance, time, elevation, and route data to fill the form. Your activity is not modified on Strava."
+              />
+              <InfoHint
+                label="What data is used"
+                text="We use the activity title, date, distance, and locations to suggest catalog race matches. Details are stored only in your Runfolio account."
+              />
+            </div>
+          </div>
+          <Button
+            type="button"
+            className="h-12 w-full text-sm font-semibold uppercase tracking-wide md:w-auto md:min-w-[140px]"
+            disabled={importing || !url.trim()}
+            onClick={() => void handleStravaImport()}
+          >
+            {importing ? "Importing…" : "Import"}
+          </Button>
+        </div>
+
+        {stravaError ? (
+          <p className="text-sm text-red-300" role="alert">
+            {stravaError}
           </p>
+        ) : null}
+        {importError ? (
+          <p className="text-sm text-red-300" role="alert">
+            {importError}
+          </p>
+        ) : null}
+        {importNotice ? (
+          <p className="text-sm text-amber-200/90" role="status">
+            {importNotice}
+          </p>
+        ) : null}
+
+        {stravaOAuthConfigured && !stravaConnected && showStravaConnectHint ? (
+          <div className="rounded-xl border border-accent/30 bg-accent/10 px-4 py-4">
+            <p className="text-sm text-white/90">Connect Strava to import real activities.</p>
+            <Link
+              href="/api/strava/oauth/start?next=%2Fraces%2Fnew"
+              className="mt-3 inline-flex text-sm font-semibold text-accent underline-offset-4 hover:underline"
+            >
+              Connect Strava
+            </Link>
+          </div>
+        ) : null}
+
+        <div className="rounded-xl border border-white/10 bg-black/25 px-4 py-6 md:px-6">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">How it works</p>
+          <div className="mt-6 flex flex-col gap-6 md:flex-row md:items-start md:justify-between md:gap-4">
+            <div className="flex gap-3 md:flex-1">
+              <StepIcon done={activityImported}>1</StepIcon>
+              <div>
+                <p className="text-sm font-semibold text-white">Import activity</p>
+                <p className="mt-0.5 text-xs text-muted">Paste a link and import.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 md:flex-1">
+              <StepIcon done={matchStepActive}>2</StepIcon>
+              <div>
+                <p className="text-sm font-semibold text-white">Confirm race match</p>
+                <p className="mt-0.5 text-xs text-muted">Pick the right event from our catalog.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 md:flex-1">
+              <StepIcon done={Boolean(form.description?.trim())}>3</StepIcon>
+              <div>
+                <p className="text-sm font-semibold text-white">Add your story</p>
+                <p className="mt-0.5 text-xs text-muted">Reflect and save below.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {activityImported ? (
+        <Card className="border-green/30 bg-green-950/20">
+          <div className="grid gap-3 text-sm md:grid-cols-5">
+            <p className="md:col-span-2">
+              <span className="font-semibold text-green">Imported</span>
+              <br />
+              <span className="text-muted">
+                {form.name || "—"}
+                {form.date ? ` · ${form.date}` : ""}
+              </span>
+            </p>
+            <p>
+              <span className="text-muted">Distance</span>
+              <br />
+              {form.distance_km || "—"} km
+            </p>
+            <p>
+              <span className="text-muted">Elevation</span>
+              <br />
+              {form.elevation_m || "—"} m
+            </p>
+            <p>
+              <span className="text-muted">Moving time</span>
+              <br />
+              {form.time || "—"}
+            </p>
+          </div>
         </Card>
       ) : null}
-      <form action={asFormAction(createRaceAction)} className="space-y-4">
-      <Card className="bg-panelAlt/85 p-0">
-        <div className="grid gap-4 p-5 lg:grid-cols-[1.4fr_1fr]">
-          <div className="border border-border bg-black/30 p-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent">Import from Strava (recommended)</p>
-            <p className="mt-1 text-sm text-muted">Paste your Strava activity link and we will auto-fill the details and stats.</p>
-            {stravaConnected ? (
-              <p className="mt-2 text-sm text-green-400" role="status">
-                Strava connected — imports use your account (activity:read).
-              </p>
-            ) : null}
-            {stravaError ? (
-              <p className="mt-2 text-sm text-red-300" role="alert">
-                Strava: {stravaError}
-              </p>
-            ) : null}
-            {stravaOAuthConfigured ? (
-              <p className="mt-3 text-sm">
-                <Link
-                  href="/api/strava/oauth/start?next=%2Fraces%2Fnew"
-                  className="font-semibold text-accent underline-offset-4 hover:underline"
-                >
-                  Connect Strava
-                </Link>{" "}
-                <span className="text-muted">(opens Strava, then returns here)</span>
-              </p>
-            ) : (
-              <p className="mt-3 text-xs text-muted">
-                Add <code className="text-white/80">STRAVA_CLIENT_ID</code> and{" "}
-                <code className="text-white/80">STRAVA_CLIENT_SECRET</code> to enable Connect Strava, or set{" "}
-                <code className="text-white/80">STRAVA_ACCESS_TOKEN</code> in{" "}
-                <code className="text-white/80">.env.local</code>.
-              </p>
-            )}
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <Input
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://www.strava.com/activities/…"
-                className="sm:min-w-0 sm:flex-1"
-              />
-              <Button type="button" disabled={importing} onClick={() => void handleStravaImport()}>
-                {importing ? "Importing…" : "Import Activity"}
-              </Button>
-            </div>
-            {importError ? (
-              <p className="mt-2 text-xs text-red-300" role="alert">
-                {importError}
-              </p>
-            ) : null}
-            {importNotice ? (
-              <p className="mt-2 text-xs text-amber-200/90" role="status">
-                {importNotice}
-              </p>
-            ) : null}
-            <p className="mt-2 text-xs text-muted">
-              Uses your Strava access token on the server (see README). Activities you can see must be allowed for that
-              token. Nothing is written to Strava.
-            </p>
-            {stravaConnected && raceEffortsWithHints.length > 0 ? (
-              <div className="mt-5 border-t border-white/10 pt-4">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent">Your race candidates</p>
-                <p className="mt-1 text-xs text-muted">
-                  ≥21 km · Run / Trail Run / Race only — tap to autofill and confirm a catalog match if suggested.
-                </p>
-                <div className="mt-3 grid max-h-[340px] gap-3 overflow-y-auto pr-1 sm:grid-cols-2">
-                  {raceEffortsWithHints.slice(0, 12).map(({ activity: a, catalogSuggestion }) => (
-                    <StravaActivityCard
-                      key={a.strava_id}
-                      activity={a}
-                      catalogSuggestion={catalogSuggestion}
-                      onSelect={() => applyFromStravaFeed(a)}
-                    />
-                  ))}
-                </div>
-              </div>
-            ) : null}
-          </div>
-          <div className="border border-border bg-black/30 p-4">
-            <p className="text-sm font-semibold">How it works</p>
-            <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs text-muted">
-              <div><p className="text-accent">1</p><p>Import</p></div>
-              <div><p className="text-accent">2</p><p>Review</p></div>
-              <div><p className="text-accent">3</p><p>Reflect</p></div>
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      <Card className="border-green/30 bg-green-950/20">
-        <div className="grid gap-3 text-sm md:grid-cols-5">
-          <p className="md:col-span-2">
-            <span className="font-semibold text-green">Auto-filled from Strava</span>
-            <br />
-            <span className="text-muted">{form.name || "UTMB 2024"} - {form.date || "Aug 30, 2024"}</span>
-          </p>
-          <p><span className="text-muted">Distance</span><br />{form.distance_km || "171.2"} km</p>
-          <p><span className="text-muted">Elevation</span><br />{form.elevation_m || "10,040"} m</p>
-          <p><span className="text-muted">Moving Time</span><br />{form.time || "23:57:13"}</p>
-        </div>
-      </Card>
 
       <div className="grid gap-4 lg:grid-cols-[0.72fr_1.25fr_0.9fr]">
         <Card className="space-y-4 bg-panelAlt/90">
@@ -535,8 +526,9 @@ export function CreateRaceForm({
     </form>
 
     {pendingMatchInput && matchCandidates.length > 0 ? (
-      <div className="mt-6">
+      <div className="mt-8">
         <RaceMatchConfirmation
+          presentation="compact"
           candidates={matchCandidates}
           stravaActivityId={pendingMatchInput.strava_id}
           activityTitle={pendingMatchInput.name}

@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import type { CanonicalStravaSuggestion } from "@/lib/strava-canonical-match/suggestions";
-import type { RecentlyConfirmedFinish } from "@/lib/match-hub/service";
 import { parseActivityPageId } from "@/lib/activity-route-id";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -27,26 +26,48 @@ function formatActivityStatLine(input: {
     .join(" · ");
 }
 
+function confidenceBarClass(conf: string): string {
+  switch (conf) {
+    case "high":
+      return "bg-emerald-400";
+    case "medium":
+      return "bg-amber-400";
+    default:
+      return "bg-white/40";
+  }
+}
+
 type SuggestedProps = {
   suggestion: CanonicalStravaSuggestion;
   pending: boolean;
   onConfirm: (fd: FormData, stravaActivityId: string) => void;
-  onChange: (stravaActivityId: string) => void;
+  onNotRace: (stravaActivityId: string) => void;
 };
 
-export function SuggestedRaceCard({ suggestion: s, pending, onConfirm, onChange }: SuggestedProps) {
+export function SuggestedRaceCard({ suggestion: s, pending, onConfirm, onNotRace }: SuggestedProps) {
   const top = s.topMatch!;
   const stat = formatActivityStatLine({ date: s.startDateYmd, km: s.distanceKm, el: s.elevationM });
   const { stravaUrl, portfolioPath } = activityLinks(s.stravaActivityId);
+  const conf = top.confidence;
+  const scorePct = Math.min(100, Math.max(0, top.score));
 
   return (
     <Card className="w-full overflow-hidden border border-white/12 bg-panel/40 p-0">
       <div className="border-b border-white/10 px-4 py-4">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Suggested</p>
-        <p className="mt-2 font-semibold leading-snug text-white">{s.activityTitle}</p>
-        <p className="mt-1 text-sm text-white/55">{stat}</p>
-        <p className="mt-4 text-[11px] font-semibold uppercase tracking-wider text-white/45">Catalog match</p>
-        <p className="mt-1 text-lg font-medium leading-snug text-white">{top.name}</p>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">Review</p>
+        <p className="mt-2 text-lg font-medium leading-snug text-white">{top.name}</p>
+        <p className="mt-3 text-[11px] font-semibold uppercase tracking-wider text-white/45">Match confidence</p>
+        <div className="mt-1.5 flex items-center gap-2">
+          <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+            <div
+              className={cn("h-full rounded-full transition-all", confidenceBarClass(conf))}
+              style={{ width: `${scorePct}%` }}
+            />
+          </div>
+          <span className="shrink-0 text-[11px] font-semibold capitalize text-white/70">{conf}</span>
+        </div>
+        <p className="mt-3 text-sm text-white/55">{stat}</p>
+        <p className="mt-1 text-xs text-white/40">{s.activityTitle}</p>
       </div>
       <div className="flex flex-col gap-3 px-4 py-4">
         <form
@@ -62,7 +83,7 @@ export function SuggestedRaceCard({ suggestion: s, pending, onConfirm, onChange 
           <input type="hidden" name="distance_km" value={String(s.distanceKm)} />
           <input type="hidden" name="elevation_m" value={s.elevationM != null ? String(s.elevationM) : ""} />
           <Button type="submit" disabled={pending} className="min-h-[48px] w-full text-[13px] font-semibold uppercase tracking-[0.1em]">
-            {pending ? "Saving…" : "Match race"}
+            {pending ? "Saving…" : "Confirm race"}
           </Button>
         </form>
         <Button
@@ -70,9 +91,9 @@ export function SuggestedRaceCard({ suggestion: s, pending, onConfirm, onChange 
           variant="secondary"
           disabled={pending}
           className="min-h-[48px] w-full border-white/20 bg-white/[0.06] text-[13px] font-semibold uppercase tracking-[0.1em] text-white/90"
-          onClick={() => onChange(s.stravaActivityId)}
+          onClick={() => onNotRace(s.stravaActivityId)}
         >
-          Not this match
+          Not a race
         </Button>
         <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 text-[11px] text-white/40">
           {stravaUrl ? (
@@ -90,39 +111,3 @@ export function SuggestedRaceCard({ suggestion: s, pending, onConfirm, onChange 
   );
 }
 
-type MatchedProps = {
-  finish: RecentlyConfirmedFinish;
-  className?: string;
-};
-
-export function MatchedRaceCard({ finish, className }: MatchedProps) {
-  const { stravaUrl, portfolioPath } = activityLinks(finish.stravaActivityId);
-  const stat = [finish.date ?? "—"].filter(Boolean).join(" · ");
-
-  return (
-    <Card className={cn("w-full border border-emerald-500/20 bg-emerald-950/15 p-4", className)}>
-      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-emerald-200/80">Linked</p>
-      <p className="mt-2 font-semibold text-white">{finish.name}</p>
-      <p className="mt-1 text-sm text-white/55">{stat}</p>
-      <p className="mt-3 text-sm font-medium text-emerald-100/95">{finish.displayRaceName}</p>
-      <div className="mt-4">
-        <Link
-          href={portfolioPath}
-          className="inline-flex min-h-[48px] w-full items-center justify-center rounded-xl bg-white/[0.08] text-[13px] font-semibold uppercase tracking-[0.1em] text-white transition hover:bg-white/[0.12]"
-        >
-          View linked race
-        </Link>
-      </div>
-      {stravaUrl ? (
-        <a
-          href={stravaUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2 block text-center text-[11px] text-white/45 underline-offset-2 hover:text-white/70 hover:underline"
-        >
-          Strava activity
-        </a>
-      ) : null}
-    </Card>
-  );
-}

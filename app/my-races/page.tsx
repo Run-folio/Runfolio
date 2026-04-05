@@ -19,7 +19,6 @@ import { loadUserStravaOverviewState } from "@/lib/strava-user-overview";
 import { resolveDefaultProfilePathForUser } from "@/lib/profile-path-server";
 import { buildSetupUrl } from "@/lib/setup-url";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
-import { withRaceLinkedCelebration } from "@/lib/profile-race-linked-celebration";
 import type { Race } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -51,13 +50,10 @@ export default async function MyRacesPage() {
     syncedRows: stravaOverview.syncedRows,
     collectDevCanonicalTraces: process.env.NODE_ENV === "development"
   });
-  const liveStravaActivityCount = stravaOverview.syncedRows.length;
   const profilePath = await resolveDefaultProfilePathForUser(supabase, user.id);
   const profileHref = profilePath !== "/dashboard" ? profilePath : "/dashboard";
   const completedRacesHref =
     profilePath !== "/dashboard" ? `${profilePath}#profile-completed-races` : "/dashboard";
-  const profileFinishHref =
-    profilePath !== "/dashboard" ? withRaceLinkedCelebration(`${profilePath}#profile-completed-races`) : "/dashboard";
 
   const stravaOAuthConfigured = Boolean(
     process.env.STRAVA_CLIENT_ID?.trim() && process.env.STRAVA_CLIENT_SECRET?.trim()
@@ -83,11 +79,10 @@ export default async function MyRacesPage() {
     <>
       <AppNavbar />
       <main className="min-h-screen bg-[#05070c] pb-24">
-        <div className="app-shell mx-auto w-full max-w-[560px] px-4 pt-6 pb-4 md:px-6 md:pt-10">
+        <div className="app-shell mx-auto w-full max-w-5xl px-4 pt-6 pb-4 md:px-6 md:pt-10">
           <StravaOAuthResultBanner />
-          <header className="mb-2 space-y-1 md:mb-4">
+          <header className="mb-4 md:mb-6">
             <h1 className="font-display text-2xl font-normal tracking-tight text-white md:text-3xl">My Races</h1>
-            <p className="text-sm text-white/50">Import, then match each activity to a race or dismiss it.</p>
           </header>
 
           <MyRacesActionStrip stravaOAuthConfigured={stravaOAuthConfigured} />
@@ -110,14 +105,13 @@ export default async function MyRacesPage() {
           </section>
         </div>
 
-        <div className="app-shell mx-auto max-w-[560px] px-4 pb-10 md:px-6">
+        <div className="app-shell mx-auto max-w-5xl px-4 pb-10 md:px-6">
           <MyRacesClient
             initialBundle={bundle}
+            portfolioRaces={portfolioRaces}
             profileHref={profileHref}
             completedRacesHref={completedRacesHref}
-            profileFinishHref={profileFinishHref}
             stravaOAuthConfigured={stravaOAuthConfigured}
-            liveStravaActivityCount={liveStravaActivityCount}
           />
         </div>
       </main>

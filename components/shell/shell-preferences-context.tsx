@@ -13,10 +13,12 @@ import {
 const STORAGE = {
   locale: "runfolio_locale",
   textSize: "runfolio_text_size",
-  reduceMotion: "runfolio_reduce_motion"
+  reduceMotion: "runfolio_reduce_motion",
+  distanceUnits: "runfolio_distance_units"
 } as const;
 
 export type TextSizePreference = "default" | "large";
+export type DistanceUnitsPreference = "km" | "miles";
 
 type ShellPreferencesContextValue = {
   locale: Locale;
@@ -27,6 +29,8 @@ type ShellPreferencesContextValue = {
   setTextSize: (s: TextSizePreference) => void;
   reduceMotion: boolean;
   setReduceMotion: (v: boolean) => void;
+  distanceUnits: DistanceUnitsPreference;
+  setDistanceUnits: (u: DistanceUnitsPreference) => void;
 };
 
 const ShellPreferencesContext = createContext<ShellPreferencesContextValue | null>(null);
@@ -62,37 +66,57 @@ function readReduceMotion(): boolean {
   }
 }
 
-function applyDomHints(locale: Locale, textSize: TextSizePreference, reduceMotion: boolean) {
+function readDistanceUnits(): DistanceUnitsPreference {
+  if (typeof window === "undefined") return "km";
+  try {
+    const raw = localStorage.getItem(STORAGE.distanceUnits);
+    if (raw === "miles" || raw === "km") return raw;
+  } catch {
+    /* ignore */
+  }
+  return "km";
+}
+
+function applyDomHints(
+  locale: Locale,
+  textSize: TextSizePreference,
+  reduceMotion: boolean,
+  distanceUnits: DistanceUnitsPreference
+) {
   const root = document.documentElement;
   root.setAttribute("lang", locale);
   root.setAttribute("data-text-size", textSize);
   root.setAttribute("data-reduce-motion", reduceMotion ? "on" : "off");
+  root.setAttribute("data-distance-units", distanceUnits);
 }
 
 export function ShellPreferencesProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
   const [textSize, setTextSizeState] = useState<TextSizePreference>("default");
   const [reduceMotion, setReduceMotionState] = useState(false);
+  const [distanceUnits, setDistanceUnitsState] = useState<DistanceUnitsPreference>("km");
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
     setLocaleState(readStoredLocale());
     setTextSizeState(readTextSize());
     setReduceMotionState(readReduceMotion());
+    setDistanceUnitsState(readDistanceUnits());
     setHydrated(true);
   }, []);
 
   useEffect(() => {
     if (!hydrated) return;
-    applyDomHints(locale, textSize, reduceMotion);
+    applyDomHints(locale, textSize, reduceMotion, distanceUnits);
     try {
       localStorage.setItem(STORAGE.locale, locale);
       localStorage.setItem(STORAGE.textSize, textSize);
       localStorage.setItem(STORAGE.reduceMotion, reduceMotion ? "1" : "0");
+      localStorage.setItem(STORAGE.distanceUnits, distanceUnits);
     } catch {
       /* ignore */
     }
-  }, [locale, textSize, reduceMotion, hydrated]);
+  }, [locale, textSize, reduceMotion, distanceUnits, hydrated]);
 
   const setLocale = useCallback((loc: Locale) => {
     setLocaleState(loc);
@@ -104,6 +128,10 @@ export function ShellPreferencesProvider({ children }: { children: ReactNode }) 
 
   const setReduceMotion = useCallback((v: boolean) => {
     setReduceMotionState(v);
+  }, []);
+
+  const setDistanceUnits = useCallback((u: DistanceUnitsPreference) => {
+    setDistanceUnitsState(u);
   }, []);
 
   const messages = useMemo(() => getMessages(locale), [locale]);
@@ -124,9 +152,11 @@ export function ShellPreferencesProvider({ children }: { children: ReactNode }) 
       textSize,
       setTextSize,
       reduceMotion,
-      setReduceMotion
+      setReduceMotion,
+      distanceUnits,
+      setDistanceUnits
     }),
-    [locale, setLocale, messages, t, textSize, setTextSize, reduceMotion, setReduceMotion]
+    [locale, setLocale, messages, t, textSize, setTextSize, reduceMotion, setReduceMotion, distanceUnits, setDistanceUnits]
   );
 
   return <ShellPreferencesContext.Provider value={value}>{children}</ShellPreferencesContext.Provider>;

@@ -3,7 +3,15 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useId, useState, useTransition, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useTransition
+} from "react";
 import { signOutAction } from "@/lib/sign-out-action";
 import { usePersistence } from "@/components/persistence-context";
 import { buildSetupUrl } from "@/lib/setup-url";
@@ -46,49 +54,37 @@ type NavbarProps = {
   profileImageUrl?: string | null;
 };
 
-function ProfileNavAvatar({
-  profileHref,
+const menuLinkClass =
+  "flex w-full items-center rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-white/90 transition hover:bg-white/[0.07] focus-visible:bg-white/[0.07] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-offset-2 focus-visible:ring-offset-[#1e2029]";
+
+const HOVER_MENU_LEAVE_MS = 160;
+
+function useHoverMenuPlatform() {
+  const [matches, setMatches] = useState(false);
+
+  useLayoutEffect(() => {
+    const mq = window.matchMedia("(min-width: 768px) and (hover: hover) and (pointer: fine)");
+    const sync = () => setMatches(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  return matches;
+}
+
+function AvatarFace({
   profileInitial,
-  profileImageUrl,
-  compact = false
+  profileImageUrl
 }: {
-  profileHref: string;
   profileInitial: string;
   profileImageUrl?: string | null;
-  compact?: boolean;
 }) {
-  const router = useRouter();
-  const [navPending, startNavTransition] = useTransition();
   const [imgFailed, setImgFailed] = useState(false);
   const showPhoto = Boolean(profileImageUrl?.trim()) && !imgFailed;
-  const size = compact ? "h-10 w-10" : "h-9 w-9";
-
-  const onClick = useCallback(
-    (e: MouseEvent<HTMLAnchorElement>) => {
-      if (e.defaultPrevented) return;
-      if (e.button !== 0) return;
-      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      e.preventDefault();
-      startNavTransition(() => {
-        router.push(profileHref);
-      });
-    },
-    [router, profileHref]
-  );
 
   return (
-    <a
-      href={profileHref}
-      className={cn(
-        "relative flex shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-accent/50 bg-panelAlt font-display text-sm font-semibold text-white ring-1 ring-white/10 transition hover:border-accent",
-        size,
-        navPending && "pointer-events-none opacity-60"
-      )}
-      title="Profile"
-      aria-label="Open your public profile"
-      aria-busy={navPending}
-      onClick={onClick}
-    >
+    <>
       {showPhoto ? (
         <img
           src={profileImageUrl!}
@@ -101,13 +97,176 @@ function ProfileNavAvatar({
       ) : (
         profileInitial
       )}
-    </a>
+    </>
+  );
+}
+
+function UserAvatarMenu({
+  profileHref,
+  profileInitial,
+  profileImageUrl,
+  menuId
+}: {
+  profileHref: string;
+  profileInitial: string;
+  profileImageUrl?: string | null;
+  menuId: string;
+}) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const hoverPlatform = useHoverMenuPlatform();
+  const [open, setOpen] = useState(false);
+  const [navPending, startNavTransition] = useTransition();
+  const leaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const size = "h-10 w-10";
+
+  const clearLeaveTimer = useCallback(() => {
+    if (leaveTimerRef.current) {
+      clearTimeout(leaveTimerRef.current);
+      leaveTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleClose = useCallback(() => {
+    if (!hoverPlatform) return;
+    clearLeaveTimer();
+    leaveTimerRef.current = setTimeout(() => setOpen(false), HOVER_MENU_LEAVE_MS);
+  }, [hoverPlatform, clearLeaveTimer]);
+
+  const openMenu = useCallback(() => {
+    clearLeaveTimer();
+    setOpen(true);
+  }, [clearLeaveTimer]);
+
+  useEffect(() => {
+    setOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (hoverPlatform || !open) return;
+    const onDoc = (ev: globalThis.MouseEvent) => {
+      if (!containerRef.current?.contains(ev.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open, hoverPlatform]);
+
+  useEffect(() => {
+    if (!open || hoverPlatform) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, hoverPlatform]);
+
+  const onAvatarClick = useCallback(() => {
+    if (hoverPlatform) {
+      startNavTransition(() => {
+        router.push(profileHref);
+      });
+      return;
+    }
+    setOpen((o) => !o);
+  }, [hoverPlatform, router, profileHref]);
+
+  const avatarClass = cn(
+    "relative flex shrink-0 cursor-pointer items-center justify-center overflow-hidden rounded-full border border-accent/50 bg-panelAlt font-display text-sm font-semibold text-white ring-1 ring-white/10 transition hover:border-accent",
+    size,
+    navPending && "pointer-events-none opacity-60",
+    !hoverPlatform && open && "border-accent ring-accent/30"
+  );
+
+  const panel = (
+    <div
+      id={menuId}
+      role="menu"
+      aria-orientation="vertical"
+      className={cn(
+        "w-[min(calc(100vw-2rem),15.5rem)] origin-top-right rounded-xl border border-white/12 bg-[#161821] py-2 shadow-xl shadow-black/50 ring-1 ring-white/5 transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none",
+        open ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-1 opacity-0"
+      )}
+      onMouseEnter={hoverPlatform ? openMenu : undefined}
+      onMouseLeave={hoverPlatform ? scheduleClose : undefined}
+    >
+      <div className="px-1.5 pb-1 pt-0.5" role="none">
+        <Link href={profileHref} role="menuitem" className={menuLinkClass}>
+          My Profile
+        </Link>
+        <Link href="/settings" role="menuitem" className={menuLinkClass}>
+          Settings
+        </Link>
+        <Link href="/settings#settings-language" role="menuitem" className={menuLinkClass}>
+          Language
+        </Link>
+      </div>
+
+      <div className="mx-2 my-1.5 border-t border-white/10" role="separator" />
+
+      <div className="px-1.5 py-1" role="none">
+        <Link href="/about" role="menuitem" className={menuLinkClass}>
+          About
+        </Link>
+        <Link href="/privacy" role="menuitem" className={menuLinkClass}>
+          Privacy
+        </Link>
+        <Link href="/terms" role="menuitem" className={menuLinkClass}>
+          Terms
+        </Link>
+        <Link href="/contact" role="menuitem" className={menuLinkClass}>
+          Contact
+        </Link>
+      </div>
+
+      <div className="mx-2 my-1.5 border-t border-white/10" role="separator" />
+
+      <div className="px-1.5 pb-0.5 pt-1" role="none">
+        <form action={signOutAction}>
+          <button
+            type="submit"
+            role="menuitem"
+            className={cn(
+              menuLinkClass,
+              "text-red-300/95 hover:bg-red-950/35 focus-visible:ring-red-400/30"
+            )}
+          >
+            Log out
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+
+  return (
+    <div
+      ref={containerRef}
+      className="relative shrink-0"
+      onMouseEnter={hoverPlatform ? openMenu : undefined}
+      onMouseLeave={hoverPlatform ? scheduleClose : undefined}
+    >
+      <button
+        type="button"
+        className={avatarClass}
+        title={hoverPlatform ? "Profile" : "Account menu"}
+        aria-label={hoverPlatform ? "Open your public profile or account menu" : "Open account menu"}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-controls={menuId}
+        aria-busy={navPending}
+        onClick={onAvatarClick}
+      >
+        <AvatarFace profileInitial={profileInitial} profileImageUrl={profileImageUrl} />
+      </button>
+      <div className="absolute right-0 top-full z-50 flex justify-end pt-1.5">{panel}</div>
+    </div>
   );
 }
 
 export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarProps) {
   const pathname = usePathname();
   const menuId = useId();
+  const accountMenuId = useId();
   const [menuOpen, setMenuOpen] = useState(false);
   const { canPersist, reason, status, message, ctaHref, ctaLabel } = usePersistence();
   const hidePersistenceBanner =
@@ -171,7 +330,7 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
       ) : null}
 
       <div className="mx-auto flex w-full max-w-[1400px] items-center justify-between gap-3 px-4 py-3 md:px-6 md:py-4">
-        <Link href="/dashboard" className="flex min-w-0 shrink flex-col gap-0.5">
+        <Link href="/dashboard" className="flex min-w-0 shrink items-center">
           <Image
             src="/branding/runfolio-logo.png"
             alt="Runfolio"
@@ -180,9 +339,6 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
             className="h-9 w-auto max-w-[min(200px,48vw)] object-contain object-left md:h-10"
             priority
           />
-          <p className="hidden text-[10px] uppercase tracking-[0.18em] text-muted sm:block">
-            Built on effort. Remembered forever.
-          </p>
         </Link>
 
         <nav className="hidden items-center gap-8 md:flex" aria-label="Primary">
@@ -205,17 +361,12 @@ export function Navbar({ profileHref, profileInitial, profileImageUrl }: NavbarP
               Setup
             </Link>
           ) : null}
-          <ProfileNavAvatar
+          <UserAvatarMenu
             profileHref={profileHref}
             profileInitial={profileInitial}
             profileImageUrl={profileImageUrl}
-            compact
+            menuId={accountMenuId}
           />
-          <form action={signOutAction} className="hidden md:block">
-            <Button variant="secondary" className="px-3 py-1.5 text-[10px] uppercase tracking-[0.15em]" type="submit">
-              Log out
-            </Button>
-          </form>
 
           <button
             type="button"

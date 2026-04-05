@@ -11,6 +11,7 @@ import { ProfileBucketList } from "@/components/profile-bucket-list";
 import { RaceJourney } from "@/components/race-journey";
 import { StravaRacePortfolioSection } from "@/components/strava-race-portfolio-section";
 import { StravaIncrementalSyncButton } from "@/components/strava-incremental-sync-button";
+import { DashboardFeaturedRaceSummary } from "@/components/dashboard-featured-race-summary";
 import { Card } from "@/components/ui/card";
 import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
 import { getServerAuthUser } from "@/lib/auth-server";
@@ -357,112 +358,7 @@ export default async function DashboardPage() {
           </div>
         </div>
 
-        {featured ? (
-          <section className="border border-border bg-panel/80">
-            <div className="grid gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)_minmax(0,0.85fr)]">
-              <div
-                className="min-h-[320px] bg-cover bg-center lg:min-h-[480px]"
-                style={{ backgroundImage: `url('${getRaceSceneImagePath(featured.name)}')` }}
-              />
-              <div className="border-border p-6 md:p-8 lg:border-l">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h3 className="text-xl font-bold uppercase tracking-[0.04em] md:text-2xl lg:text-3xl">{featured.name}</h3>
-                  <span className="rounded-full border border-green/45 bg-green/10 px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-green">
-                    Completed
-                  </span>
-                </div>
-                <p className="type-meta mt-2 uppercase tracking-wide">
-                  {featured.location ?? "—"} · {featured.date ?? "—"}
-                </p>
-                <div className="mt-6 grid grid-cols-2 gap-3 sm:mt-8 sm:gap-4 lg:grid-cols-4">
-                  {[
-                    { k: "Distance", v: `${featured.distance_km} km` },
-                    { k: "Elevation", v: `${featured.elevation_m ?? "—"} m` },
-                    { k: "Time", v: featured.time ?? "—" },
-                    { k: "Place", v: "—" }
-                  ].map((row) => (
-                    <div key={row.k}>
-                      <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-accent">{row.k}</p>
-                      <p className="mt-1 text-lg font-semibold text-white">{row.v}</p>
-                    </div>
-                  ))}
-                </div>
-                {featured.description?.trim() ? (
-                  <div className="mt-8 border-t border-border pt-6">
-                    <p className="text-sm leading-relaxed text-slate-300">{featured.description}</p>
-                  </div>
-                ) : null}
-              </div>
-              <div className="border-t border-border p-6 lg:border-l lg:border-t-0 md:p-8">
-                <p className="type-section text-sm">Linked finish</p>
-                <div
-                  className="mt-3 h-40 bg-cover bg-center"
-                  style={{ backgroundImage: `url('${getRaceSceneImagePath(featured.name)}')` }}
-                />
-                <p className="type-meta mt-4 text-xs">
-                  {featured.strava_activity_id ? "Strava-linked finish." : "Link Strava on Add race for the activity page."}
-                </p>
-                {featured.strava_activity_id ? (
-                  <Link
-                    href={portfolioRaceHref(featured)}
-                    className="mt-4 inline-block text-[11px] font-semibold uppercase tracking-[0.15em] text-accent hover:underline"
-                  >
-                    Open race portfolio →
-                  </Link>
-                ) : null}
-                <div className="mt-6">
-                  <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">Splits</p>
-                  <table className="mt-2 w-full text-left text-sm">
-                    <thead>
-                      <tr className="type-meta text-[11px]">
-                        <th className="pb-2 font-normal">Point</th>
-                        <th className="pb-2 font-normal">Distance</th>
-                        <th className="pb-2 font-normal">Time</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/80">
-                      {["Start", "CP1", "CP2", "Finish"].map((pt, idx) => (
-                        <tr key={pt}>
-                          <td className="py-2 text-white">{pt}</td>
-                          <td className="py-2 text-muted">{idx * 25} km</td>
-                          <td className="py-2 text-muted">—</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-2 overflow-x-auto border-t border-border px-4 py-4 [-webkit-overflow-scrolling:touch]">
-              {completedSorted.slice(0, 6).map((race) => {
-                const thumbHref = portfolioRaceHref(race);
-                const thumbExternal = thumbHref.startsWith("http");
-                const thumbStyle = { backgroundImage: `url('${getRaceSceneImagePath(race.name)}')` };
-                const thumbClass =
-                  "block h-16 w-28 shrink-0 overflow-hidden rounded-md bg-cover bg-center ring-1 ring-white/10 transition hover:ring-accent/50 focus-visible:outline focus-visible:ring-2 focus-visible:ring-accent";
-                return thumbExternal ? (
-                  <a
-                    key={race.id}
-                    href={thumbHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    className={thumbClass}
-                    style={thumbStyle}
-                    aria-label={`Open ${race.name}`}
-                  />
-                ) : (
-                  <Link
-                    key={race.id}
-                    href={thumbHref}
-                    className={thumbClass}
-                    style={thumbStyle}
-                    aria-label={`View ${race.name}`}
-                  />
-                );
-              })}
-            </div>
-          </section>
-        ) : null}
+        {featured ? <DashboardFeaturedRaceSummary races={completedSorted.slice(0, 6)} /> : null}
 
         <section className="grid grid-cols-2 gap-x-3 gap-y-5 border border-border bg-panel/50 p-5 sm:grid-cols-3 sm:gap-4 md:p-6 lg:grid-cols-6">
           <div className="min-w-0">

@@ -34,7 +34,20 @@ export const es: Messages = {
     reduceMotionHint: "Limita animaciones decorativas. Si está desactivado, se usa la configuración del sistema.",
     backToApp: "Volver al resumen",
     saveNote: "Las preferencias se guardan en este dispositivo.",
-    openMyRaces: "Mis carreras"
+    openMyRaces: "Mis carreras",
+    profileSection: "Perfil",
+    preferencesSection: "Preferencias",
+    units: "Unidades",
+    unitsKm: "Kilómetros",
+    unitsMiles: "Millas",
+    connectedSection: "Cuentas conectadas",
+    dangerSection: "Zona de peligro",
+    deleteAccount: "Eliminar cuenta",
+    deleteAccountHint: "Elimina tu cuenta y el acceso para siempre. No se puede deshacer.",
+    deleteAccountConfirm:
+      "¿Eliminar tu cuenta de Runfolio para siempre? Perderás el acceso y los datos vinculados a este inicio de sesión.",
+    deleteAccountUnavailable: "No está disponible eliminar la cuenta.",
+    deleteAccountFailed: "No se pudo eliminar la cuenta."
   },
   language: {
     en: "English",

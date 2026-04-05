@@ -35,6 +35,18 @@ export type MessageTree = {
     backToApp: string;
     saveNote: string;
     openMyRaces: string;
+    profileSection: string;
+    preferencesSection: string;
+    units: string;
+    unitsKm: string;
+    unitsMiles: string;
+    connectedSection: string;
+    dangerSection: string;
+    deleteAccount: string;
+    deleteAccountHint: string;
+    deleteAccountConfirm: string;
+    deleteAccountUnavailable: string;
+    deleteAccountFailed: string;
   };
   language: {
     en: string;

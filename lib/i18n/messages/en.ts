@@ -34,7 +34,20 @@ export const en: Messages = {
     reduceMotionHint: "Limits decorative movement. Respects your system setting when off.",
     backToApp: "Back to Overview",
     saveNote: "Preferences are saved on this device.",
-    openMyRaces: "My Races"
+    openMyRaces: "My Races",
+    profileSection: "Profile",
+    preferencesSection: "Preferences",
+    units: "Units",
+    unitsKm: "Kilometres",
+    unitsMiles: "Miles",
+    connectedSection: "Connected accounts",
+    dangerSection: "Danger zone",
+    deleteAccount: "Delete account",
+    deleteAccountHint: "Permanently remove your account and sign-in. This can’t be undone.",
+    deleteAccountConfirm:
+      "Delete your Runfolio account permanently? You will lose access and stored data tied to this login.",
+    deleteAccountUnavailable: "Account deletion isn’t available.",
+    deleteAccountFailed: "Could not delete account."
   },
   language: {
     en: "English",

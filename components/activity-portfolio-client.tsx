@@ -165,7 +165,9 @@ export function ActivityPortfolioClient({
     { label: "Achievements", value: String(stravaView.achievement_count) }
   ];
 
-  const splits = stravaEnrichment.splits_metric;
+  const splitsRaw = stravaEnrichment.splits_metric;
+  const splits = splitsRaw?.length ? splitsRaw : null;
+  const splitsShowElevCol = Boolean(splits?.some((s) => s.elevation_m != null));
 
   return (
     <>
@@ -648,7 +650,7 @@ export function ActivityPortfolioClient({
               </div>
             ) : null}
 
-            {splits?.length ? (
+            {splits ? (
               <div className="mt-8 border-t border-white/10 pt-8">
                 <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Splits (metric)</p>
                 <div className="mt-4 overflow-x-auto">
@@ -658,7 +660,7 @@ export function ActivityPortfolioClient({
                         <th className="pb-2 pr-4">Leg</th>
                         <th className="pb-2 pr-4">Dist</th>
                         <th className="pb-2">Time</th>
-                        <th className="pb-2">± Elev</th>
+                        {splitsShowElevCol ? <th className="pb-2">± Elev</th> : null}
                       </tr>
                     </thead>
                     <tbody>
@@ -667,9 +669,11 @@ export function ActivityPortfolioClient({
                           <td className="py-2 pr-4 tabular-nums">{s.index}</td>
                           <td className="py-2 pr-4 tabular-nums">{(s.distance_m / 1000).toFixed(2)} km</td>
                           <td className="py-2 tabular-nums">{formatStravaMovingTime(s.moving_time_sec)}</td>
-                          <td className="py-2 tabular-nums text-white/65">
-                            {s.elevation_m != null ? `${s.elevation_m} m` : "—"}
-                          </td>
+                          {splitsShowElevCol ? (
+                            <td className="py-2 tabular-nums text-white/65">
+                              {s.elevation_m != null ? `${s.elevation_m} m` : ""}
+                            </td>
+                          ) : null}
                         </tr>
                       ))}
                     </tbody>

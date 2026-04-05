@@ -293,7 +293,7 @@ export default async function RaceIdRouterPage({ params }: Props) {
                   href={portfolioRaceHref(userMatch)}
                   className="rounded-[12px] border border-border bg-panelAlt px-4 py-2 text-[13px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-slate-800"
                 >
-                  {userMatch.strava_activity_id ? "Open race portfolio" : "Open your race story"}
+                  View race
                 </Link>
                 {userMatch.strava_activity_id ? (
                   <Link
