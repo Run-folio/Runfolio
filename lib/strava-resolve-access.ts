@@ -1,12 +1,18 @@
 import type { NextResponse } from "next/server";
-import { fetchStravaActivity } from "@/lib/strava-api";
-import type { StravaActivityJson } from "@/lib/strava-api";
+import {
+  fetchStravaActivity,
+  fetchStravaActivityStreams,
+  type StravaActivityJson,
+  type StravaActivityStreamsKeyed
+} from "@/lib/strava-api";
 import { applyStravaTokensToResponse, getStravaTokensFromCookies } from "@/lib/strava-cookies";
 import { getStravaClientCredentials } from "@/lib/strava-env";
 import { refreshStravaAccessToken } from "@/lib/strava-oauth";
 
 export type StravaFetchOutcome = {
   activity: StravaActivityJson;
+  /** Distance / altitude streams when Strava returns them; null if unavailable. */
+  streams: StravaActivityStreamsKeyed | null;
   /** Call on the successful JSON / redirect response so rotated tokens are saved in cookies. */
   applyCookieRotation?: (res: NextResponse) => void;
 };
@@ -49,7 +55,8 @@ export async function fetchStravaActivityWithRecovery(
 
   try {
     const activity = await fetchStravaActivity(activityId, access);
-    return { activity, applyCookieRotation: pendingCookies };
+    const streams = await fetchStravaActivityStreams(activityId, access);
+    return { activity, streams, applyCookieRotation: pendingCookies };
   } catch (e) {
     const message = e instanceof Error ? e.message : "Strava request failed";
     if (!cred || !refresh || !isLikelyUnauthorized(message)) {
@@ -57,8 +64,10 @@ export async function fetchStravaActivityWithRecovery(
     }
     const t = await refreshStravaAccessToken(refresh, cred.clientId, cred.clientSecret);
     const activity = await fetchStravaActivity(activityId, t.access_token);
+    const streams = await fetchStravaActivityStreams(activityId, t.access_token);
     return {
       activity,
+      streams,
       applyCookieRotation: (res) => {
         applyStravaTokensToResponse(res, t);
         pendingCookies?.(res);

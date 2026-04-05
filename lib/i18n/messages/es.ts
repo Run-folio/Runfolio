@@ -20,6 +20,10 @@ export const es: Messages = {
     stravaNotConnected: "Strava no está conectado. Conecta para importar y sincronizar actividades.",
     stravaConnect: "Conectar Strava",
     reconnectStrava: "Reconectar Strava",
+    disconnectStrava: "Desconectar Strava",
+    disconnectStravaHint: "Quita los tokens de Strava. Las actividades importadas se conservan.",
+    disconnectStravaConfirm:
+      "¿Desconectar Strava? Puedes volver a conectar. Las actividades guardadas siguen en Runfolio.",
     signOut: "Cerrar sesión",
     languageSection: "Idioma",
     displaySection: "Pantalla y accesibilidad",

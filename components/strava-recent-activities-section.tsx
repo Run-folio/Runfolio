@@ -13,6 +13,8 @@ type Props = {
   showInsights?: boolean;
   stravaOAuthConfigured?: boolean;
   emptyHint?: string;
+  /** Return path after Strava OAuth (must be signed in). */
+  stravaOauthNext?: string;
 };
 
 export function StravaRecentActivitiesSection({
@@ -23,7 +25,8 @@ export function StravaRecentActivitiesSection({
   limit = 8,
   showInsights = true,
   stravaOAuthConfigured = false,
-  emptyHint
+  emptyHint,
+  stravaOauthNext = "/dashboard"
 }: Props) {
   const slice = activities.slice(0, limit);
 
@@ -43,7 +46,7 @@ export function StravaRecentActivitiesSection({
           </p>
           {stravaOAuthConfigured ? (
             <Link
-              href="/api/strava/oauth/start"
+              href={`/api/strava/oauth/start?next=${encodeURIComponent(stravaOauthNext)}`}
               className="mt-4 inline-block text-sm font-semibold uppercase tracking-wider text-accent hover:underline"
             >
               Connect Strava

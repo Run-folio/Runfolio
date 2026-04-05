@@ -3,12 +3,13 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
-import type { ActivityPortfolioStravaView, Race } from "@/types";
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import type { ActivityPortfolioStravaEnrichment, ActivityPortfolioStravaView, Race } from "@/types";
 import {
   markStravaActivityNotRaceAction,
+  patchActivityPortfolioAction,
   snoozeStravaActivityMatchHubAction,
-  upsertActivityPortfolioAction
+  type ActivityPortfolioPatch
 } from "@/lib/actions";
 import type { ManualRaceSoftHint } from "@/lib/match-hub/manual-link-hints";
 import { ManualRaceLinkPanel } from "@/components/manual-race-link-panel";
@@ -17,13 +18,18 @@ import { getCatalogDisplayTitle } from "@/lib/discover-race-details";
 import { getPortfolioRaceLabel } from "@/lib/portfolio-race-label";
 import { getDiscoverPrestigeMeta } from "@/lib/discover-race-prestige";
 import { getRaceSceneImagePath } from "@/lib/race-scene-images";
+import { formatStravaMovingTime } from "@/lib/strava-api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { ActivityRouteMap } from "@/components/activity-route-map";
+import { ActivityElevationProfile } from "@/components/activity-elevation-profile";
+import { ActivityPhotoGalleryEditor } from "@/components/activity-photo-gallery-editor";
 
 type Props = {
   stravaView: ActivityPortfolioStravaView;
+  stravaEnrichment: ActivityPortfolioStravaEnrichment;
   race: Race | null;
   suggestedDiscoverRaceId: string | null;
   catalogDisplayTitle: string | null;
@@ -35,17 +41,21 @@ type Props = {
 
 function mergePhotoUrls(strava: string[], manual: string[] | null | undefined): string[] {
   const m = manual ?? [];
-  return [...new Set([...strava, ...m].filter(Boolean))];
+  const combined = [...m, ...strava];
+  return [...new Set(combined.filter(Boolean))];
 }
 
-function strOrFallback(value: string | null | undefined, fallback: string): string {
-  const v = value?.trim();
-  if (v) return v;
-  return fallback;
+function legacyReflectionsAsText(race: Race | null): string {
+  if (!race) return "";
+  const parts = [race.reflection_toughest, race.reflection_learned, race.reflection_mattered].filter(
+    (s): s is string => Boolean(s?.trim())
+  );
+  return parts.join("\n\n").trim();
 }
 
 export function ActivityPortfolioClient({
   stravaView,
+  stravaEnrichment,
   race,
   suggestedDiscoverRaceId,
   catalogDisplayTitle,
@@ -55,21 +65,37 @@ export function ActivityPortfolioClient({
   canonicalRaceSlug
 }: Props) {
   const router = useRouter();
-  const [editing, setEditing] = useState(!race);
   const [err, setErr] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const [linkUiOpen, setLinkUiOpen] = useState(() => !race?.canonical_race_id);
   const [linkAuxPending, startLinkAux] = useTransition();
 
-  useEffect(() => {
-    if (race?.canonical_race_id) setLinkUiOpen(false);
-  }, [race?.canonical_race_id]);
+  const [titleEditing, setTitleEditing] = useState(false);
+  const [subtitleEditing, setSubtitleEditing] = useState(false);
 
   const effectiveDiscoverId = race?.discover_race_id ?? suggestedDiscoverRaceId;
   const canonicalHref =
-    race?.canonical_race_id && canonicalRaceSlug ? `/races/${canonicalRaceSlug}` : race?.canonical_race_id ? `/races/${race.canonical_race_id}` : null;
+    race?.canonical_race_id && canonicalRaceSlug
+      ? `/races/${canonicalRaceSlug}`
+      : race?.canonical_race_id
+        ? `/races/${race.canonical_race_id}`
+        : null;
   const prestige = getDiscoverPrestigeMeta(effectiveDiscoverId);
   const displayTitle = race ? getPortfolioRaceLabel(race) : stravaView.name;
+
+  const savedStory = race?.description?.trim() ?? "";
+  const legacyBlock = !savedStory ? legacyReflectionsAsText(race) : "";
+  const stravaStoryHint = stravaView.description?.trim() ?? "";
+  const narrativeDisplay = savedStory || legacyBlock || stravaStoryHint;
+  const stravaOnlyCaption = Boolean(!savedStory && !legacyBlock && stravaStoryHint);
+
+  const storyBaselineRef = useRef(narrativeDisplay);
+  const [storyDraft, setStoryDraft] = useState(narrativeDisplay);
+  useEffect(() => {
+    storyBaselineRef.current = narrativeDisplay;
+    setStoryDraft(narrativeDisplay);
+  }, [narrativeDisplay]);
+
   const photos = useMemo(
     () => mergePhotoUrls(stravaView.photo_urls, race?.manual_photo_urls),
     [stravaView.photo_urls, race?.manual_photo_urls]
@@ -85,28 +111,53 @@ export function ActivityPortfolioClient({
         ? "Imported · GPX/TCX file"
         : null;
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    startTransition(async () => {
-      setErr(null);
-      const res = await upsertActivityPortfolioAction(fd);
-      if (res && "error" in res && res.error) {
-        setErr(res.error);
-        return;
-      }
-      router.refresh();
-      setEditing(false);
-    });
-  }
+  const polyline = stravaView.summary_polyline?.trim() || null;
+
+  useEffect(() => {
+    if (race?.canonical_race_id) setLinkUiOpen(false);
+  }, [race?.canonical_race_id]);
+
+  const runPatch = useCallback(
+    (partial: Partial<ActivityPortfolioPatch>) => {
+      const name =
+        partial.name?.trim() ||
+        (race ? getPortfolioRaceLabel(race) : stravaView.name).trim() ||
+        stravaView.name;
+      startTransition(async () => {
+        setErr(null);
+        const res = await patchActivityPortfolioAction({
+          strava_activity_id: stravaView.strava_id,
+          name,
+          ...partial
+        });
+        if (res && "error" in res && res.error) {
+          setErr(res.error);
+          return;
+        }
+        router.refresh();
+      });
+    },
+    [race, router, stravaView.name, stravaView.strava_id]
+  );
+
+  const onCommitManualPhotos = useCallback(
+    (urls: string[]) => {
+      runPatch({ manual_photo_urls: urls });
+    },
+    [runPatch]
+  );
+
+  const tagDefs = [
+    { key: "tag_pb" as const, label: "PB" },
+    { key: "tag_career_highlight" as const, label: "Career highlight" },
+    { key: "tag_hardest" as const, label: "Hardest" },
+    { key: "tag_bucket_list_done" as const, label: "Bucket list done" }
+  ];
 
   const statGrid = [
     { label: "Distance", value: `${stravaView.distance_km} km` },
     { label: "Moving time", value: stravaView.moving_time_label },
-    {
-      label: "Elapsed",
-      value: stravaView.elapsed_time_label ?? "—"
-    },
+    { label: "Elapsed", value: stravaView.elapsed_time_label ?? "—" },
     { label: "Pace", value: stravaView.pace_label ?? "—" },
     { label: "Elevation", value: stravaView.elevation_m != null ? `${stravaView.elevation_m} m` : "—" },
     { label: "Location", value: stravaView.location_label },
@@ -114,35 +165,107 @@ export function ActivityPortfolioClient({
     { label: "Achievements", value: String(stravaView.achievement_count) }
   ];
 
+  const splits = stravaEnrichment.splits_metric;
+
   return (
     <>
-      <section className="relative min-h-[320px] overflow-hidden border-b border-white/10">
+      <section className="relative min-h-[340px] overflow-hidden border-b border-white/10">
         <div className="absolute inset-0">
           {photos[0] ? (
-            // eslint-disable-next-line @next/next/no-img-element -- Strava CDN URLs; avoid remotePatterns setup
+            // eslint-disable-next-line @next/next/no-img-element -- external CDN / storage URLs
             <img src={photos[0]} alt="" className="h-full w-full object-cover" />
           ) : (
             <Image src={heroScene} alt="" fill className="object-cover" sizes="100vw" priority />
           )}
         </div>
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/75 to-black/30" />
-        <div className="relative z-10 mx-auto flex min-h-[320px] max-w-5xl flex-col justify-end px-5 pb-10 pt-24 md:px-8">
-          <Link
-            href="/dashboard"
-            className="mb-6 w-fit text-[13px] font-medium text-white/70 transition hover:text-white"
-          >
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/78 to-black/35" />
+        <div className="relative z-10 mx-auto flex min-h-[340px] max-w-5xl flex-col justify-end px-5 pb-10 pt-24 md:px-8">
+          <Link href="/dashboard" className="mb-6 w-fit text-[13px] font-medium text-white/70 transition hover:text-white">
             ← Back
           </Link>
-          <p className="type-tagline mb-2 text-accent">Race portfolio</p>
-          <h1 className="type-display max-w-4xl text-white">{displayTitle}</h1>
-          {race?.race_subtitle ? (
-            <p className="mt-3 max-w-2xl text-lg text-white/85">{race.race_subtitle}</p>
-          ) : null}
+          <p className="type-tagline mb-2 text-accent">Your race</p>
+
+          <div className="max-w-4xl">
+            {titleEditing ? (
+              <Input
+                key={displayTitle}
+                autoFocus
+                defaultValue={displayTitle}
+                className="type-display h-auto border-white/25 bg-black/55 py-2 text-3xl font-semibold text-white md:text-4xl"
+                disabled={pending}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  setTitleEditing(false);
+                  if (v && v !== displayTitle) runPatch({ name: v });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") setTitleEditing(false);
+                }}
+              />
+            ) : (
+              <h1
+                className="type-display cursor-text text-white outline-none ring-offset-2 hover:underline hover:decoration-white/30 hover:underline-offset-4"
+                onClick={() => setTitleEditing(true)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") setTitleEditing(true);
+                }}
+              >
+                {displayTitle}
+              </h1>
+            )}
+          </div>
+
+          <div className="mt-3 max-w-2xl">
+            {subtitleEditing ? (
+              <Input
+                key={race?.race_subtitle ?? "sub"}
+                autoFocus
+                defaultValue={race?.race_subtitle ?? ""}
+                placeholder="Subtitle (optional)"
+                className="border-white/25 bg-black/45 text-lg text-white/90"
+                disabled={pending}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  setSubtitleEditing(false);
+                  const cur = race?.race_subtitle?.trim() ?? "";
+                  if (v !== cur) runPatch({ race_subtitle: v || null });
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                  if (e.key === "Escape") setSubtitleEditing(false);
+                }}
+              />
+            ) : (
+              <button
+                type="button"
+                className="text-left text-lg text-white/80 hover:text-white"
+                onClick={() => setSubtitleEditing(true)}
+              >
+                {race?.race_subtitle?.trim() ? (
+                  race.race_subtitle
+                ) : (
+                  <span className="text-white/45">Add a subtitle…</span>
+                )}
+              </button>
+            )}
+          </div>
+
+          <div className="mt-5 flex flex-wrap gap-3 text-sm tabular-nums text-white/85">
+            <span className="rounded-full border border-white/15 bg-black/35 px-3 py-1">{stravaView.distance_km} km</span>
+            <span className="rounded-full border border-white/15 bg-black/35 px-3 py-1">{stravaView.moving_time_label}</span>
+            {stravaView.pace_label ? (
+              <span className="rounded-full border border-white/15 bg-black/35 px-3 py-1">{stravaView.pace_label}</span>
+            ) : null}
+            <span className="rounded-full border border-white/15 bg-black/35 px-3 py-1">{stravaView.start_date}</span>
+          </div>
+
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <span className="border border-white/20 bg-black/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/90">
               {sportLabel}
             </span>
-            <span className="text-sm tabular-nums text-white/75">{stravaView.start_date}</span>
             {stravaFetchFailed ? (
               <span className="border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-amber-200">
                 Saved copy · live Strava unavailable
@@ -174,6 +297,7 @@ export function ActivityPortfolioClient({
               </span>
             ) : null}
           </div>
+
           <div className="mt-6 flex flex-wrap gap-3">
             {isStravaSource && stravaView.strava_url ? (
               <a
@@ -204,17 +328,6 @@ export function ActivityPortfolioClient({
                 Suggested: {catalogDisplayTitle}
               </span>
             ) : null}
-            <Button
-              type="button"
-              variant="secondary"
-              className="border border-white/30 bg-transparent text-[11px] font-semibold uppercase tracking-[0.15em] hover:bg-white/10"
-              onClick={() => {
-                setEditing((v) => !v);
-                setErr(null);
-              }}
-            >
-              {editing ? "View page" : "Edit story"}
-            </Button>
             {race?.canonical_race_id ? (
               <Button
                 type="button"
@@ -235,7 +348,7 @@ export function ActivityPortfolioClient({
         </div>
       </section>
 
-      <main className="app-shell space-y-12 pb-20 pt-10">
+      <main className="app-shell space-y-14 pb-24 pt-10">
         {err ? (
           <p className="rounded-md border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">{err}</p>
         ) : null}
@@ -287,8 +400,187 @@ export function ActivityPortfolioClient({
         ) : null}
 
         <section className="space-y-4">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/55">Story</h2>
+          <div className="flex flex-wrap gap-2">
+            {tagDefs.map(({ key, label }) => {
+              const on = Boolean(race?.[key]);
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => runPatch({ [key]: !on })}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide transition",
+                    on
+                      ? "border-accent/60 bg-accent/20 text-accent"
+                      : "border-white/18 bg-white/[0.04] text-white/65 hover:border-white/35 hover:text-white/90"
+                  )}
+                >
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="relative rounded-xl border border-white/10 bg-[#0b0b0b] p-6 md:p-8">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Your race story</p>
+            {stravaOnlyCaption ? (
+              <p className="mb-2 text-xs text-white/45">Prefilled from Strava — edit and it becomes your portfolio version.</p>
+            ) : null}
+            <textarea
+              value={storyDraft}
+              onChange={(e) => setStoryDraft(e.target.value)}
+              disabled={pending}
+              onBlur={() => {
+                const next = storyDraft.trim();
+                if (next === storyBaselineRef.current.trim()) return;
+                runPatch({ description: next || null });
+              }}
+              rows={Math.min(18, Math.max(6, Math.ceil(storyDraft.length / 88) + 4))}
+              className="w-full resize-y rounded-lg border border-white/10 bg-black/40 px-4 py-3 text-[15px] leading-relaxed text-white/90 placeholder:text-muted focus:border-accent/40 focus:outline-none"
+              placeholder="How did the day feel? What happened out there?"
+            />
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Photos</h3>
+            <ActivityPhotoGalleryEditor
+              stravaActivityId={stravaView.strava_id}
+              manualUrls={race?.manual_photo_urls ?? []}
+              stravaPhotoUrls={stravaView.photo_urls}
+              onCommitManualUrls={onCommitManualPhotos}
+              busy={pending}
+            />
+          </div>
+
+          <details className="rounded-lg border border-white/10 bg-white/[0.02] px-4 py-3 text-sm">
+            <summary className="cursor-pointer select-none text-white/70">Details & catalog match</summary>
+            <div className="mt-4 grid gap-4 border-t border-white/10 pt-4 md:grid-cols-2">
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Catalog race</label>
+                <select
+                  className="mt-2 flex h-10 w-full border border-white/15 bg-black/50 px-3 text-sm text-white"
+                  value={effectiveDiscoverId ?? ""}
+                  disabled={pending}
+                  onChange={(e) => {
+                    const v = e.target.value.trim() || null;
+                    runPatch({ discover_race_id: v });
+                  }}
+                >
+                  <option value="">— None / custom —</option>
+                  {discoverRaces.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Date</label>
+                <Input
+                  key={`${race?.id}-${race?.date ?? stravaView.start_date}`}
+                  type="date"
+                  className="mt-2 border-white/15 bg-black/50"
+                  defaultValue={(race?.date ?? stravaView.start_date).slice(0, 10)}
+                  disabled={pending}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    const cur = (race?.date ?? stravaView.start_date).slice(0, 10);
+                    if (v && v !== cur) runPatch({ date: v });
+                  }}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Location</label>
+                <Input
+                  key={`${race?.id}-loc`}
+                  className="mt-2 border-white/15 bg-black/50"
+                  defaultValue={race?.location ?? stravaView.location_label}
+                  disabled={pending}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    const cur = race?.location ?? stravaView.location_label;
+                    if (v !== cur) runPatch({ location: v || null });
+                  }}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Distance (km)</label>
+                <Input
+                  key={`${race?.id}-dist`}
+                  type="number"
+                  step="0.1"
+                  className="mt-2 border-white/15 bg-black/50"
+                  defaultValue={race?.distance_km ?? stravaView.distance_km}
+                  disabled={pending}
+                  onBlur={(e) => {
+                    const n = Number(e.target.value);
+                    if (!Number.isFinite(n)) return;
+                    const cur = race?.distance_km ?? stravaView.distance_km;
+                    if (n !== cur) runPatch({ distance_km: n });
+                  }}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Elevation (m)</label>
+                <Input
+                  key={`${race?.id}-elev-${race?.elevation_m ?? ""}`}
+                  type="number"
+                  className="mt-2 border-white/15 bg-black/50"
+                  defaultValue={race?.elevation_m ?? stravaView.elevation_m ?? ""}
+                  disabled={pending}
+                  onBlur={(e) => {
+                    const raw = e.target.value.trim();
+                    if (!raw) {
+                      runPatch({ elevation_m: null });
+                      return;
+                    }
+                    const n = Number(raw);
+                    if (!Number.isFinite(n)) return;
+                    const cur = race?.elevation_m ?? stravaView.elevation_m;
+                    if (n !== (cur ?? NaN)) runPatch({ elevation_m: n });
+                  }}
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Moving time</label>
+                <Input
+                  key={`${race?.id}-time`}
+                  className="mt-2 border-white/15 bg-black/50"
+                  defaultValue={race?.time ?? stravaView.moving_time_label}
+                  disabled={pending}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    const cur = race?.time ?? stravaView.moving_time_label;
+                    if (v !== cur) runPatch({ time: v || null });
+                  }}
+                />
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
+                  Finish / placement notes
+                </label>
+                <textarea
+                  key={`${race?.id}-finish`}
+                  className="mt-2 w-full rounded-md border border-white/15 bg-black/50 px-3 py-2 text-sm text-white"
+                  rows={3}
+                  defaultValue={race?.finish_notes ?? ""}
+                  disabled={pending}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    const cur = race?.finish_notes?.trim() ?? "";
+                    if (v !== cur) runPatch({ finish_notes: v || null });
+                  }}
+                />
+              </div>
+            </div>
+          </details>
+        </section>
+
+        <section className="space-y-4">
           <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/55">
-            {isStravaSource ? "From Strava" : "Activity details"}
+            {isStravaSource ? "Activity data" : "Imported metrics"}
           </h2>
           <Card className="border-white/10 bg-[#0a0a0a] p-6">
             <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -299,347 +591,93 @@ export function ActivityPortfolioClient({
                 </div>
               ))}
             </dl>
-            {stravaView.description ? (
-              <div className="mt-6 border-t border-white/10 pt-6">
-                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
-                  {isStravaSource ? "Strava description" : "Notes"}
-                </p>
-                <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-white/80">
-                  {stravaView.description}
-                </p>
+
+            {stravaEnrichment.elevation_profile ? (
+              <div className="mt-8 border-t border-white/10 pt-8">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Elevation</p>
+                <ActivityElevationProfile profile={stravaEnrichment.elevation_profile} className="mt-4" />
               </div>
+            ) : stravaView.elevation_m != null ? (
+              <p className="mt-6 text-sm text-muted">No stream-based elevation profile for this activity (privacy or API limits).</p>
             ) : null}
-            <div className="mt-6 border-t border-white/10 pt-6">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Route</p>
-              {stravaView.has_map ? (
+
+            {polyline ? (
+              <div className="mt-8 border-t border-white/10 pt-8">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Route</p>
+                <div className="mt-4 rounded-lg border border-white/10 bg-black/30 p-4">
+                  <ActivityRouteMap encodedPolyline={polyline} />
+                </div>
+                {isStravaSource && stravaView.strava_url ? (
+                  <p className="mt-3 text-sm text-white/65">
+                    <a href={stravaView.strava_url} className="font-semibold text-accent underline-offset-4 hover:underline" target="_blank" rel="noreferrer">
+                      Open full map on Strava →
+                    </a>
+                  </p>
+                ) : null}
+              </div>
+            ) : stravaView.has_map ? (
+              <div className="mt-8 border-t border-white/10 pt-8">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Route</p>
                 <p className="mt-2 text-sm text-white/75">
                   {isStravaSource && stravaView.strava_url ? (
                     <>
-                      Map data is available on Strava.{" "}
+                      Map on{" "}
                       <a
                         href={stravaView.strava_url}
                         className="font-semibold text-accent underline-offset-4 hover:underline"
                         target="_blank"
                         rel="noreferrer"
                       >
-                        View the route →
+                        Strava
                       </a>
+                      .
                     </>
                   ) : (
-                    <>A simplified route from your uploaded file is stored in Runfolio (no external activity link).</>
+                    <>Route stored for this import; polyline preview unavailable.</>
                   )}
                 </p>
-              ) : (
-                <p className="mt-2 text-sm text-muted">No route preview in this import.</p>
-              )}
-            </div>
-          </Card>
-        </section>
-
-        <section className="space-y-4">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/55">Gallery</h2>
-            <p className="max-w-xl text-xs text-muted">
-              {isStravaSource
-                ? "Strava often returns a single primary image per activity. Add image URLs below to build a fuller album."
-                : "File imports do not include photos. Paste image URLs below if you want a gallery on your portfolio."}
-            </p>
-          </div>
-          {photos.length === 0 ? (
-            <Card className="overflow-hidden border border-dashed border-white/15 bg-[#0a0a0a]">
-              <div className="relative aspect-[2.2/1] max-h-52 w-full border-b border-white/10">
-                <Image src={heroScene} alt="" fill className="object-cover opacity-35 saturate-50" sizes="(max-width:768px) 100vw, 896px" />
-                <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/85 via-black/45 to-black/25 px-6 text-center">
-                  <p className="text-sm font-medium text-white/90">
-                    {isStravaSource ? "No Strava images returned for this activity" : "No images on this import"}
-                  </p>
-                  <p className="mt-2 max-w-md text-xs leading-relaxed text-white/55">
-                    {isStravaSource
-                      ? "The API often exposes only a primary shot, or none. Your hero uses course art until you add photos."
-                      : "Upload GPX/TCX/FIT for metrics and route — add photo URLs in Edit story when you are ready."}
-                  </p>
-                </div>
               </div>
-              <div className="p-8 text-center">
-                <p className="text-sm text-white/70">
-                  Add your own images: open <strong className="text-white/90">Edit story</strong> and paste HTTPS links
-                  (one per line).
+            ) : null}
+
+            {stravaView.description ? (
+              <div className="mt-8 border-t border-white/10 pt-8">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
+                  {isStravaSource ? "Strava activity notes" : "Import notes"}
                 </p>
+                <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-white/75">{stravaView.description}</p>
               </div>
-            </Card>
-          ) : photos.length === 1 ? (
-            <figure className="mx-auto max-w-3xl border border-white/12 bg-gradient-to-b from-white/[0.05] to-transparent p-3 shadow-[0_24px_80px_rgba(0,0,0,0.35)] md:p-4">
-              <div className="relative aspect-[16/9] overflow-hidden border border-white/10 bg-black">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photos[0]} alt="" className="h-full w-full object-cover" />
-                <div className="pointer-events-none absolute inset-3 border border-gold/20 md:inset-4" aria-hidden />
-              </div>
-              <figcaption className="mt-4 text-center text-[11px] font-medium uppercase tracking-[0.2em] text-white/45">
-                {isStravaSource ? "Primary from Strava · add more in Edit story" : "Primary image · add more in Edit story"}
-              </figcaption>
-            </figure>
-          ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {photos.map((url, i) => (
-                <div
-                  key={`${url}-${i}`}
-                  className={cn(
-                    "relative overflow-hidden border border-white/10 bg-black/40",
-                    i === 0 ? "min-h-[240px] sm:col-span-2 sm:row-span-2" : "aspect-[4/3]"
-                  )}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={url} alt="" className="h-full w-full object-cover" />
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
+            ) : null}
 
-        <section className="space-y-4">
-          <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-white/55">Your race story</h2>
-          {!editing ? (
-            <div className="space-y-6">
-              {race?.tag_pb ||
-              race?.tag_career_highlight ||
-              race?.tag_hardest ||
-              race?.tag_bucket_list_done ? (
-                <div className="flex flex-wrap gap-2">
-                  {race.tag_pb ? (
-                    <span className="border border-accent/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-accent">
-                      PB
-                    </span>
-                  ) : null}
-                  {race.tag_career_highlight ? (
-                    <span className="border border-gold/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-gold">
-                      Career highlight
-                    </span>
-                  ) : null}
-                  {race.tag_hardest ? (
-                    <span className="border border-red-400/35 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-red-200">
-                      Hardest race
-                    </span>
-                  ) : null}
-                  {race.tag_bucket_list_done ? (
-                    <span className="border border-green-500/40 px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-green-300">
-                      Bucket list completed
-                    </span>
-                  ) : null}
-                </div>
-              ) : null}
-              {race?.description ? (
-                <Card className="border-white/10 bg-[#0d0d0d] p-6">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Full story</p>
-                  <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed text-white/90">{race.description}</p>
-                </Card>
-              ) : (
-                <p className="text-sm text-muted">No story yet — open edit to add reflections.</p>
-              )}
-              <div className="grid gap-4 md:grid-cols-3">
-                {[
-                  { label: "Toughest moment", v: race?.reflection_toughest },
-                  { label: "What I learned", v: race?.reflection_learned },
-                  { label: "Why it mattered", v: race?.reflection_mattered }
-                ].map(({ label, v }) =>
-                  v ? (
-                    <Card key={label} className="border-white/10 bg-[#0a0a0a] p-5">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">{label}</p>
-                      <p className="mt-2 text-sm leading-relaxed text-white/85">{v}</p>
-                    </Card>
-                  ) : null
-                )}
-              </div>
-              {race?.finish_notes ? (
-                <Card className="border-white/10 bg-[#0a0a0a] p-6">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Finish / placement notes</p>
-                  <p className="mt-2 text-sm text-white/85">{race.finish_notes}</p>
-                </Card>
-              ) : null}
-            </div>
-          ) : (
-            <Card className="border-white/10 bg-[#0a0a0a] p-6 md:p-8">
-              <form onSubmit={handleSubmit} className="space-y-6">
-                <input type="hidden" name="strava_activity_id" value={stravaView.strava_id} />
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Race title</label>
-                    <Input
-                      name="name"
-                      required
-                      defaultValue={strOrFallback(race?.name, stravaView.name)}
-                      className="mt-2 border-white/15 bg-black/50"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Subtitle</label>
-                    <Input
-                      name="race_subtitle"
-                      defaultValue={race?.race_subtitle ?? ""}
-                      placeholder="Short line under the title"
-                      className="mt-2 border-white/15 bg-black/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Linked catalog race</label>
-                    <select
-                      name="discover_race_id"
-                      defaultValue={effectiveDiscoverId ?? ""}
-                      className="mt-2 flex h-10 w-full border border-white/15 bg-black/50 px-3 text-sm text-white"
-                    >
-                      <option value="">— None / custom —</option>
-                      {discoverRaces.map((d) => (
-                        <option key={d.id} value={d.id}>
-                          {d.name}
-                        </option>
+            {splits?.length ? (
+              <div className="mt-8 border-t border-white/10 pt-8">
+                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Splits (metric)</p>
+                <div className="mt-4 overflow-x-auto">
+                  <table className="w-full min-w-[320px] text-left text-sm text-white/85">
+                    <thead className="text-[10px] uppercase tracking-wider text-muted">
+                      <tr>
+                        <th className="pb-2 pr-4">Leg</th>
+                        <th className="pb-2 pr-4">Dist</th>
+                        <th className="pb-2">Time</th>
+                        <th className="pb-2">± Elev</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {splits.map((s) => (
+                        <tr key={s.index} className="border-t border-white/10">
+                          <td className="py-2 pr-4 tabular-nums">{s.index}</td>
+                          <td className="py-2 pr-4 tabular-nums">{(s.distance_m / 1000).toFixed(2)} km</td>
+                          <td className="py-2 tabular-nums">{formatStravaMovingTime(s.moving_time_sec)}</td>
+                          <td className="py-2 tabular-nums text-white/65">
+                            {s.elevation_m != null ? `${s.elevation_m} m` : "—"}
+                          </td>
+                        </tr>
                       ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Date</label>
-                    <Input
-                      name="date"
-                      type="date"
-                      defaultValue={strOrFallback(race?.date, stravaView.start_date)}
-                      className="mt-2 border-white/15 bg-black/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Location</label>
-                    <Input
-                      name="location"
-                      defaultValue={strOrFallback(race?.location, stravaView.location_label)}
-                      className="mt-2 border-white/15 bg-black/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Distance (km)</label>
-                    <Input
-                      name="distance_km"
-                      type="number"
-                      step="0.1"
-                      defaultValue={race?.distance_km ?? stravaView.distance_km}
-                      className="mt-2 border-white/15 bg-black/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Elevation (m)</label>
-                    <Input
-                      name="elevation_m"
-                      type="number"
-                      defaultValue={race?.elevation_m ?? stravaView.elevation_m ?? ""}
-                      className="mt-2 border-white/15 bg-black/50"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Moving time</label>
-                    <Input
-                      name="time"
-                      defaultValue={strOrFallback(race?.time, stravaView.moving_time_label)}
-                      placeholder="e.g. 03:42:10"
-                      className="mt-2 border-white/15 bg-black/50"
-                    />
-                  </div>
+                    </tbody>
+                  </table>
                 </div>
-
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Full story / reflection</label>
-                  <textarea
-                    name="description"
-                    rows={6}
-                    defaultValue={race?.description ?? ""}
-                    className="mt-2 w-full rounded-md border border-white/15 bg-black/50 px-3 py-2 text-sm text-white placeholder:text-muted"
-                    placeholder="The narrative you want on your portfolio…"
-                  />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-3">
-                  {(
-                    [
-                      ["reflection_toughest", "Toughest moment", race?.reflection_toughest],
-                      ["reflection_learned", "What I learned", race?.reflection_learned],
-                      ["reflection_mattered", "Why it mattered", race?.reflection_mattered]
-                    ] as const
-                  ).map(([name, label, def]) => (
-                    <div key={name}>
-                      <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">{label}</label>
-                      <textarea
-                        name={name}
-                        rows={4}
-                        defaultValue={def ?? ""}
-                        className="mt-2 w-full rounded-md border border-white/15 bg-black/50 px-3 py-2 text-sm text-white"
-                      />
-                    </div>
-                  ))}
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
-                    Finish / placement notes
-                  </label>
-                  <textarea
-                    name="finish_notes"
-                    rows={3}
-                    defaultValue={race?.finish_notes ?? ""}
-                    className="mt-2 w-full rounded-md border border-white/15 bg-black/50 px-3 py-2 text-sm text-white"
-                    placeholder="Age group, splits, what the watch missed…"
-                  />
-                </div>
-
-                <div>
-                  <label className="text-[10px] font-bold uppercase tracking-[0.2em] text-muted">
-                    Extra photo URLs (one HTTPS URL per line)
-                  </label>
-                  <textarea
-                    name="manual_photo_urls"
-                    rows={4}
-                    defaultValue={(race?.manual_photo_urls ?? []).join("\n")}
-                    className="mt-2 w-full rounded-md border border-white/15 bg-black/50 px-3 py-2 font-mono text-xs text-white"
-                    placeholder="https://…"
-                  />
-                </div>
-
-                <fieldset className="space-y-2 rounded-lg border border-white/10 p-4">
-                  <legend className="px-1 text-[10px] font-bold uppercase tracking-[0.2em] text-muted">Tags</legend>
-                  <label className="flex items-center gap-2 text-sm text-white/85">
-                    <input type="checkbox" name="tag_pb" defaultChecked={race?.tag_pb} className="accent-accent" />
-                    PB
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-white/85">
-                    <input
-                      type="checkbox"
-                      name="tag_career_highlight"
-                      defaultChecked={race?.tag_career_highlight}
-                      className="accent-accent"
-                    />
-                    Career highlight
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-white/85">
-                    <input type="checkbox" name="tag_hardest" defaultChecked={race?.tag_hardest} className="accent-accent" />
-                    Hardest race
-                  </label>
-                  <label className="flex items-center gap-2 text-sm text-white/85">
-                    <input
-                      type="checkbox"
-                      name="tag_bucket_list_done"
-                      defaultChecked={race?.tag_bucket_list_done}
-                      className="accent-accent"
-                    />
-                    Bucket list completed
-                  </label>
-                </fieldset>
-
-                <div className="flex flex-wrap gap-3">
-                  <Button type="submit" disabled={pending} className="bg-accent text-black hover:bg-accent/90">
-                    {pending ? "Saving…" : "Save portfolio"}
-                  </Button>
-                  <Button type="button" variant="ghost" onClick={() => setEditing(false)} disabled={pending}>
-                    Cancel
-                  </Button>
-                </div>
-              </form>
-            </Card>
-          )}
+              </div>
+            ) : null}
+          </Card>
         </section>
       </main>
     </>

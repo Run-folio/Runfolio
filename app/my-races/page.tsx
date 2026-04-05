@@ -7,6 +7,7 @@ import { DevMatchDebugSummary } from "@/components/dev-match-debug-summary";
 import { MyRacesActionStrip } from "@/components/my-races/my-races-action-strip";
 import { MyRacesClient } from "@/components/my-races/my-races-client";
 import { StravaBackfillExperience } from "@/components/strava-backfill-experience";
+import { StravaOAuthResultBanner } from "@/components/strava-oauth-result-banner";
 import { ensurePublicUserRowForAuthedRequest } from "@/lib/auth-ensure-public-user-on-request";
 import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
@@ -83,6 +84,7 @@ export default async function MyRacesPage() {
       <AppNavbar />
       <main className="min-h-screen bg-[#05070c] pb-24">
         <div className="app-shell mx-auto w-full max-w-[560px] px-4 pt-6 pb-4 md:px-6 md:pt-10">
+          <StravaOAuthResultBanner />
           <header className="mb-2 space-y-1 md:mb-4">
             <h1 className="font-display text-2xl font-normal tracking-tight text-white md:text-3xl">My Races</h1>
             <p className="text-sm text-white/50">Import, then match each activity to a race or dismiss it.</p>

@@ -81,7 +81,7 @@ export function StravaRacePortfolioSection({
           </p>
           {stravaOAuthConfigured ? (
             <Link
-              href="/api/strava/oauth/start"
+              href="/api/strava/oauth/start?next=%2Fdashboard"
               className="mt-4 inline-flex min-h-[44px] items-center justify-center text-sm font-semibold uppercase tracking-wider text-accent hover:underline"
             >
               Connect Strava

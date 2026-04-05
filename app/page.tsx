@@ -17,12 +17,12 @@ export default function HomePage() {
           <p className="mx-auto mt-8 max-w-2xl text-base leading-relaxed text-slate-300">
             Curate your most meaningful races, import your history, and share a public profile that honors your effort.
           </p>
+          <p className="mx-auto mt-4 max-w-xl text-sm leading-relaxed text-slate-400">
+            Sign in or create an account, then connect Strava to import races and keep activities in sync.
+          </p>
           <div className="mt-12 flex flex-wrap justify-center gap-4">
-            <Link href="/api/strava/oauth/start?next=%2Fdashboard">
-              <Button>Continue with Strava</Button>
-            </Link>
             <Link href="/auth/login">
-              <Button variant="secondary">Sign in</Button>
+              <Button>Sign in</Button>
             </Link>
             <Link href="/auth/signup">
               <Button variant="secondary">Create account</Button>

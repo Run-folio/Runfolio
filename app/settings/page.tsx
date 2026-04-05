@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
+import { StravaOAuthResultBanner } from "@/components/strava-oauth-result-banner";
 import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { SettingsClient } from "@/app/settings/settings-client";
 import { getServerAuthUser } from "@/lib/auth-server";
@@ -39,6 +40,9 @@ export default async function SettingsPage() {
     <>
       <AppNavbar />
       <main className="min-h-screen bg-[#05070c]">
+        <div className="app-shell mx-auto max-w-[560px] px-4 pt-6 md:px-6">
+          <StravaOAuthResultBanner />
+        </div>
         <SettingsClient
           email={email}
           displayName={displayName}

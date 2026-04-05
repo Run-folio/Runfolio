@@ -3,6 +3,7 @@ import { isDynamicServerError } from "next/dist/client/components/hooks-server-c
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { redirect } from "next/navigation";
 import { AppNavbar } from "@/components/app-navbar";
+import { StravaOAuthResultBanner } from "@/components/strava-oauth-result-banner";
 import { DataBackendSetupGate } from "@/components/data-backend-setup-gate";
 import { CanonicalStravaMatchSuggestions } from "@/components/canonical-strava-match-suggestions";
 import { DevMatchDebugSummary } from "@/components/dev-match-debug-summary";
@@ -214,6 +215,7 @@ export default async function DashboardPage() {
       </section>
 
       <main className="app-shell space-y-16">
+        <StravaOAuthResultBanner />
         <section>
           <div className="mb-5 flex flex-col justify-between gap-3 sm:mb-6 sm:flex-row sm:items-end">
             <div>

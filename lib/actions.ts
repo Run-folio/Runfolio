@@ -530,6 +530,109 @@ export async function upsertActivityPortfolioAction(formData: FormData) {
   }
 }
 
+export type ActivityPortfolioPatch = {
+  strava_activity_id: string;
+  name?: string;
+  race_subtitle?: string | null;
+  description?: string | null;
+  finish_notes?: string | null;
+  location?: string | null;
+  date?: string | null;
+  distance_km?: number | null;
+  elevation_m?: number | null;
+  time?: string | null;
+  discover_race_id?: string | null;
+  manual_photo_urls?: string[];
+  tag_pb?: boolean;
+  tag_career_highlight?: boolean;
+  tag_hardest?: boolean;
+  tag_bucket_list_done?: boolean;
+};
+
+/** Partial update for inline editors; merges with existing `races` row or inserts when missing. */
+export async function patchActivityPortfolioAction(patch: ActivityPortfolioPatch) {
+  try {
+    const gate = await requireActionPersistence();
+    if (!gate.ok) return { error: gate.error };
+    const { user, supabase } = gate;
+
+    const stravaActivityId = String(patch.strava_activity_id ?? "").trim();
+    if (!stravaActivityId) return { error: "Missing Strava activity id." };
+
+    const existing = await getRaceByStravaActivityId(stravaActivityId, user.id);
+    const profileApprovedAt =
+      (existing as Race | null)?.profile_approved_at?.trim() || new Date().toISOString();
+
+    const nextDiscover =
+      patch.discover_race_id !== undefined ? patch.discover_race_id : (existing?.discover_race_id ?? null);
+
+    if (!existing) {
+      const name = (patch.name ?? "").trim();
+      if (!name) return { error: "Title is required." };
+      const insertRow = {
+        user_id: user.id,
+        strava_activity_id: stravaActivityId,
+        is_completed: true,
+        is_bucket_list_item: false,
+        include_on_profile: true,
+        profile_approved_at: profileApprovedAt,
+        name,
+        race_subtitle: patch.race_subtitle !== undefined ? patch.race_subtitle : null,
+        description: patch.description !== undefined ? patch.description : null,
+        finish_notes: patch.finish_notes !== undefined ? patch.finish_notes : null,
+        location: patch.location !== undefined ? patch.location : null,
+        date: patch.date !== undefined ? patch.date : null,
+        distance_km: patch.distance_km !== undefined ? patch.distance_km : null,
+        elevation_m: patch.elevation_m !== undefined ? patch.elevation_m : null,
+        time: patch.time !== undefined ? patch.time : null,
+        discover_race_id: nextDiscover,
+        manual_photo_urls:
+          patch.manual_photo_urls !== undefined ? patch.manual_photo_urls : [],
+        tag_pb: patch.tag_pb ?? false,
+        tag_career_highlight: patch.tag_career_highlight ?? false,
+        tag_hardest: patch.tag_hardest ?? false,
+        tag_bucket_list_done: patch.tag_bucket_list_done ?? false,
+        reflection_toughest: null,
+        reflection_learned: null,
+        reflection_mattered: null
+      };
+      const { error: insErr } = await supabase.from("races").insert(insertRow);
+      if (insErr) return { error: dbErr(insErr) };
+    } else {
+      const row: Record<string, unknown> = {};
+      if (patch.name !== undefined) row.name = patch.name.trim() || existing.name;
+      if (patch.race_subtitle !== undefined) row.race_subtitle = patch.race_subtitle;
+      if (patch.description !== undefined) row.description = patch.description;
+      if (patch.finish_notes !== undefined) row.finish_notes = patch.finish_notes;
+      if (patch.location !== undefined) row.location = patch.location;
+      if (patch.date !== undefined) row.date = patch.date;
+      if (patch.distance_km !== undefined) row.distance_km = patch.distance_km;
+      if (patch.elevation_m !== undefined) row.elevation_m = patch.elevation_m;
+      if (patch.time !== undefined) row.time = patch.time;
+      if (patch.discover_race_id !== undefined) row.discover_race_id = patch.discover_race_id;
+      if (patch.manual_photo_urls !== undefined) row.manual_photo_urls = patch.manual_photo_urls;
+      if (patch.tag_pb !== undefined) row.tag_pb = patch.tag_pb;
+      if (patch.tag_career_highlight !== undefined) row.tag_career_highlight = patch.tag_career_highlight;
+      if (patch.tag_hardest !== undefined) row.tag_hardest = patch.tag_hardest;
+      if (patch.tag_bucket_list_done !== undefined) row.tag_bucket_list_done = patch.tag_bucket_list_done;
+      if (Object.keys(row).length === 0) return { ok: true as const };
+      const { error: upErr } = await supabase.from("races").update(row).eq("id", existing.id);
+      if (upErr) return { error: dbErr(upErr) };
+    }
+
+    await revalidatePortfolioSurfaces(supabase, user.id, {
+      discoverRaceId: nextDiscover ?? undefined,
+      stravaActivityId
+    });
+    return { ok: true as const };
+  } catch (e) {
+    if (isDynamicServerError(e)) throw e;
+    if (isRedirectError(e)) throw e;
+    runfolioLog.error("actions.patchActivityPortfolio", e);
+    return { error: e instanceof Error ? e.message : "Could not save changes." };
+  }
+}
+
 async function requireOwnedRace(
   supabase: SupabaseClient,
   userId: string,

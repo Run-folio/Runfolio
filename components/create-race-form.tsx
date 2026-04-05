@@ -304,7 +304,7 @@ export function CreateRaceForm({
             {stravaOAuthConfigured ? (
               <p className="mt-3 text-sm">
                 <Link
-                  href="/api/strava/oauth/start"
+                  href="/api/strava/oauth/start?next=%2Fraces%2Fnew"
                   className="font-semibold text-accent underline-offset-4 hover:underline"
                 >
                   Connect Strava

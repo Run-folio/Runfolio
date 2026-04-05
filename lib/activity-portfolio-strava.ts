@@ -45,6 +45,7 @@ export function buildActivityPortfolioStravaView(
     achievement_count: raw.achievement_count ?? 0,
     description: raw.description ?? null,
     has_map: Boolean(raw.map?.summary_polyline),
+    summary_polyline: raw.map?.summary_polyline?.trim() || null,
     strava_url: `https://www.strava.com/activities/${stravaId}`,
     photo_urls: collectStravaActivityPhotoUrls(raw.photos)
   };
@@ -77,6 +78,7 @@ export function buildActivityPortfolioStravaViewFromSnapshot(
     achievement_count: 0,
     description: snap.description ?? null,
     has_map: false,
+    summary_polyline: null,
     strava_url: snap.strava_url,
     photo_urls: []
   };
@@ -108,6 +110,7 @@ export function buildActivityPortfolioStravaViewFromSyncedRow(row: StravaSyncedA
     achievement_count: row.achievement_count ?? 0,
     description: row.description ?? null,
     has_map: Boolean(row.polyline?.trim()),
+    summary_polyline: row.polyline?.trim() || null,
     strava_url: src === "strava" ? `https://www.strava.com/activities/${row.strava_activity_id}` : "",
     photo_urls: []
   };
@@ -132,6 +135,7 @@ export function buildActivityPortfolioStravaViewFromRace(race: Race, stravaId: s
     achievement_count: 0,
     description: race.description ?? null,
     has_map: false,
+    summary_polyline: null,
     strava_url: `https://www.strava.com/activities/${stravaId}`,
     photo_urls: []
   };

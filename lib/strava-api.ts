@@ -25,6 +25,21 @@ export function formatDurationFromSeconds(totalSec: number): string {
   return `${m}m`;
 }
 
+/** Per-km (or segmented) splits from Strava activity detail. */
+export type StravaActivitySplitMetric = {
+  split?: number;
+  distance: number;
+  elapsed_time: number;
+  moving_time: number;
+  elevation_difference?: number;
+};
+
+/** Stream series from GET /activities/{id}/streams?key_by_type=true */
+export type StravaActivityStreamsKeyed = {
+  distance?: { data?: number[] };
+  altitude?: { data?: number[] };
+};
+
 export type StravaActivityJson = {
   id: number;
   name: string;
@@ -43,6 +58,8 @@ export type StravaActivityJson = {
   achievement_count?: number | null;
   map?: { summary_polyline?: string | null };
   start_latlng?: [number, number] | null;
+  /** Present on detailed activity fetch; ~1 km splits when available. */
+  splits_metric?: StravaActivitySplitMetric[] | null;
   photos?: {
     count?: number;
     primary?: {
@@ -85,6 +102,32 @@ export async function fetchStravaActivity(activityId: string, accessToken: strin
     throw new Error(detail || `Strava API error ${res.status}`);
   }
   return JSON.parse(text) as StravaActivityJson;
+}
+
+/**
+ * Distance + altitude streams for elevation profile charts.
+ * May 404 or fail for some activities (privacy / subscribers-only data).
+ */
+export async function fetchStravaActivityStreams(
+  activityId: string,
+  accessToken: string
+): Promise<StravaActivityStreamsKeyed | null> {
+  const url = new URL(`https://www.strava.com/api/v3/activities/${activityId}/streams`);
+  url.searchParams.set("keys", "distance,altitude");
+  url.searchParams.set("key_by_type", "true");
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${accessToken}` },
+    next: { revalidate: 0 }
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    return null;
+  }
+  try {
+    return JSON.parse(text) as StravaActivityStreamsKeyed;
+  } catch {
+    return null;
+  }
 }
 
 /** Summary object returned by GET /athlete/activities (subset of full activity). */

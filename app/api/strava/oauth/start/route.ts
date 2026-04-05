@@ -1,13 +1,10 @@
 import { NextResponse } from "next/server";
-import {
-  STRAVA_OAUTH_MODE_COOKIE,
-  STRAVA_OAUTH_NEXT_COOKIE,
-  STRAVA_OAUTH_STATE_COOKIE
-} from "@/lib/strava-cookies";
+import { STRAVA_OAUTH_NEXT_COOKIE, STRAVA_OAUTH_STATE_COOKIE } from "@/lib/strava-cookies";
 import { getStravaClientCredentials, resolveStravaRedirectUri } from "@/lib/strava-env";
 import { stravaAuthorizeUrl } from "@/lib/strava-oauth";
 import { stravaOauthTrace } from "@/lib/strava-oauth-trace";
 import { parseSafeRedirectPath } from "@/lib/safe-redirect-path";
+import { createClient } from "@/lib/supabase/server";
 
 const cookieBase = {
   httpOnly: true,
@@ -17,6 +14,10 @@ const cookieBase = {
   maxAge: 600
 };
 
+/**
+ * Strava OAuth is **data connection only**: user must already be signed in (email/password).
+ * After authorize, callback links tokens to the current Supabase user.
+ */
 export async function GET(request: Request) {
   const cred = getStravaClientCredentials();
   if (!cred) {
@@ -34,7 +35,18 @@ export async function GET(request: Request) {
   const reqUrl = new URL(request.url);
   const nextParam = reqUrl.searchParams.get("next") ?? "/dashboard";
   const nextPath = parseSafeRedirectPath(nextParam) ?? "/dashboard";
-  const mode = reqUrl.searchParams.get("mode") === "reconnect" ? "reconnect" : "login";
+
+  const supabase = await createClient();
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+  if (!session?.user?.id) {
+    const login = new URL("/auth/login", reqUrl.origin);
+    login.searchParams.set("next", nextPath);
+    login.searchParams.set("notice", "strava_requires_signin");
+    stravaOauthTrace("oauth_aborted", { reason: "connect_requires_session", nextPath });
+    return NextResponse.redirect(login);
+  }
 
   const state = crypto.randomUUID();
   const authorize = stravaAuthorizeUrl({
@@ -47,13 +59,13 @@ export async function GET(request: Request) {
     redirect_uri: uriRes.redirectUri,
     redirect_source: uriRes.source,
     request_origin: uriRes.requestOrigin,
-    mode,
-    nextPath
+    flow: "strava_connect",
+    nextPath,
+    user_id: session.user.id
   });
 
   const res = NextResponse.redirect(authorize);
   res.cookies.set(STRAVA_OAUTH_STATE_COOKIE, state, cookieBase);
   res.cookies.set(STRAVA_OAUTH_NEXT_COOKIE, nextPath, cookieBase);
-  res.cookies.set(STRAVA_OAUTH_MODE_COOKIE, mode, cookieBase);
   return res;
 }

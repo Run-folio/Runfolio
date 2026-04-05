@@ -1,10 +1,13 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { useShellPreferences } from "@/components/shell/shell-preferences-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { SUPPORTED_LOCALES, type Locale } from "@/lib/i18n";
+import { disconnectStravaAction } from "@/lib/strava-disconnect-action";
 import { signOutAction } from "@/lib/sign-out-action";
 import { cn } from "@/lib/utils";
 
@@ -16,8 +19,11 @@ type Props = {
 };
 
 export function SettingsClient({ email, displayName, stravaConnected, stravaOAuthConfigured }: Props) {
+  const router = useRouter();
   const { t, locale, setLocale, textSize, setTextSize, reduceMotion, setReduceMotion } = useShellPreferences();
-  const reconnectHref = `/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent("/settings")}`;
+  const stravaOAuthHref = `/api/strava/oauth/start?next=${encodeURIComponent("/settings")}`;
+  const [disconnectPending, startDisconnect] = useTransition();
+  const [disconnectErr, setDisconnectErr] = useState<string | null>(null);
 
   return (
     <div className="mx-auto w-full max-w-[560px] space-y-8 px-4 pb-20 pt-8 md:px-6 md:pt-10">
@@ -46,7 +52,7 @@ export function SettingsClient({ email, displayName, stravaConnected, stravaOAut
         {stravaOAuthConfigured ? (
           <div className="flex flex-col gap-2 sm:flex-row">
             <Link
-              href={stravaConnected ? reconnectHref : `/api/strava/oauth/start?next=${encodeURIComponent("/settings")}`}
+              href={stravaOAuthHref}
               className="inline-flex min-h-[48px] items-center justify-center rounded-xl border border-white/15 bg-white/[0.06] px-4 text-center text-[12px] font-semibold uppercase tracking-[0.08em] text-white transition hover:bg-white/[0.1]"
             >
               {stravaConnected ? t("settings.reconnectStrava") : t("settings.stravaConnect")}
@@ -61,6 +67,33 @@ export function SettingsClient({ email, displayName, stravaConnected, stravaOAut
         ) : (
           <p className="text-sm text-muted">Strava OAuth is not configured on this server.</p>
         )}
+        {stravaOAuthConfigured && stravaConnected ? (
+          <div className="border-t border-white/10 pt-4">
+            <p className="text-xs text-muted">{t("settings.disconnectStravaHint")}</p>
+            {disconnectErr ? (
+              <p className="mt-2 text-sm text-red-300" role="alert">
+                {disconnectErr}
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={disconnectPending}
+              className="mt-3 min-h-[48px] w-full border-white/15 text-[12px]"
+              onClick={() => {
+                if (!window.confirm(t("settings.disconnectStravaConfirm"))) return;
+                setDisconnectErr(null);
+                startDisconnect(async () => {
+                  const r = await disconnectStravaAction();
+                  if (r.ok) router.refresh();
+                  else setDisconnectErr(r.error);
+                });
+              }}
+            >
+              {disconnectPending ? "…" : t("settings.disconnectStrava")}
+            </Button>
+          </div>
+        ) : null}
       </Card>
 
       <Card className="space-y-4 border border-white/10 bg-panel/35 p-5">

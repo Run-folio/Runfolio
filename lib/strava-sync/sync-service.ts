@@ -263,7 +263,7 @@ async function runIncrementalSync(userId: string, supabaseClient?: SupabaseClien
   for (let page = 1; page <= INCREMENTAL_MAX_PAGES; page++) {
     const token = await getValidStravaAccessTokenForUser(userId);
     if (!token) {
-      await recordIngestError(supabase, userId, "Connect Strava first — use Continue with Strava to sign in.");
+      await recordIngestError(supabase, userId, "Connect Strava first — sign in, then connect from My Races or Settings.");
       return { ok: false, error: "Connect Strava first — use My Races or Overview to reconnect.", needStravaReconnect: true };
     }
 

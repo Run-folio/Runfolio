@@ -15,10 +15,6 @@ export type StravaCredentialRow = {
   expires_at: string;
 };
 
-export function stravaSyntheticEmail(athleteId: string): string {
-  return `strava-${athleteId}@strava.runfolio.internal`;
-}
-
 export async function upsertStravaUserCredentials(
   admin: SupabaseClient,
   userId: string,

@@ -105,7 +105,7 @@ export function SetupFlowContent({ persistence, progress, safeNext }: Props) {
           primary={
             stravaOAuthConfigured
               ? {
-                  href: `/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(buildSetupUrl(safeNext))}`,
+                  href: `/api/strava/oauth/start?next=${encodeURIComponent(buildSetupUrl(safeNext))}`,
                   label: "Connect Strava"
                 }
               : undefined

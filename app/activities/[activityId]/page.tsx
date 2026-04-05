@@ -18,11 +18,17 @@ import { getServerAuthUser } from "@/lib/auth-server";
 import { createClient } from "@/lib/supabase/server";
 import { isSupabaseConfigured } from "@/lib/demo-mode";
 import { requirePersistenceReadyOrRedirect } from "@/lib/require-persistence-ready";
+import { buildActivityPortfolioEnrichment } from "@/lib/activity-portfolio-enrichment";
 import { fetchStravaActivityWithRecovery } from "@/lib/strava-resolve-access";
 import { buildManualRaceSoftHints, type ManualRaceSoftHint } from "@/lib/match-hub/manual-link-hints";
 import { rankCanonicalMatchesForSyncedRowDetailed } from "@/lib/strava-canonical-match/suggestions";
 import type { StravaSyncedActivityRow } from "@/lib/strava-sync/types";
-import type { ActivityMatchInput, ActivityPortfolioStravaView, Race } from "@/types";
+import type {
+  ActivityMatchInput,
+  ActivityPortfolioStravaEnrichment,
+  ActivityPortfolioStravaView,
+  Race
+} from "@/types";
 
 type Props = { params: Promise<{ activityId: string }> };
 
@@ -65,6 +71,10 @@ export default async function ActivityPortfolioPage({ params }: Props) {
 
   let stravaFetchFailed = false;
   let stravaView: ActivityPortfolioStravaView | null = null;
+  let stravaEnrichment: ActivityPortfolioStravaEnrichment = {
+    elevation_profile: null,
+    splits_metric: null
+  };
   let syncRowRaw: StravaSyncedActivityRow | null = null;
 
   if (parsed.kind === "file_import") {
@@ -83,8 +93,9 @@ export default async function ActivityPortfolioPage({ params }: Props) {
       stravaView = buildActivityPortfolioStravaViewFromSnapshot(snap);
     } else {
       try {
-        const { activity } = await fetchStravaActivityWithRecovery(stravaId);
+        const { activity, streams } = await fetchStravaActivityWithRecovery(stravaId);
         stravaView = buildActivityPortfolioStravaView(stravaId, activity);
+        stravaEnrichment = buildActivityPortfolioEnrichment(activity, streams);
       } catch {
         stravaFetchFailed = true;
         if (race) {
@@ -109,6 +120,15 @@ export default async function ActivityPortfolioPage({ params }: Props) {
   }
 
   if (!stravaView) notFound();
+
+  const polyFromSync = syncRowRaw?.polyline?.trim() || null;
+  if (polyFromSync && !stravaView.summary_polyline) {
+    stravaView = {
+      ...stravaView,
+      summary_polyline: polyFromSync,
+      has_map: true
+    };
+  }
 
   const { data: userRaces } = await supabase.from("races").select("*").eq("user_id", user.id);
   const allRaces = (userRaces ?? []) as Race[];
@@ -161,6 +181,7 @@ export default async function ActivityPortfolioPage({ params }: Props) {
       <AppNavbar />
       <ActivityPortfolioClient
         stravaView={stravaView}
+        stravaEnrichment={stravaEnrichment}
         race={race}
         suggestedDiscoverRaceId={suggestedDiscoverRaceId}
         catalogDisplayTitle={catalogDisplayTitle}

@@ -79,9 +79,22 @@ export type ActivityPortfolioStravaView = {
   achievement_count: number;
   description: string | null;
   has_map: boolean;
+  /** Encoded route when available (activity detail or synced row). */
+  summary_polyline: string | null;
   strava_url: string;
   /** Strava-hosted photo URLs (detail API often exposes primary only). */
   photo_urls: string[];
+};
+
+/** Optional charts / splits derived from live Strava detail + streams. */
+export type ActivityPortfolioStravaEnrichment = {
+  elevation_profile: { distance_km: number[]; elevation_m: number[] } | null;
+  splits_metric: Array<{
+    index: number;
+    distance_m: number;
+    moving_time_sec: number;
+    elevation_m?: number;
+  }> | null;
 };
 
 export type RaceMatchConfidence = "high" | "medium" | "low";

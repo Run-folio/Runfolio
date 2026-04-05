@@ -167,7 +167,7 @@ export function StravaActivityMatchModal({
                 : `Connect Strava to import activities and prove this finish for ${raceDisplayTitle}.`}
             </p>
             <Link
-              href="/api/strava/oauth/start"
+              href={`/api/strava/oauth/start?next=${encodeURIComponent(returnTo)}`}
               className="inline-flex items-center justify-center rounded-[12px] bg-accent px-4 py-2.5 text-[12px] font-semibold uppercase tracking-[0.08em] text-white"
             >
               Connect Strava

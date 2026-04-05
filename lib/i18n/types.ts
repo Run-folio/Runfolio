@@ -21,6 +21,9 @@ export type MessageTree = {
     stravaNotConnected: string;
     stravaConnect: string;
     reconnectStrava: string;
+    disconnectStrava: string;
+    disconnectStravaHint: string;
+    disconnectStravaConfirm: string;
     signOut: string;
     languageSection: string;
     displaySection: string;

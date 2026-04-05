@@ -69,7 +69,7 @@ export function SetupSyncActions() {
           <p>{msg}</p>
           {showReconnect ? (
             <Link
-              href={`/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(pathname)}`}
+              href={`/api/strava/oauth/start?next=${encodeURIComponent(pathname)}`}
               className="inline-flex font-semibold text-accent underline-offset-4 hover:underline"
             >
               Reconnect Strava

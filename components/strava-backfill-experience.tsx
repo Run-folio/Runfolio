@@ -599,7 +599,7 @@ export function StravaBackfillExperience({ initialProgress, stravaOAuthConfigure
             <p>{banner}</p>
             {showBackfillReconnect ? (
               <Link
-                href={`/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(pathname)}`}
+                href={`/api/strava/oauth/start?next=${encodeURIComponent(pathname)}`}
                 className="font-semibold text-accent underline-offset-4 hover:underline"
               >
                 Reconnect Strava

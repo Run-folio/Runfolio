@@ -118,7 +118,7 @@ export function buildOnboardingProgress(input: BuildInput): OnboardingProgress {
       secondaryCta = { href: "https://supabase.com/dashboard", label: "Open Supabase" };
       break;
     case "sign_in":
-      primaryCta = { href: `/auth/login?next=${encodeURIComponent(loginNext)}`, label: "Continue with Strava" };
+      primaryCta = { href: `/auth/login?next=${encodeURIComponent(loginNext)}`, label: "Sign in" };
       secondaryCta = { href: "/races/new", label: "Add a race manually" };
       break;
     case "backend_or_session":
@@ -131,8 +131,8 @@ export function buildOnboardingProgress(input: BuildInput): OnboardingProgress {
       break;
     case "connect_strava":
       primaryCta = {
-        href: `/api/strava/oauth/start?mode=reconnect&next=${encodeURIComponent(loginNext)}`,
-        label: "Reconnect Strava"
+        href: `/api/strava/oauth/start?next=${encodeURIComponent(loginNext)}`,
+        label: "Connect Strava"
       };
       secondaryCta = { href: "/races/new", label: "Skip — add manually" };
       break;
