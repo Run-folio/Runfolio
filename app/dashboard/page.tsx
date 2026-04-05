@@ -215,6 +215,53 @@ export default async function DashboardPage() {
         </div>
       </section>
 
+      <div className="mx-auto w-full max-w-[1400px] px-6 pt-5 md:px-8 md:pt-6">
+        <section className="grid grid-cols-2 gap-x-3 gap-y-5 border border-border bg-panel/50 p-5 sm:grid-cols-3 sm:gap-4 md:p-6 lg:grid-cols-6">
+          <div className="min-w-0">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">
+              Portfolio km
+            </p>
+            <p className="mt-1.5 truncate text-2xl font-bold tabular-nums sm:mt-2 sm:text-3xl">{totalKm.toFixed(1)} km</p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">Races</p>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums sm:mt-2 sm:text-3xl">{completedSorted.length}</p>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">Goals</p>
+            <p className="mt-1.5 text-2xl font-bold tabular-nums sm:mt-2 sm:text-3xl">{futureGoalCount}</p>
+          </div>
+          {stravaFeed.ok ? (
+            <>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase leading-snug tracking-[0.14em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
+                  Race candidate km
+                </p>
+                <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
+                  {raceStripStats.totalDistanceKm} km
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase leading-snug tracking-[0.14em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
+                  Race candidates
+                </p>
+                <p className="mt-1.5 text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
+                  {raceStripStats.activityCount}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[9px] font-semibold uppercase leading-snug tracking-[0.14em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
+                  Candidate elev.
+                </p>
+                <p className="mt-1.5 text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
+                  {raceStripStats.totalElevationM} m
+                </p>
+              </div>
+            </>
+          ) : null}
+        </section>
+      </div>
+
       <main className="app-shell space-y-16">
         <StravaOAuthResultBanner />
         <section>
@@ -359,51 +406,6 @@ export default async function DashboardPage() {
         </div>
 
         {featured ? <DashboardFeaturedRaceSummary races={completedSorted.slice(0, 6)} /> : null}
-
-        <section className="grid grid-cols-2 gap-x-3 gap-y-5 border border-border bg-panel/50 p-5 sm:grid-cols-3 sm:gap-4 md:p-6 lg:grid-cols-6">
-          <div className="min-w-0">
-            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">
-              Portfolio km
-            </p>
-            <p className="mt-1.5 truncate text-2xl font-bold tabular-nums sm:mt-2 sm:text-3xl">{totalKm.toFixed(1)} km</p>
-          </div>
-          <div className="min-w-0">
-            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">Races</p>
-            <p className="mt-1.5 text-2xl font-bold tabular-nums sm:mt-2 sm:text-3xl">{completedSorted.length}</p>
-          </div>
-          <div className="min-w-0">
-            <p className="text-[9px] font-semibold uppercase tracking-[0.18em] text-muted sm:text-[10px] sm:tracking-[0.2em]">Goals</p>
-            <p className="mt-1.5 text-2xl font-bold tabular-nums sm:mt-2 sm:text-3xl">{futureGoalCount}</p>
-          </div>
-          {stravaFeed.ok ? (
-            <>
-              <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase leading-snug tracking-[0.14em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
-                  Race candidate km
-                </p>
-                <p className="mt-1.5 truncate text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
-                  {raceStripStats.totalDistanceKm} km
-                </p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase leading-snug tracking-[0.14em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
-                  Race candidates
-                </p>
-                <p className="mt-1.5 text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
-                  {raceStripStats.activityCount}
-                </p>
-              </div>
-              <div className="min-w-0">
-                <p className="text-[9px] font-semibold uppercase leading-snug tracking-[0.14em] text-accent sm:text-[10px] sm:tracking-[0.2em]">
-                  Candidate elev.
-                </p>
-                <p className="mt-1.5 text-2xl font-bold tabular-nums text-white sm:mt-2 sm:text-3xl">
-                  {raceStripStats.totalElevationM} m
-                </p>
-              </div>
-            </>
-          ) : null}
-        </section>
       </main>
       {devMatchDebug ? <DevMatchDebugSummary snapshot={devMatchDebug} /> : null}
     </>
